@@ -1,0 +1,9 @@
+requests
+Ta-Lib-Precompiled
+pandas
+mplfinance
+ccxt
+sqlalchemy
+jupter
+notebook
+pymysql
