@@ -9,6 +9,7 @@ bin-release/
 .env
 .venv/
 *.pyc
+*.log
 
 # Executables
 *.swf

@@ -4,6 +4,6 @@ pandas
 mplfinance
 ccxt
 sqlalchemy
-jupter
+jupyter
 notebook
 pymysql
