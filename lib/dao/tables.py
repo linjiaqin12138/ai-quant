@@ -1,6 +1,6 @@
 from typing import Any
 
-from sqlalchemy import Column, String, Float, DateTime, DECIMAL, Boolean
+from sqlalchemy import Column, String, Float, DateTime, DECIMAL, Enum
 from sqlalchemy.ext.declarative import declarative_base
 
 from ..typedef import Scale, ExchangePair
@@ -33,6 +33,7 @@ class Events_Cache(Base):
     __tablename__ = 'events'
     key = Column(String(512), primary_key=True)
     context = Column(String(2048))
+    type=Column(Enum('string', 'json'), default='string')
 
 # 创建模型对应的表
 Base.metadata.create_all(engine)

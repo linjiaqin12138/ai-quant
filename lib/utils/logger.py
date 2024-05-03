@@ -10,7 +10,7 @@ class JSONFormatter(logging.Formatter):
             'level': record.levelname,
             'message': record.getMessage()
         })
-log_level = getattr(logging, os.environ.get('LOG_LEVEL', 'INFO'))
+log_level = getattr(logging, os.environ.get('LOG_LEVEL', 'INFO').upper())
 # file_handler = logging.FileHandler('./quant.log')
 # file_handler.setFormatter(JSONFormatter())
 

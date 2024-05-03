@@ -1,12 +1,18 @@
 import pandas as pd
 
 from lib.dao.data_query import get_ohclv, get_all_pairs
+from lib.dao.exchange import get_remain_money
 from lib.utils.logger import logger
 from lib.notification import send_push
 
 interval_min = 10 
 
 try:
+    remain = get_remain_money()
+    if remain < 10:
+        logger.info(f'钱太少，只有{remain}, 溜了溜了')
+        exit(0)
+        
     all_pairs = list(filter(lambda pair: pair.endswith('USDT'), get_all_pairs()))
     messages_10 = []
     messages_5 = []

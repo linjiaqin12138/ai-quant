@@ -44,6 +44,10 @@ fetch_order_book = with_retry(exchange.fetch_order_book)
 fetch_ticker = with_retry(exchange.fetch_ticker)
 create_order = with_retry(exchange.create_order)
 
+def get_remain_money():
+    balance = fetch_balance()
+    return balance['USDT']['free']
+
 def sell_all_at_price(pair: str, amount: float, price: float):
     return create_order(pair, 'limit', 'sell', amount, price)
 
