@@ -1,13 +1,15 @@
 import os
 import time
+from typing import Callable, Any, TypeVar
 
 import ccxt
 
 from ..utils.logger import logger
 
+G = TypeVar('G')
 exchange = ccxt.binance({
-  'apiKey': os.environ.get('API_KEY'),
-  'secret': os.environ.get('SECRET_KEY')
+  'apiKey': os.environ.get('BINANCE_API_KEY'),
+  'secret': os.environ.get('BINANCE_SECRET_KEY')
 })
 
 proxy = os.environ.get('PROXY')
@@ -19,36 +21,28 @@ if proxy:
     exchange.wsProxy = proxy
 
 MAX_RETRY_TIME = 5
-def call_with_retry(function, **args):
-    count = 0
-    while True:
-        try: 
-            return getattr(exchange, function)(**args)
-        except ccxt.errors.RequestTimeout as e:
-            count += 1
-            logger.warn(f'Retry {function} {count} times')
-            time.sleep(2 ** (count - 1))
-            if count > MAX_RETRY_TIME:
-                raise e
 
-def with_retry(function: str): 
-    count = 0
-    while True:
-        try: 
-            return getattr(exchange, function)
-        except ccxt.errors.RequestTimeout as e:
-            count += 1
-            logger.warn(f'Retry {function} {count} times')
-            time.sleep(2 ** (count - 1))
-            if count > MAX_RETRY_TIME:
-                raise e
+def with_retry(function: G) -> G:
+    def function_with_retry(*args, **kwargs):
+        count = 0
+        while True:
+            try: 
+                return function(*args, **kwargs)
+            except ccxt.errors.RequestTimeout as e:
+                count += 1
+                logger.warn(f'Retry {function} {count} times')
+                time.sleep(2 ** (count - 1))
+                if count > MAX_RETRY_TIME:
+                    raise e
+    return function_with_retry
 
-fetch_balance = with_retry('fetch_balance')
-create_market_buy_order = with_retry('create_market_buy_order')
-fetch_ohlcv = with_retry('fetch_ohlcv')
-load_markets = with_retry('load_markets')
-fetch_order_book = with_retry('fetch_order_book')
-create_order = with_retry('create_order')
+fetch_balance = with_retry(exchange.fetch_balance)
+create_market_buy_order = with_retry(exchange.create_market_buy_order)
+fetch_ohlcv = with_retry(exchange.fetch_ohlcv)
+load_markets = with_retry(exchange.load_markets)
+fetch_order_book = with_retry(exchange.fetch_order_book)
+fetch_ticker = with_retry(exchange.fetch_ticker)
+create_order = with_retry(exchange.create_order)
 
 def sell_all_at_price(pair: str, amount: float, price: float):
     return create_order(pair, 'limit', 'sell', amount, price)

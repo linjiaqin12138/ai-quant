@@ -7,3 +7,4 @@ sqlalchemy
 jupyter
 notebook
 pymysql
+pytest

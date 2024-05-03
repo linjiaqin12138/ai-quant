@@ -10,6 +10,7 @@ bin-release/
 .venv/
 *.pyc
 *.log
+nohup.out
 
 # Executables
 *.swf

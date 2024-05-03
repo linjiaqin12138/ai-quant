@@ -5,21 +5,24 @@ function help() {
     echo "Example: ./runJob.sh buy_10_sell_5 arg1 arg2"
 }
 
-function check_second_param() {
-    if [ -z "$2" ] || [[ "$2" =~ ^-.* ]]; then
-        echo "Option $1 requires an argument"
-        echo ""
-        usage
-        exit 1
-    fi
-}
 
 function main {
     SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
     PROJECT_DIR="$( cd "$SCRIPT_DIR/../" && pwd )"
-    export PYTHONPATH="$PROJECT_DIR:$PYTHONPATH"
+
+    if [ -z "$PYTHONPATH" ]; then
+        export PYTHONPATH="$PROJECT_DIR"
+    else 
+        export PYTHONPATH="$PROJECT_DIR:$PYTHONPATH"
+    fi
+    
     if [ -d "$PROJECT_DIR/.venv" ]; then
-        source "$PROJECT_DIR/.venv/bin/activate" 
+        platform="$(uname)"
+        if [[ $platform == MINGW64* ]]; then
+            source $PROJECT_DIR/.venv/Scripts/activate
+        else
+            source $PROJECT_DIR/.venv/bin/activate
+        fi
     fi
     source "$PROJECT_DIR/.env"
 
@@ -36,7 +39,14 @@ function main {
 
     shift 1
 
-    nohup python3 $job_name $@ &
+    PYTHON_EXE="python"
+    if command -v python3 &> /dev/null
+    then
+        # "Python 3 command is available"
+        PYTHON_EXE="python3"
+    fi
+    # echo "$http_proxy" "$PROXY" "$MYSQL_DB"
+    nohup $PYTHON_EXE $job_name $@ &
 
     # pid=$!
 
