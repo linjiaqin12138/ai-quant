@@ -11,8 +11,8 @@ class JSONFormatter(logging.Formatter):
             'message': record.getMessage()
         })
 log_level = getattr(logging, os.environ.get('LOG_LEVEL', 'INFO'))
-file_handler = logging.FileHandler('./quant.log')
-file_handler.setFormatter(JSONFormatter())
+# file_handler = logging.FileHandler('./quant.log')
+# file_handler.setFormatter(JSONFormatter())
 
 console_handler = logging.StreamHandler()
 console_handler.setLevel(log_level)
@@ -23,7 +23,7 @@ logger = logging.getLogger('quant')
 logger.setLevel(log_level)
 # 将handler添加到logger中
 logger.addHandler(console_handler)
-logger.addHandler(file_handler)
+# logger.addHandler(file_handler)
 
 __all__ = [
   'logger'

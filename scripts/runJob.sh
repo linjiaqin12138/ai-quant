@@ -5,7 +5,6 @@ function help() {
     echo "Example: ./runJob.sh buy_10_sell_5 arg1 arg2"
 }
 
-
 function main {
     SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
     PROJECT_DIR="$( cd "$SCRIPT_DIR/../" && pwd )"
@@ -24,7 +23,10 @@ function main {
             source $PROJECT_DIR/.venv/bin/activate
         fi
     fi
-    source "$PROJECT_DIR/.env"
+
+    if [ -f "$PROJECT_DIR/.env" ]; then
+        source "$PROJECT_DIR/.env"
+    fi
 
     if [ $# -eq 0 ]; then
         echo "Miss job name to be run"
@@ -46,7 +48,7 @@ function main {
         PYTHON_EXE="python3"
     fi
     # echo "$http_proxy" "$PROXY" "$MYSQL_DB"
-    nohup $PYTHON_EXE $job_name $@ &
+    $PYTHON_EXE $job_name $@
 
     # pid=$!
 
