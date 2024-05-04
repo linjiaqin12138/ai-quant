@@ -1,12 +1,12 @@
 import pandas as pd
 
 from lib.dao.data_query import get_ohclv, get_all_pairs
-from lib.dao.exchange import get_remain_money
+from lib.dao.exchange import buy_at_market_price, get_remain_money, sell_at_price
 from lib.utils.logger import logger
 from lib.notification import send_push
 
 interval_min = 10 
-
+ACTION_REASON = 'BUY_10_SELL_5'
 try:
     remain = get_remain_money()
     if remain < 10:
@@ -37,14 +37,32 @@ try:
             
         low = df['low'].iloc[-1]
     
-        decline_rate = (max_high - low) / max_high * 100
+        decline_rate = (max_high - low) / max_high * 100 if max_high > low else 0
         decline_rates.append([pair, decline_rate])
     
         if decline_rate > 10:
             messages_10.append(f'{pair} decline over 10% in {interval_min}min: {round(decline_rate, 2)}%')
+            result = buy_at_market_price(pair, reason=ACTION_REASON, spend=20 if remain >= 20 else remain)
+            price = result['average']
+            amount = result['amount']
+            cost = result['cost']
+            remain -= cost
+            to_sell_at_price = result['average'] * (decline_rate / 2)
+            to_gain= cost * (decline_rate / 2) / 100
+            messages_10.append(f'buy {pair} with USDT {cost} and try to sell when price up from {result["average"]} to {to_sell_at_price}, gain money {to_gain} with rate {decline_rate / 2}')
+            sell_at_price(pair, to_sell_at_price, amount, ACTION_REASON)
+
         elif decline_rate > 5:
             messages_5.append(f'{pair} decline over 5% in {interval_min}min: {round(decline_rate, 2)}%')
-
+            result = buy_at_market_price(pair, reason=ACTION_REASON, spend=20 if remain >= 20 else remain)
+            price = result['average']
+            amount = result['amount']
+            cost = result['cost']
+            remain -= cost
+            to_sell_at_price = result['average'] * (decline_rate / 2)
+            to_gain= cost * (decline_rate / 2) / 100
+            messages_10.append(f'buy {pair} with USDT {cost} and try to sell when price up from {result["average"]} to {to_sell_at_price}, gain money {to_gain} with rate {decline_rate / 2}')
+            sell_at_price(pair, to_sell_at_price, amount, ACTION_REASON)
     df = pd.DataFrame(decline_rates, columns = ['pair', 'decline_rate'])
     df.sort_values(by='decline_rate', ascending=False, inplace=True)
     print('过去10分钟跌幅前3的交易对: ')

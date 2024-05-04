@@ -14,11 +14,11 @@ class Ohlcv_Cache(Base):
     __tablename__ = 'ohlcv_cache'
     timestamp = Column(DateTime, primary_key=True)
     pair = Column(String(20), primary_key=True)
-    open = Column(Float)
-    high = Column(Float)
-    low = Column(Float)
-    close = Column(Float)
-    volume = Column(Float)
+    open = Column(DECIMAL(15, 10))
+    high = Column(DECIMAL(15, 10))
+    low = Column(DECIMAL(15, 10))
+    close = Column(DECIMAL(15, 10))
+    volume = Column(DECIMAL(15, 10))
 
 # TODO: 改掉其他类的名字风格，统一改成驼峰
 # https://www.python.org/dev/peps/pep-0008/#class-names
@@ -28,6 +28,17 @@ class Exchange_Info(Base):
     pair = Column(String(20), primary_key=True)
     quote_volume = Column(DECIMAL(20, 6))
     # is_monitoring = Column(Boolean)
+
+class Trade_Action_Info(Base):
+    __tablename__ = 'trade_action_info'
+    pair = Column(String(20), primary_key=True)
+    timestamp = Column(DateTime, primary_key=True)
+    action = Column(Enum('buy', 'sell'), primary_key=True)
+    reason = Column(String(1024))
+    amount = Column(DECIMAL(15, 10), nullable=False)
+    price = Column(DECIMAL(15, 10), nullable=False)
+    type = Column(Enum('limit', 'market'), nullable=False)
+    context = Column(String(2048))
 
 class Events_Cache(Base):
     __tablename__ = 'events'

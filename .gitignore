@@ -11,6 +11,10 @@ bin-release/
 *.pyc
 *.log
 nohup.out
+*.egg-info
+build/
+.pytest_cache
+temp.json
 
 # Executables
 *.swf
