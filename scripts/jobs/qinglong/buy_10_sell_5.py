@@ -21,6 +21,16 @@ BuyTenSellFiveEventContext = Dict[str, Dict[str, OrderContext]]
 # get_event(EVENT_KEY)
 important_message: List[str] = []
 
+def report():
+    if len(important_message) > 0:
+        message = '\n'.join(important_message)
+        logger.info(f'Send push message: {message}')
+        result = send_push({ 'content': message, 'title': f'过去{interval_min}分钟行情' })
+        if not result['success']:
+            logger.warn('Send push failed')
+    else:
+        logger.info('No important message need to be reported')
+
 def log_info(msg: str):
     important_message.append(msg)
     logger.info(msg)
@@ -52,6 +62,7 @@ def main():
         remain = get_remain_money()
         if remain < 10:
             logger.info(f'钱太少，只有{remain}, 溜了溜了，不买了')
+            report()
             return 0
 
         all_pairs = list(filter(lambda pair: pair.endswith('USDT'), get_all_pairs()))
@@ -104,13 +115,7 @@ def main():
         print('过去10分钟跌幅前3的交易对: ')
         print(df.head(3))
 
-        if len(important_message) > 0:
-            message = '\n'.join(important_message)
-            logger.info(f'Send push message: {message}')
-            result = send_push({ 'content': message, 'title': f'过去{interval_min}分钟行情' })
-            if not result['success']:
-                logger.warn('Send push failed')
-                return 1
+        report()
         
         logger.info('Finish minotoring')
     except Exception as e:
