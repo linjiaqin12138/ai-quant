@@ -39,6 +39,7 @@ class Trade_Action_Info(Base):
     price = Column(DECIMAL(15, 10), nullable=False)
     type = Column(Enum('limit', 'market'), nullable=False)
     context = Column(String(2048))
+    order_id = Column(String(100))
 
 class Events_Cache(Base):
     __tablename__ = 'events'

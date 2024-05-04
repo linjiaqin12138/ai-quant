@@ -1,10 +1,10 @@
-from typing import Dict, Any
+from typing import Dict, List
 import json
 from .session import get_session
 from .tables import Events_Cache
 from ..utils.logger import logger
 
-def set_event(key: str, context: str | Dict) -> None:
+def set_event(key: str, context: str | Dict | List) -> None:
     try: 
         session = get_session()
         event_to_update = session.query(Events_Cache).filter(Events_Cache.key == key).first()
@@ -13,14 +13,14 @@ def set_event(key: str, context: str | Dict) -> None:
             if type(context) == str:
                 event_to_update.context = context
                 event_to_update.type = 'string'
-            if type(context) == dict:
+            if type(context) == dict or type(context) == list:
                 event_to_update.context = json.dumps(context)
                 event_to_update.type = 'json'
         else:
             logger.debug(f'Insert new event {key}')
             if type(context) == str:
                 session.add(Events_Cache(key = key, context = context, type='string'))
-            if type(context) == dict:
+            if type(context) == dict or type(context) == list:
                 session.add(Events_Cache(key = key, context = json.dumps(context), type='json'))
         session.commit()
     except:

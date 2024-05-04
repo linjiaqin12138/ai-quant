@@ -1,4 +1,5 @@
 import datetime
+import traceback
 from typing import Literal, TypedDict 
 
 from lib.dao.data_query import get_ohclv
@@ -155,20 +156,25 @@ def turtle_trade(pair, frame = '1d', total_money = 100.0, max_round = 1, min_win
 #     'TRB/USDT'
 # ]
 def main():
-    # 比特币不止跌，用简单海龟法则进行交易，因为价格趋势比较稳定
-    turtle_trade('BTC/USDT', '1d', 100, max_round=1, min_window=20, max_window=20, stop_decline_rate=None)
-    # ETH设置两轮买入，止跌10，防止过大回撤
-    turtle_trade('ETH/USDT', '1d', 100, max_round=2, min_window=20, max_window=20, stop_decline_rate=10)
-    # SOL处在历史高位，要防止一下过大回撤
-    turtle_trade('SOL/USDT', '1d', 100, max_round=2, min_window=20, max_window=20, stop_decline_rate=10)
-    
-    if len(important_message) > 0:
+    try:
+        # 比特币不止跌，用简单海龟法则进行交易，因为价格趋势比较稳定
+        turtle_trade('BTC/USDT', '1d', 100, max_round=1, min_window=20, max_window=20, stop_decline_rate=None)
+        # ETH设置两轮买入，止跌10，防止过大回撤
+        turtle_trade('ETH/USDT', '1d', 100, max_round=2, min_window=20, max_window=20, stop_decline_rate=10)
+        # SOL处在历史高位，要防止一下过大回撤
+        turtle_trade('SOL/USDT', '1d', 100, max_round=2, min_window=20, max_window=20, stop_decline_rate=10)
+        
+        if len(important_message) > 0:
+            send_push({
+                'title': '海龟交易法报告',
+                'content': '\n'.join(important_message)
+            })
+        else:
+            logger.info('No Event Need to Report')
+    except Exception as e:
+        logger.error(e)
         send_push({
-            'title': '海龟交易法报告',
-            'content': '\n'.join(important_message)
+            'title': '海龟交易法程序错误',
+            'content': traceback.format_exc(chain = False)
         })
-    else:
-        logger.info('No Event Need to Report')
-
-main()
-    
+        

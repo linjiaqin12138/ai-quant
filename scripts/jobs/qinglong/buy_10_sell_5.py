@@ -1,83 +1,124 @@
+import traceback
+from typing import TypedDict, Dict, List
+
 import pandas as pd
 
 from lib.dao.data_query import get_ohclv, get_all_pairs
-from lib.dao.exchange import buy_at_market_price, get_remain_money, sell_at_price
+from lib.dao.event import get_event, set_event
+from lib.dao.exchange import buy_at_market_price, get_remain_money, sell_at_price, fetch_order, fetch_ticker
 from lib.utils.logger import logger
 from lib.notification import send_push
+from lib.utils.time import curr_ts
 
 interval_min = 10 
 ACTION_REASON = 'BUY_10_SELL_5'
-try:
-    remain = get_remain_money()
-    if remain < 10:
-        logger.info(f'钱太少，只有{remain}, 溜了溜了')
-        exit(0)
-        
-    all_pairs = list(filter(lambda pair: pair.endswith('USDT'), get_all_pairs()))
-    messages_10 = []
-    messages_5 = []
-    decline_rates = []
+EVENT_KEY = 'BUY_10_SELL_5'
+# Key is order_id
+OrderContext = TypedDict('OrderContext', {
+    'buy_price': float
+})
+BuyTenSellFiveEventContext = Dict[str, Dict[str, OrderContext]]
+# get_event(EVENT_KEY)
+important_message: List[str] = []
 
-    for pair in all_pairs:
-        df = get_ohclv(pair, '1m', limit=interval_min + 1)
-        
-        max_high = max(df['high'])
-        high_idx = 0
-        for i in range(len(df)):
-            if df['high'].iloc[i] == max_high:
-                high_idx = i
-                break
-    
-        # data_after_high = df[high_idx:]
-        # min_low = min(data_after_high['low'])
-        # min_idx = 0
-        # for i in range(len(data_after_high)):
-        #     if data_after_high['low'].iloc[i] == min_low:
-        #         min_idx = i
+def log_info(msg: str):
+    important_message.append(msg)
+    logger.info(msg)
+
+def add_order(events: BuyTenSellFiveEventContext, symbol: str, id: str, context: OrderContext):
+    if symbol in events:
+        events[symbol][id] = context
+
+def main():
+    try:
+        # 监控买入的订单状态
+        order_events: BuyTenSellFiveEventContext = get_event(EVENT_KEY)
+        if order_events:
+            for pair in order_events:
+                orders = order_events[pair]
+                for order_id in orders:
+                    order_info = fetch_order(order_id)
+                    if order_info['status'] != 'open':
+                        log_info(f'{pair} 的在价格为{order_events[order_id]["buy_price"]}买入，{order_info["average"]}卖出的单已经被卖出')
+                        del order_events[order_id]
+                    elif (curr_ts() - order_info['timestamp'] / 1000) / 84600 > 3:
+                        past_days = int((curr_ts() - order_info['timestamp'] / 1000) / 84600)
+                        ticker = fetch_ticker(pair)
+                        curr_price = ticker['last']
+                        rate = (curr_price - order_events[order_id]["buy_price"]) / order_events[order_id]["buy_price"] * 100
+                        log_info(f'{pair} 的在价格为{order_events[order_id]["buy_price"]}买入，{order_info["average"]}卖出的单已经超过{past_days}天没有卖出, 现在卖出将{"盈利" if rate > 0 else "亏损"}{abs(rate)}%, 当前价格为{curr_price}')
+            set_event(EVENT_KEY, order_events)
+
+        remain = get_remain_money()
+        if remain < 10:
+            logger.info(f'钱太少，只有{remain}, 溜了溜了，不买了')
+            return 0
+
+        all_pairs = list(filter(lambda pair: pair.endswith('USDT'), get_all_pairs()))
+
+        decline_rates = []
+        for pair in all_pairs:
+            if remain < 10:
+                # 余钱不够，不继续扫描
+                continue
+
+            df = get_ohclv(pair, '1m', limit=interval_min + 1)
             
-        low = df['low'].iloc[-1]
-    
-        decline_rate = (max_high - low) / max_high * 100 if max_high > low else 0
-        decline_rates.append([pair, decline_rate])
-    
-        if decline_rate > 10:
-            messages_10.append(f'{pair} decline over 10% in {interval_min}min: {round(decline_rate, 2)}%')
-            result = buy_at_market_price(pair, reason=ACTION_REASON, spend=20 if remain >= 20 else remain)
-            price = result['average']
-            amount = result['amount']
-            cost = result['cost']
-            remain -= cost
-            to_sell_at_price = result['average'] * (decline_rate / 2)
-            to_gain= cost * (decline_rate / 2) / 100
-            messages_10.append(f'buy {pair} with USDT {cost} and try to sell when price up from {result["average"]} to {to_sell_at_price}, gain money {to_gain} with rate {decline_rate / 2}')
-            sell_at_price(pair, to_sell_at_price, amount, ACTION_REASON)
+            max_high = max(df['high'])       
+            low = df['low'].iloc[-1]
+        
+            decline_rate = (max_high - low) / max_high * 100 if max_high > low else 0
+            decline_rates.append([pair, decline_rate])
+        
+            if decline_rate > 10:
+                log_info(f'{pair} decline over 10% in {interval_min}min: {round(decline_rate, 2)}%')
+                result = buy_at_market_price(pair, reason=ACTION_REASON, spend=20 if remain >= 20 else remain)
+                price = result['average']
+                amount = result['amount']
+                cost = result['cost']
+                remain -= cost
+                to_sell_at_price = result['average'] * (decline_rate / 2)
+                to_gain= cost * (decline_rate / 2) / 100
 
-        elif decline_rate > 5:
-            messages_5.append(f'{pair} decline over 5% in {interval_min}min: {round(decline_rate, 2)}%')
-            result = buy_at_market_price(pair, reason=ACTION_REASON, spend=20 if remain >= 20 else remain)
-            price = result['average']
-            amount = result['amount']
-            cost = result['cost']
-            remain -= cost
-            to_sell_at_price = result['average'] * (decline_rate / 2)
-            to_gain= cost * (decline_rate / 2) / 100
-            messages_10.append(f'buy {pair} with USDT {cost} and try to sell when price up from {result["average"]} to {to_sell_at_price}, gain money {to_gain} with rate {decline_rate / 2}')
-            sell_at_price(pair, to_sell_at_price, amount, ACTION_REASON)
-    df = pd.DataFrame(decline_rates, columns = ['pair', 'decline_rate'])
-    df.sort_values(by='decline_rate', ascending=False, inplace=True)
-    print('过去10分钟跌幅前3的交易对: ')
-    print(df.head(3))
+                log_info(f'buy {pair} with USDT {cost} and try to sell when price up from {result["average"]} to {to_sell_at_price}, gain money {to_gain} with rate {decline_rate / 2}')
+                res = sell_at_price(pair, to_sell_at_price, amount, ACTION_REASON)
+                add_order(order_events, pair, res['id'], { 'buy_price': price })
+            elif decline_rate > 5:
+                log_info(f'{pair} decline over 5% in {interval_min}min: {round(decline_rate, 2)}%')
+                result = buy_at_market_price(pair, reason=ACTION_REASON, spend=20 if remain >= 20 else remain)
+                price = result['average']
+                amount = result['amount']
+                cost = result['cost']
+                remain -= cost
+                to_sell_at_price = result['average'] * (decline_rate / 2)
+                to_gain= cost * (decline_rate / 2) / 100
+                log_info(f'buy {pair} with USDT {cost} and try to sell when price up from {result["average"]} to {to_sell_at_price}, gain money {to_gain} with rate {decline_rate / 2}')
+                sell_at_price(pair, to_sell_at_price, amount, ACTION_REASON)
+                add_order(order_events, pair, res['id'], { 'buy_price': price })
+        
+        if order_events:
+            set_event(EVENT_KEY, order_events)
 
-    if len(messages_10) + len(messages_5) > 0:
-        message = '\n'.join(messages_10 + messages_5)
-        logger.info(f'Send push message: {message}')
-        result = send_push({ 'content': message, 'title': f'过去{interval_min}分钟行情' })
-        if not result['success']:
-            logger.warn('Send push failed')
-            exit(1)
-    
-    logger.info('Finish minotoring')
-except Exception as e:
-    logger.error('Unexpeted error: ', e)
-    send_push({ 'content': str(e), 'title': '发生未知错误，脚本退出' })
-    exit(1)
+        df = pd.DataFrame(decline_rates, columns = ['pair', 'decline_rate'])
+        df.sort_values(by='decline_rate', ascending=False, inplace=True)
+        print('过去10分钟跌幅前3的交易对: ')
+        print(df.head(3))
+
+        if len(important_message) > 0:
+            message = '\n'.join(important_message)
+            logger.info(f'Send push message: {message}')
+            result = send_push({ 'content': message, 'title': f'过去{interval_min}分钟行情' })
+            if not result['success']:
+                logger.warn('Send push failed')
+                return 1
+        
+        logger.info('Finish minotoring')
+    except Exception as e:
+        logger.error('Unexpeted error: ', e)
+        send_push({
+            'content': traceback.format_exc(chain=False),
+            'title': '发生未知错误，脚本退出'
+        })
+        return 1
+
+main()

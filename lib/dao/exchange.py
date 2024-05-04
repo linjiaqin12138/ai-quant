@@ -2,7 +2,7 @@ import os
 import time
 import datetime
 import json
-from typing import Optional, TypeVar, LiteralString, Literal
+from typing import Optional, TypeVar, TypeAlias, Literal
 
 import ccxt
 
@@ -11,6 +11,7 @@ from .session import get_session
 from .tables import Trade_Action_Info
 
 G = TypeVar('G')
+TradeContext: TypeAlias = Optional[dict | list]
 exchange = ccxt.binance({
   'apiKey': os.environ.get('BINANCE_API_KEY'),
   'secret': os.environ.get('BINANCE_SECRET_KEY')
@@ -40,7 +41,7 @@ def with_retry(function: G) -> G:
                     raise e
     return function_with_retry
 
-def add_trade_info(pair: str, action: Literal['sell', 'buy'], reason: Optional[str], context: Optional[dict], price: float, amount: float, type: Literal['limit', 'market']): 
+def add_trade_info(pair: str, action: Literal['sell', 'buy'], reason: Optional[str], context: TradeContext, price: float, amount: float, type: Literal['limit', 'market']): 
     sess = get_session()
     raw_context = None if context is None else json.dumps(context)
     sess.add(Trade_Action_Info(**{
@@ -51,13 +52,21 @@ def add_trade_info(pair: str, action: Literal['sell', 'buy'], reason: Optional[s
         'context': raw_context,
         'amount': amount,
         'price': price,
-        'type': type
+        'type': type,
+        'order_id': context['id']
     }))
+    sess.commit()
+
+def delete_trade_info(order_id: str):
+    sess = get_session()
+    sess.query(Trade_Action_Info).filter(Trade_Action_Info.order_id == order_id).delete()
     sess.commit()
 
 create_market_buy_order = with_retry(exchange.create_market_buy_order)
 create_market_sell_order = with_retry(exchange.create_market_sell_order)
 create_order = with_retry(exchange.create_order)
+_cancel_order = with_retry(exchange.cancel_order)
+fetch_order = with_retry(exchange.fetch_order)
 fetch_ohlcv = with_retry(exchange.fetch_ohlcv)
 fetch_balance = with_retry(exchange.fetch_balance)
 fetch_order_book = with_retry(exchange.fetch_order_book)
@@ -117,6 +126,10 @@ def buy_at_price(pair: str, price: float, spend: Optional[float] = None, reason:
     logger.info(f'Buy {pair} at price {price}, amount {amount} for reason: {reason}')
 
     add_trade_info(pair, 'buy', reason, res, price, amount, 'limit')
+
+def cancel_order(pair: str, order_id: str): 
+    _cancel_order(order_id, pair)
+    delete_trade_info(order_id)
 
 def buy(pair: str, spent_usdt: float):
     order_book = fetch_order_book(symbol=pair)
