@@ -1,6 +1,6 @@
 import datetime
 import traceback
-from typing import Literal, TypedDict 
+from typing import Literal, TypedDict, Optional
 
 from lib.dao.data_query import get_ohclv
 from lib.dao.event import get_event, set_event
@@ -17,7 +17,7 @@ TurtleContext = TypedDict('TurtleContext', {
     'holdCoin': float, # 手头持有的货币,
     'latestMaxPrice': float, # 买入期间币价最高值，用来计算最大回撤
     'maxRound': int,
-    'stopDeclineRate': float,
+    'stopDeclineRate': Optional[float],
     'minWindow': int,
     'maxWindow': int,
     'frame': Literal['1d', '1m']
@@ -89,7 +89,7 @@ def turtle_trade(pair, frame = '1d', total_money = 100.0, max_round = 1, min_win
     context['minWindow'] = min_window
     context['maxWindow'] = max_window
     context['maxRound'] = max_round
-    context['frame'] = frame,
+    context['frame'] = frame
     # initialMoney改不了，所以一开始投资多少钱就不能变，除非改数据库
     # context['initialMoney'] = 
     if context['latestMaxPrice'] > 0 and context['latestMaxPrice'] < df['close'].iloc[-2]:
@@ -125,10 +125,10 @@ def turtle_trade(pair, frame = '1d', total_money = 100.0, max_round = 1, min_win
         log_info(f"买入价格: {buy_result['average']}, 花费 {actual_spend}, 剩余: {context['holdMoney'] }")
     else:
         is_over_min_window = df['close'].iloc[-2] < df['min_in_window'].iloc[-3]
-        is_decline_over_threshold = is_decline_over(context['latestMaxPrice'], df['close'].iloc[-2], context['stopDeclineRate'])
+        is_decline_over_threshold = is_decline_over(context['latestMaxPrice'], df['close'].iloc[-2], context.get('stopDeclineRate'))
         if context['holdCoin'] > 0 and is_over_min_window or is_decline_over_threshold:
             log_info('卖出信号出现:')
-            log_info(f'价格跌破过去{min_window}个周期价格' if is_over_min_window else f'最大回撤超{context["stopDeclineRate"]}%: {round(decline_rate(context["latestMaxPrice"], df["close"].iloc[-2]), 4)}')
+            log_info(f'价格跌破过去{min_window}个周期价格' if is_over_min_window else f'最大回撤超{context.get("stopDeclineRate")}%: {round(decline_rate(context["latestMaxPrice"], df["close"].iloc[-2]), 4)}')
             # 全部卖出
             sell_result = sell_at_market_price(pair, amount=None, reason=ACTION_REASON)
             context['holdCoin'] -= sell_result['amount']
@@ -145,8 +145,8 @@ def turtle_trade(pair, frame = '1d', total_money = 100.0, max_round = 1, min_win
     if datetime.datetime.isoweekday(datetime.datetime.now()) == 1:
         gain = (context['holdCoin'] * df['close'].iloc[-1] + context['holdMoney'])
         gain_rate = (gain - context['initialMoney']) / context['initialMoney'] * 100
-        compare_rate = context['initialCoin'] * df['close'].iloc[-1] / context['initialMoney'] * 100
-        log_info(f'{pair} 海龟收益率: {context["initialMoney"]} -> {gain} = {gain_rate}%, 比较收益率: {compare_rate}%')
+        compare_rate = (context['initialCoin'] * df['close'].iloc[-1] - context['initialMoney']) / context['initialMoney'] * 100
+        log_info(f'{pair} 海龟收益率: {context["initialMoney"]} -> {gain} = {round(gain_rate, 4)}%, 比较收益率: {round(compare_rate, 4)}%')
 
 # MONITOR_LIST=[
 #     'BTC/USDT',
@@ -158,11 +158,11 @@ def turtle_trade(pair, frame = '1d', total_money = 100.0, max_round = 1, min_win
 def main():
     try:
         # 比特币不止跌，用简单海龟法则进行交易，因为价格趋势比较稳定
-        turtle_trade('BTC/USDT', '1d', 100, max_round=1, min_window=20, max_window=20, stop_decline_rate=None)
+        turtle_trade('BTC/USDT', frame='1d', total_money=100, max_round=1, min_window=20, max_window=20, stop_decline_rate=None)
         # ETH设置两轮买入，止跌10，防止过大回撤
-        turtle_trade('ETH/USDT', '1d', 100, max_round=2, min_window=20, max_window=20, stop_decline_rate=10)
+        turtle_trade('ETH/USDT', frame='1d', total_money=100, max_round=2, min_window=20, max_window=20, stop_decline_rate=10)
         # SOL处在历史高位，要防止一下过大回撤
-        turtle_trade('SOL/USDT', '1d', 100, max_round=2, min_window=20, max_window=20, stop_decline_rate=10)
+        turtle_trade('SOL/USDT', frame='1d', total_money=100, max_round=2, min_window=20, max_window=20, stop_decline_rate=10)
         
         if len(important_message) > 0:
             send_push({
@@ -178,3 +178,4 @@ def main():
             'content': traceback.format_exc(chain = False)
         })
         
+main()

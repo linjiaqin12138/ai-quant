@@ -33,7 +33,7 @@ def with_retry(function: G) -> G:
         while True:
             try: 
                 return function(*args, **kwargs)
-            except ccxt.errors.RequestTimeout as e:
+            except (ccxt.errors.NetworkError, ccxt.errors.RequestTimeout) as e:
                 count += 1
                 logger.warn(f'Retry {function} {count} times')
                 time.sleep(2 ** (count - 1))
