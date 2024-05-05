@@ -80,8 +80,8 @@ def main():
 
             df = get_ohclv(pair, '1m', limit=interval_min + 1)
             
-            max_high = max(df['high'])       
-            low = df['low'].iloc[-1]
+            max_high = max(max(df['open']), max(df['close']))
+            low = df['close'].iloc[-1]
         
             decline_rate = (max_high - low) / max_high * 100 if max_high > low else 0
             decline_rates.append([pair, decline_rate])
