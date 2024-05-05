@@ -1,4 +1,5 @@
 import traceback
+import datetime
 from typing import TypedDict, Dict, List
 
 import pandas as pd
@@ -20,6 +21,10 @@ OrderContext = TypedDict('OrderContext', {
 BuyTenSellFiveEventContext = Dict[str, Dict[str, OrderContext]]
 # get_event(EVENT_KEY)
 important_message: List[str] = []
+
+def is_eight_clock():
+    now = datetime.datetime.now()
+    return now.hour == 8 and now.minute < 10
 
 def report():
     if len(important_message) > 0:
@@ -51,7 +56,7 @@ def main():
                     if order_info['status'] != 'open':
                         log_info(f'{pair} 的在价格为{order_events[order_id]["buy_price"]}买入，{order_info["average"]}卖出的单已经被卖出')
                         del order_events[order_id]
-                    elif (curr_ts() - order_info['timestamp'] / 1000) / 84600 > 3:
+                    elif (curr_ts() - order_info['timestamp'] / 1000) / 84600 > 3 and is_eight_clock():
                         past_days = int((curr_ts() - order_info['timestamp'] / 1000) / 84600)
                         ticker = fetch_ticker(pair)
                         curr_price = ticker['last']
