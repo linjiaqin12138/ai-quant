@@ -93,7 +93,7 @@ def main():
                 amount = result['amount']
                 cost = result['cost']
                 remain -= cost
-                to_sell_at_price = result['average'] * (decline_rate / 2)
+                to_sell_at_price = result['average'] * (decline_rate / 2) / 10
                 to_gain= cost * (decline_rate / 2) / 100
 
                 log_info(f'buy {pair} with USDT {cost} and try to sell when price up from {result["average"]} to {to_sell_at_price}, gain money {to_gain} with rate {decline_rate / 2}')
@@ -106,7 +106,7 @@ def main():
                 amount = result['amount']
                 cost = result['cost']
                 remain -= cost
-                to_sell_at_price = result['average'] * (decline_rate / 2)
+                to_sell_at_price = result['average'] * (decline_rate / 2) / 100
                 to_gain= cost * (decline_rate / 2) / 100
                 log_info(f'buy {pair} with USDT {cost} and try to sell when price up from {result["average"]} to {to_sell_at_price}, gain money {to_gain} with rate {decline_rate / 2}')
                 res = sell_at_price(pair, to_sell_at_price, amount, ACTION_REASON)
