@@ -52,8 +52,9 @@ def log_info(msg: str):
     logger.info(msg)
 
 def add_order(events: BuyTenSellFiveEventContext, symbol: str, id: str, context: OrderContext):
-    if symbol in events:
-        events[symbol][id] = context
+    if events[symbol] is None:
+        events[symbol] = {}
+    events[symbol][id] = context
 
 def action_decline_over(pair: str, decline_rate: float, spend: float):
     log_info(f'{pair} decline over {decline_rate}% in {interval_min}min: {round(decline_rate, 2)}%')
