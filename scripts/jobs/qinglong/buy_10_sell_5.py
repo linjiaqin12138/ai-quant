@@ -72,7 +72,7 @@ def action_decline_over(pair: str, decline_rate: float, spend: float):
     add_order(GLOBAL_CONTEXT['events'], pair, res['id'], { 'buy_price': price })
 
 def monitor_orders():
-    GLOBAL_CONTEXT['events'] = get_event(EVENT_KEY)
+    GLOBAL_CONTEXT['events'] = get_event(EVENT_KEY) or {}
     if GLOBAL_CONTEXT['events']:
         for pair in GLOBAL_CONTEXT['events']:
             orders = GLOBAL_CONTEXT['events'][pair]
