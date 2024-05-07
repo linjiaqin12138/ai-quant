@@ -78,7 +78,7 @@ def monitor_orders():
         for pair in GLOBAL_CONTEXT['events']:
             orders = GLOBAL_CONTEXT['events'][pair]
             for order_id in orders:
-                order_info = fetch_order(order_id)
+                order_info = fetch_order(order_id, pair)
                 if order_info['status'] != 'open':
                     log_info(f'{pair} 的在价格为{GLOBAL_CONTEXT["events"][order_id]["buy_price"]}买入，{order_info["average"]}卖出的单已经被卖出')
                     del GLOBAL_CONTEXT["events"][order_id]
