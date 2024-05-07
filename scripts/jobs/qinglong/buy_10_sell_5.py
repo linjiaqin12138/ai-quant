@@ -75,19 +75,26 @@ def action_decline_over(pair: str, decline_rate: float, spend: float):
 def monitor_orders():
     GLOBAL_CONTEXT['events'] = get_event(EVENT_KEY) or {}
     if GLOBAL_CONTEXT['events']:
-        for pair in GLOBAL_CONTEXT['events']:
+        # To Fix dictionary changed size during iteration
+        pairs = list(GLOBAL_CONTEXT['events'].keys())
+        for pair in pairs:
+            # To Fix dictionary changed size during iteration
+            order_ids = list((GLOBAL_CONTEXT['events'][pair] or {}).keys())
             orders = GLOBAL_CONTEXT['events'][pair]
-            for order_id in orders:
+            for order_id in order_ids:
                 order_info = fetch_order(order_id, pair)
                 if order_info['status'] != 'open':
-                    log_info(f'{pair} 的在价格为{GLOBAL_CONTEXT["events"][order_id]["buy_price"]}买入，{order_info["average"]}卖出的单已经被卖出')
-                    del GLOBAL_CONTEXT["events"][order_id]
+                    log_info(f'{pair} 的在价格为{orders[order_id]["buy_price"]}买入，{order_info["average"]}卖出的单已经被卖出')
+                    del orders[order_id]
+                    # orders[order_id] = None # Will store null into json
                 elif (curr_ts() - order_info['timestamp'] / 1000) / 84600 > 3 and is_eight_clock():
                     past_days = int((curr_ts() - order_info['timestamp'] / 1000) / 84600)
                     ticker = fetch_ticker(pair)
                     curr_price = ticker['last']
-                    rate = (curr_price - GLOBAL_CONTEXT["events"][order_id]["buy_price"]) / GLOBAL_CONTEXT["events"][order_id]["buy_price"] * 100
-                    log_info(f'{pair} 的在价格为{GLOBAL_CONTEXT["events"][order_id]["buy_price"]}买入，{order_info["average"]}卖出的单已经超过{past_days}天没有卖出, 现在卖出将{"盈利" if rate > 0 else "亏损"}{abs(rate)}%, 当前价格为{curr_price}')
+                    rate = (curr_price - orders[order_id]["buy_price"]) / orders[order_id]["buy_price"] * 100
+                    log_info(f'{pair} 的在价格为{orders[order_id]["buy_price"]}买入，{order_info["average"]}卖出的单已经超过{past_days}天没有卖出, 现在卖出将{"盈利" if rate > 0 else "亏损"}{abs(rate)}%, 当前价格为{curr_price}')
+            if not orders:
+                del GLOBAL_CONTEXT['events'][pair]
         set_event(EVENT_KEY, GLOBAL_CONTEXT["events"])
 
 # def run_with_interval(interval_in_min: int):
