@@ -52,7 +52,7 @@ def log_info(msg: str):
     logger.info(msg)
 
 def add_order(events: BuyTenSellFiveEventContext, symbol: str, id: str, context: OrderContext):
-    if events[symbol] is None:
+    if events.get(symbol) is None:
         events[symbol] = {}
     events[symbol][id] = context
 

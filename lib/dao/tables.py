@@ -38,13 +38,13 @@ class Trade_Action_Info(Base):
     amount = Column(DECIMAL(15, 10), nullable=False)
     price = Column(DECIMAL(15, 10), nullable=False)
     type = Column(Enum('limit', 'market'), nullable=False)
-    context = Column(String(2048))
+    context = Column(String(4096))
     order_id = Column(String(100))
 
 class Events_Cache(Base):
     __tablename__ = 'events'
     key = Column(String(512), primary_key=True)
-    context = Column(String(2048))
+    context = Column(String(4096))
     type=Column(Enum('string', 'json'), default='string')
 
 # 创建模型对应的表
