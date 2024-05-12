@@ -8,7 +8,7 @@ from lib.dao.exchange import buy_at_market_price, get_remain_money, sell_at_mark
 from lib.notification.push.push_plus import send_push
 from lib.utils.logger import logger
 from lib.utils.time import curr_ts, unify_dt
-# TypedDict('sdf', {'a': 1})
+
 TurtleContext = TypedDict('TurtleContext', {
     'initialMoney': float, # 初始投资多少，用来计算收益率
     'holdMoney': float, # 手头剩下的USDT

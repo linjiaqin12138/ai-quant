@@ -94,7 +94,15 @@ def get_all_pairs(disable_cache = False) -> List[str]:
 
     return all_pairs
 
+
+def get_good_pairs(head: int = 100, coin_pair: str = 'USDT') -> List[str]:
+    sess = get_session()
+    pairs = sess.query(Exchange_Info).filter(Exchange_Info.pair.like(f'%/{coin_pair}')).order_by(Exchange_Info.quote_volume.desc()).limit(head).all()
+    return list(map(lambda item: item.pair, pairs))
+
+
 __all__ = [
     'get_ohclv',
-    'get_all_pairs'
+    'get_all_pairs',
+    'get_good_pairs'
 ]
