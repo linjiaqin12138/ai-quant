@@ -96,7 +96,8 @@ def turtle_trade(pair, frame = '1d', total_money = 100.0, max_round = 1, min_win
         log_info('目前涨到最高')
         context['latestMaxPrice'] = df['close'].iloc[-2]
 
-    if df['close'].iloc[-2] > df['max_in_window'].iloc[-3] and context['holdMoney'] > 0 and (context['maxRound'] > context['roundNumber']):
+    # TODO Support a enum status
+    if df['close'].iloc[-2] > df['max_in_window'].iloc[-3] and context['holdMoney'] > 0.5 and (context['maxRound'] > context['roundNumber']):
         log_info('买入信号出现')
 
         buy_per_round = context['holdMoney'] / (context['maxRound'] - context['roundNumber'])
@@ -126,7 +127,8 @@ def turtle_trade(pair, frame = '1d', total_money = 100.0, max_round = 1, min_win
     else:
         is_over_min_window = df['close'].iloc[-2] < df['min_in_window'].iloc[-3]
         is_decline_over_threshold = is_decline_over(context['latestMaxPrice'], df['close'].iloc[-2], context.get('stopDeclineRate'))
-        if context['holdCoin'] > 0 and is_over_min_window or is_decline_over_threshold:
+        # TODO: Fix holdCoind cannot be 0 if selled coin before
+        if transform_to_usdt(context['holdCoin'], df['close'].iloc[-1]) > 0.5 and is_over_min_window or is_decline_over_threshold:
             log_info('卖出信号出现:')
             log_info(f'价格跌破过去{min_window}个周期价格' if is_over_min_window else f'最大回撤超{context.get("stopDeclineRate")}%: {round(decline_rate(context["latestMaxPrice"], df["close"].iloc[-2]), 4)}')
             # 全部卖出
