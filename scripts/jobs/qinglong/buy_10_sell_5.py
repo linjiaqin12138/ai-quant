@@ -92,7 +92,7 @@ def monitor_orders():
                     ticker = fetch_ticker(pair)
                     curr_price = ticker['last']
                     rate = (curr_price - orders[order_id]["buy_price"]) / orders[order_id]["buy_price"] * 100
-                    log_info(f'{pair} 的在价格为{orders[order_id]["buy_price"]}买入，{order_info["price"]}卖出的单已经超过{past_days}天没有卖出, 现在卖出将{"盈利" if rate > 0 else "亏损"}{abs(rate)}%, 当前价格为{curr_price}')
+                    log_info(f'{pair} 的在价格为{orders[order_id]["buy_price"]}买入，{order_info["price"]}卖出的单已经超过{past_days}天没有卖出, 现在卖出将{"盈利" if rate > 0 else "亏损"}{abs(round(rate, 4))}%, 当前价格为{curr_price}')
             if not orders:
                 del GLOBAL_CONTEXT['events'][pair]
         set_event(EVENT_KEY, GLOBAL_CONTEXT["events"])

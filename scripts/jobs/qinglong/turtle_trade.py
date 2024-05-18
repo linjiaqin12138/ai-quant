@@ -93,12 +93,12 @@ def turtle_trade(pair, frame = '1d', total_money = 100.0, max_round = 1, min_win
     # initialMoney改不了，所以一开始投资多少钱就不能变，除非改数据库
     # context['initialMoney'] = 
     if context['latestMaxPrice'] > 0 and context['latestMaxPrice'] < df['close'].iloc[-2]:
-        log_info('目前涨到最高')
+        log_info(f'{pair}目前涨到最高: {df['close'].iloc[-2]} USDT')
         context['latestMaxPrice'] = df['close'].iloc[-2]
 
     # TODO Support a enum status
     if df['close'].iloc[-2] > df['max_in_window'].iloc[-3] and context['holdMoney'] > 0.5 and (context['maxRound'] > context['roundNumber']):
-        log_info('买入信号出现')
+        log_info(f'{pair}买入信号出现')
 
         buy_per_round = context['holdMoney'] / (context['maxRound'] - context['roundNumber'])
         
@@ -129,8 +129,8 @@ def turtle_trade(pair, frame = '1d', total_money = 100.0, max_round = 1, min_win
         is_decline_over_threshold = is_decline_over(context['latestMaxPrice'], df['close'].iloc[-2], context.get('stopDeclineRate'))
         # TODO: Fix holdCoind cannot be 0 if selled coin before
         if transform_to_usdt(context['holdCoin'], df['close'].iloc[-1]) > 0.5 and is_over_min_window or is_decline_over_threshold:
-            log_info('卖出信号出现:')
-            log_info(f'价格跌破过去{min_window}个周期价格' if is_over_min_window else f'最大回撤超{context.get("stopDeclineRate")}%: {round(decline_rate(context["latestMaxPrice"], df["close"].iloc[-2]), 4)}')
+            log_info(f'{pair}卖出信号出现:')
+            log_info(f'{pair}价格跌破过去{min_window}个周期价格' if is_over_min_window else f'最大回撤超{context.get("stopDeclineRate")}%: {round(decline_rate(context["latestMaxPrice"], df["close"].iloc[-2]), 4)}')
             # 全部卖出
             sell_result = sell_at_market_price(pair, amount=None, reason=ACTION_REASON)
             context['holdCoin'] -= sell_result['amount']
@@ -148,7 +148,7 @@ def turtle_trade(pair, frame = '1d', total_money = 100.0, max_round = 1, min_win
         gain = (context['holdCoin'] * df['close'].iloc[-1] + context['holdMoney'])
         gain_rate = (gain - context['initialMoney']) / context['initialMoney'] * 100
         compare_rate = (context['initialCoin'] * df['close'].iloc[-1] - context['initialMoney']) / context['initialMoney'] * 100
-        log_info(f'{pair} 海龟收益率: {context["initialMoney"]} -> {gain} = {round(gain_rate, 4)}%, 比较收益率: {round(compare_rate, 4)}%')
+        log_info(f'{pair} 海龟收益率: {round(context["initialMoney"], 4)} -> {round(gain, 4)} = {round(gain_rate, 4)}%, 比较收益率: {round(compare_rate, 4)}%')
 
 # MONITOR_LIST=[
 #     'BTC/USDT',
