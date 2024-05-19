@@ -15,6 +15,7 @@ nohup.out
 build/
 .pytest_cache
 temp.json
+Pipfile.lock
 
 # Executables
 *.swf

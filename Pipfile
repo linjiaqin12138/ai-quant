@@ -16,6 +16,10 @@ pymysql = "*"
 pytest = "*"
 jupyter = "*"
 notebook = "*"
+black = "==22.3.0"
+flake8 = "*"
+isort = "*"
+mypy = "*"
 
 [requires]
 python_version = "3.11"
