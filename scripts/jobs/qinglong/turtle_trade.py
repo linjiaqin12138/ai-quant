@@ -93,7 +93,7 @@ def turtle_trade(pair, frame = '1d', total_money = 100.0, max_round = 1, min_win
     # initialMoney改不了，所以一开始投资多少钱就不能变，除非改数据库
     # context['initialMoney'] = 
     if context['latestMaxPrice'] > 0 and context['latestMaxPrice'] < df['close'].iloc[-2]:
-        log_info(f'{pair}目前涨到最高: {df['close'].iloc[-2]} USDT')
+        log_info(f'{pair}目前涨到最高: {df["close"].iloc[-2]} USDT')
         context['latestMaxPrice'] = df['close'].iloc[-2]
 
     # TODO Support a enum status

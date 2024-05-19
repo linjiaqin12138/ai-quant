@@ -1,0 +1,21 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+requests = "*"
+ta-lib-precompiled = "*"
+pandas = "*"
+mplfinance = "*"
+ccxt = "*"
+sqlalchemy = "*"
+pymysql = "*"
+
+[dev-packages]
+pytest = "*"
+jupyter = "*"
+notebook = "*"
+
+[requires]
+python_version = "3.11"
