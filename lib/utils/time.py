@@ -15,4 +15,4 @@ def curr_ts() -> float:
 
 
 def unify_dt(dt: datetime.datetime, slot_range: int = 60) -> datetime.datetime:
-    return datetime.datetime.utcfromtimestamp(unify_ts(dt_to_float(dt), slot_range))
+    return datetime.datetime.fromtimestamp(unify_ts(dt_to_float(dt), slot_range))

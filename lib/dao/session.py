@@ -26,5 +26,7 @@ def get_session() -> Any:
     session_pool.append(sess)
     return sess
 
-
-__all__ = ["get_session"]
+__all__ = [
+  'get_session',
+  'Session'
+]

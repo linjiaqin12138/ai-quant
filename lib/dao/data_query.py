@@ -12,11 +12,11 @@ from .tables import Exchange_Info
 
 
 def get_ohclv(
-    pair: str,
-    scale: str,
-    limit: int = 500,
-    since: Union[datetime.datetime, None] = None,
-    end: Union[datetime.datetime, None] = None,
+  pair: str, 
+  scale: str, 
+  limit: int = 500, 
+  since: Union[int, None] = None,
+  end: Union[datetime.datetime, None] = None,
 ) -> pd.DataFrame:
     # table_class = get_table_class(pair, scale)
     columns = ["timestamp", "open", "high", "low", "close", "volume"]

@@ -1,24 +1,27 @@
 from typing import Any
 
-from sqlalchemy import DECIMAL, Column, DateTime, Enum, String
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import Column, String, Float, DateTime, DECIMAL, Enum
+from sqlalchemy.orm import declarative_base
 
-from ..typedef import ExchangePair, Scale
 from .engine import engine
 
 Base = declarative_base()
 
 # Query expected range data
-# Check if any data is missed, if yes, query it from backend
-class Ohlcv_Cache(Base):
-    __tablename__ = "ohlcv_cache"
+class OhlcvCacheBase():
     timestamp = Column(DateTime, primary_key=True)
     pair = Column(String(20), primary_key=True)
     open = Column(DECIMAL(15, 10))
     high = Column(DECIMAL(15, 10))
     low = Column(DECIMAL(15, 10))
     close = Column(DECIMAL(15, 10))
-    volume = Column(DECIMAL(15, 10))
+    volume = Column(DECIMAL(20, 10))
+# Check if any data is missed, if yes, query it from backend
+class OhlcvCache1H(OhlcvCacheBase, Base):
+    __tablename__ = 'ohlcv_cache_1h'
+
+class OhlcvCache1D(OhlcvCacheBase, Base):
+    __tablename__ = 'ohlcv_cache_1d'
 
 
 # TODO: 改掉其他类的名字风格，统一改成驼峰

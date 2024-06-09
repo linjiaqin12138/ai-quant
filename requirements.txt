@@ -1,0 +1,10 @@
+requests
+Ta-Lib
+pandas
+mplfinance
+ccxt
+sqlalchemy
+jupyter
+notebook
+pymysql
+pytest
