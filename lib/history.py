@@ -1,27 +1,15 @@
 import abc
 from typing import Literal, Optional, Union, List, Any
-from dataclasses import dataclass
-from datetime import datetime, UTC, timedelta
-
-from lib.utils.logger import logger
+from datetime import datetime, timedelta
 from sqlalchemy import and_
 
+from .model import Ohlcv
+from .utils.logger import logger
 from .dao.tables import OhlcvCache1H, OhlcvCache1D, OhlcvCacheBase
 from .dao.session import Session
-from .utils.time import dt_to_float, curr_ts, unify_dt
+from .utils.time import dt_to_float, unify_dt
 from .dao.exchange import fetch_ohlcv
 
-@dataclass(frozen=True)
-class Ohlcv:
-    timestamp: datetime
-    open: float
-    high: float
-    low: float
-    close: float
-    volume: float
-
-    # def __str__(self):
-    #     return ''
 
 PeriodLiteral = Literal['1h', '1d']
 
@@ -185,7 +173,7 @@ class OhlcvHistory:
         self.remote_fetcher: OhlcvRemoteFetcherAbstract = remote_fetcher_class(pair, period)
 
     def current(self) -> Ohlcv:
-        return self.remote_fetcher.query(datetime.now())
+        return self.remote_fetcher.get(datetime.now())
     
     # range query from [start_time, end_time)
     def range_query(self, start_time: datetime, end_time: datetime) -> List[Ohlcv]:
@@ -209,7 +197,6 @@ class OhlcvHistory:
         miss_time_ranges = get_missed_time_ranges(local_timerange, normalized_start, normalized_end, time_interval)
         for time_range in miss_time_ranges:
             remote_data = self.remote_fetcher.range_query(time_range[0], time_range[1])
-            # print_timestamps(list(map(lambda x: x.timestamp, remote_data)))
             self.local_store.add(remote_data)
             result.extend(remote_data)
         
