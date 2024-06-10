@@ -110,9 +110,9 @@ def boll_info(ohlcv_list: List[Ohlcv]) -> BollInfo:
             band_open_idxs.append(i)
         if (df['bandwidth'].iloc[i] /  df['bandwidth'].iloc[i - 1]  - 1) < -0.2 and (len(band_open_idxs) > 0 and len(band_close_idxs) > 0 and band_open_idxs[-1] > band_close_idxs[-1] or len(band_close_idxs) == 0):
             band_close_idxs.append(i)
-        if df['close'].iloc[i] > df['bandwidth'].iloc[i] and df['close'].iloc[i - 1] < df['bandwidth'].iloc[i - 1]:
+        if df['close'].iloc[i] > df['middleband'].iloc[i] and df['close'].iloc[i - 1] < df['middleband'].iloc[i - 1]:
             turn_good_idxs.append(i)
-        if df['close'].iloc[i] < df['bandwidth'].iloc[i] and df['close'].iloc[i - 1] > df['bandwidth'].iloc[i - 1]:
+        if df['close'].iloc[i] < df['middleband'].iloc[i] and df['close'].iloc[i - 1] > df['middleband'].iloc[i - 1]:
             turn_bad_idxs.append(i)
         if df['close'].iloc[i] > df['upperband'].iloc[i]:
             increase_over_band_idxs.append(i)
