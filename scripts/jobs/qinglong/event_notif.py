@@ -1,6 +1,6 @@
 import sys
 from datetime import datetime, timedelta
-from lib.history import OhlcvHistory
+from lib.history import OhlcvHistory, period_to_timerange_in_second
 from lib.utils.ohlcv_helper import * 
 from lib.utils.logger import logger
 from lib.notification import send_push
@@ -17,7 +17,7 @@ if __name__ == '__main__':
     data_count = 36
     for pair in interesting:
         history = OhlcvHistory(pair, interval)
-        data = history.range_query(datetime.now() - timedelta(minutes=15 * data_count), datetime.now())
+        data = history.range_query(datetime.now() - timedelta(seconds=period_to_timerange_in_second(interval) * data_count), datetime.now())
         assert len(data) == data_count
         macd = macd_info(data)
         boll = boll_info(data)
