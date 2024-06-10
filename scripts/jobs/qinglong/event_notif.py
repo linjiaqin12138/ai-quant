@@ -1,3 +1,4 @@
+import sys
 from datetime import datetime, timedelta
 from lib.history import OhlcvHistory
 from lib.utils.ohlcv_helper import * 
@@ -10,7 +11,7 @@ def log_info(msg: str):
     logger.info(msg)
 
 if __name__ == '__main__':
-    interval = '15m'
+    interval = sys.argv[1] if len(sys.argv) == 2 else '15m'
     interesting = ['DOGE/USDT', 'TRB/USDT', 'TRU/USDT']
 
     data_count = 36
@@ -43,7 +44,7 @@ if __name__ == '__main__':
     
     if message:
         send_push({
-            'title': '行情通知',
+            'title': f'行情通知 - {interval}',
             'content': '\n'.join(message)
         })
 
