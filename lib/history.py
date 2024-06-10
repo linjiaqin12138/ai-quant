@@ -11,12 +11,14 @@ from .utils.time import dt_to_float, unify_dt
 from .dao.exchange import fetch_ohlcv
 
 
-PeriodLiteral = Literal['1h', '1d']
+PeriodLiteral = Literal['1h', '1d', '15m']
 
 def period_to_table_class(period: PeriodLiteral): 
     if period == '1h':
         return OhlcvCache1H
     if period == '1d':
+        return OhlcvCache1D
+    if period == '15m':
         return OhlcvCache1D
 
 def period_to_timerange_in_second(period: PeriodLiteral) -> int:
@@ -24,6 +26,8 @@ def period_to_timerange_in_second(period: PeriodLiteral) -> int:
         return 3600
     if period == '1d':
         return 86400
+    if period == '15m':
+        return int(15 * 60)
 
 def ohlcv_from_backend(item: List[Any]) -> Ohlcv:
     return Ohlcv(timestamp=datetime.fromtimestamp(item[0] / 1000), open = item[1], high = item[2], low = item[3], close = item[4], volume = item[5])
@@ -129,12 +133,18 @@ class OhlcvCache(OhlcvCacheFetcherAbstract):
         )
 
     def add(self, lines: Union[Ohlcv, List[Ohlcv]]):
-        if type(lines) == list:
-            for line in lines:
-                self.session.add(self._to_db_record(line))
-        else:
-            self.session.add(self._to_db_record(lines))
-        self.session.commit()
+        try:
+            if type(lines) == list:
+                for line in lines:
+                    # self.add(line)
+                    self.session.add(self._to_db_record(line))
+                    self.session.commit()
+            else:
+                self.session.add(self._to_db_record(lines))
+                self.session.commit()
+        except Exception as err:
+            self.session.rollback()
+            raise err
 
 class OhlcvRemoteFetcher(OhlcvRemoteFetcherAbstract):
     def __init__(self, pair: str, period: Literal['1h', '1d']):
@@ -166,11 +176,19 @@ class OhlcvRemoteFetcher(OhlcvRemoteFetcherAbstract):
 
 
 class OhlcvHistory:
-    def __init__(self, pair: str, period: Literal['1h', '1d'], local_store_class: OhlcvCacheFetcherAbstract = OhlcvCache, remote_fetcher_class: OhlcvRemoteFetcherAbstract = OhlcvRemoteFetcher):
+    def __init__(self, pair: str, period: PeriodLiteral, local_store_class: OhlcvCacheFetcherAbstract = OhlcvCache, remote_fetcher_class: OhlcvRemoteFetcherAbstract = OhlcvRemoteFetcher):
         self.pair = pair
         self.period = period
         self.local_store: OhlcvCacheFetcherAbstract = local_store_class(pair, period)
         self.remote_fetcher: OhlcvRemoteFetcherAbstract = remote_fetcher_class(pair, period)
+
+    def _add_local_data(self, data): 
+        try:
+            self.local_store.add(data)
+        except Exception as err:
+            logger.warn('Failed to add data to local database')
+            logger.warn(err)
+        return 
 
     def current(self) -> Ohlcv:
         return self.remote_fetcher.get(datetime.now())
@@ -189,7 +207,7 @@ class OhlcvHistory:
             return local_data
         if len(local_data) == 0:
             remote_data = self.remote_fetcher.range_query(normalized_start, normalized_end)
-            self.local_store.add(remote_data)
+            self._add_local_data(remote_data)
             return remote_data
         
         local_timerange = list(map(lambda item: item.timestamp, local_data))
@@ -197,7 +215,7 @@ class OhlcvHistory:
         miss_time_ranges = get_missed_time_ranges(local_timerange, normalized_start, normalized_end, time_interval)
         for time_range in miss_time_ranges:
             remote_data = self.remote_fetcher.range_query(time_range[0], time_range[1])
-            self.local_store.add(remote_data)
+            self._add_local_data(remote_data)
             result.extend(remote_data)
         
         sorted_result = sorted(result, key=lambda item: item.timestamp)

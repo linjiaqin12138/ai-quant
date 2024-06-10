@@ -15,13 +15,16 @@ class OhlcvCacheBase():
     high = Column(DECIMAL(15, 10))
     low = Column(DECIMAL(15, 10))
     close = Column(DECIMAL(15, 10))
-    volume = Column(DECIMAL(20, 10))
+    volume = Column(DECIMAL(15, 10))
 # Check if any data is missed, if yes, query it from backend
 class OhlcvCache1H(OhlcvCacheBase, Base):
     __tablename__ = 'ohlcv_cache_1h'
 
 class OhlcvCache1D(OhlcvCacheBase, Base):
     __tablename__ = 'ohlcv_cache_1d'
+
+class OhlcvCache15M(OhlcvCacheBase, Base):
+    __tablename__ = 'ohlcv_cache_15m'
 
 
 # TODO: 改掉其他类的名字风格，统一改成驼峰
