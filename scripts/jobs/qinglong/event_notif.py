@@ -11,7 +11,7 @@ def log_info(msg: str):
 
 if __name__ == '__main__':
     interval = '15m'
-    interesting = ['DOGE/USDT', 'TRB/USDT']
+    interesting = ['DOGE/USDT', 'TRB/USDT', 'TRU/USDT']
 
     data_count = 36
     for pair in interesting:

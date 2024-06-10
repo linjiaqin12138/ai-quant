@@ -11,11 +11,11 @@ Base = declarative_base()
 class OhlcvCacheBase():
     timestamp = Column(DateTime, primary_key=True)
     pair = Column(String(20), primary_key=True)
-    open = Column(DECIMAL(15, 10))
-    high = Column(DECIMAL(15, 10))
-    low = Column(DECIMAL(15, 10))
-    close = Column(DECIMAL(15, 10))
-    volume = Column(DECIMAL(15, 10))
+    open = Column(String(25))
+    high = Column(String(25))
+    low = Column(String(25))
+    close = Column(String(25))
+    volume = Column(String(25))
 # Check if any data is missed, if yes, query it from backend
 class OhlcvCache1H(OhlcvCacheBase, Base):
     __tablename__ = 'ohlcv_cache_1h'

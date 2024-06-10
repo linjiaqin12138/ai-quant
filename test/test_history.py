@@ -16,21 +16,20 @@ def test_can_query_range_from_remote_and_second_time_hit_cache():
     assert len(range_data) == 22
     range_data = fetcher.range_query(datetime.now() - timedelta(days = 3), datetime.now())
     assert len(range_data) == 72
-    # assert len(range_data) == 22
-    # range_data = fetcher.range_query(datetime.now() - timedelta(days = 1), datetime.now() - timedelta(hours=2))
-    # assert len(range_data) == 22
-    # range_data = fetcher.range_query(datetime.now() - timedelta(days = 2), datetime.now() - timedelta(hours=1))
-    # assert len(range_data) == 47
-    # range_data = fetcher.range_query(datetime.now() - timedelta(days = 2), datetime.now() - timedelta(hours=1))
-    # assert len(range_data) == 47
-    # range_data = fetcher.range_query(datetime.now() - timedelta(days = 100), datetime.now())
-    # assert len(range_data) == 2400
-    # range_data = fetcher.range_query(datetime.now() - timedelta(days = 200), datetime.now())
-    # assert len(range_data) == 4800
+    range_data = fetcher.range_query(datetime.now() - timedelta(days = 1), datetime.now() - timedelta(hours=2))
+    assert len(range_data) == 22
+    range_data = fetcher.range_query(datetime.now() - timedelta(days = 2), datetime.now() - timedelta(hours=1))
+    assert len(range_data) == 47
+    range_data = fetcher.range_query(datetime.now() - timedelta(days = 2), datetime.now() - timedelta(hours=1))
+    assert len(range_data) == 47
+    range_data = fetcher.range_query(datetime.now() - timedelta(days = 100), datetime.now())
+    assert len(range_data) == 2400
+    range_data = fetcher.range_query(datetime.now() - timedelta(days = 200), datetime.now())
+    assert len(range_data) == 4800
 
-    # fetcher = OhlcvHistory('BTC/USDT', '1d')
-    # range_data = fetcher.range_query(datetime.now() - timedelta(days = 1), datetime.now() - timedelta(hours=3))
-    # assert len(range_data) == 1
-    # range_data = fetcher.range_query(datetime.now() - timedelta(days = 200), datetime.now())
-    # assert len(range_data) == 200
+    fetcher = OhlcvHistory('BTC/USDT', '1d')
+    range_data = fetcher.range_query(datetime.now() - timedelta(days = 1), datetime.now() - timedelta(hours=3))
+    assert len(range_data) == 1
+    range_data = fetcher.range_query(datetime.now() - timedelta(days = 200), datetime.now())
+    assert len(range_data) == 200
     

@@ -125,11 +125,11 @@ class OhlcvCache(OhlcvCacheFetcherAbstract):
         return self.table_class(
             pair=self.pair,
             timestamp=ohlcv.timestamp,
-            open=ohlcv.open,
-            high=ohlcv.high,
-            low=ohlcv.low,
-            close=ohlcv.close,
-            volume=ohlcv.volume
+            open=str(ohlcv.open),
+            high=str(ohlcv.high),
+            low=str(ohlcv.low),
+            close=str(ohlcv.close),
+            volume=str(ohlcv.volume)
         )
 
     def add(self, lines: Union[Ohlcv, List[Ohlcv]]):
@@ -138,10 +138,9 @@ class OhlcvCache(OhlcvCacheFetcherAbstract):
                 for line in lines:
                     # self.add(line)
                     self.session.add(self._to_db_record(line))
-                    self.session.commit()
             else:
                 self.session.add(self._to_db_record(lines))
-                self.session.commit()
+            self.session.commit()
         except Exception as err:
             self.session.rollback()
             raise err
