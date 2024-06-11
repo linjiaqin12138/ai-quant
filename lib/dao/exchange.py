@@ -5,6 +5,7 @@ import time
 from typing import Literal, Optional, TypeAlias, TypeVar
 
 import ccxt
+import requests
 
 from ..utils.logger import logger
 from .session import get_session
@@ -204,6 +205,15 @@ def buy(pair: str, spent_usdt: float):
     logger.info(f'Result: Spend {result["cost"]}')
 
     return {"result": result}
+
+def long_short_ratio_info(pair: str, period: str, limit: int):
+    symbol = pair.replace('/', '')
+    url = f"https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol={symbol}&period={period}&limit={limit}"
+
+    # 发起 GET 请求
+    return requests.get(url)
+    
+
 
 
 # __all__ = ['call_with_retry']

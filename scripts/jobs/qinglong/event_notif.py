@@ -4,6 +4,7 @@ from lib.history import OhlcvHistory, period_to_timerange_in_second
 from lib.utils.ohlcv_helper import * 
 from lib.utils.logger import logger
 from lib.notification import send_push
+from lib.dao.exchange import long_short_ratio_info
 
 message = []
 def log_info(msg: str):
@@ -41,8 +42,18 @@ if __name__ == '__main__':
             log_info(f'{pair} {interval}涨破布林线均线')
         if boll['turn_bad_idxs'] and boll['turn_bad_idxs'][-1] == data_count - 1:
             log_info(f'{pair} {interval}跌破布林线均线')
-    
+
+
     if message:
+        content = '\n'.join(message)
+        for pair in interesting:
+            if content.find(pair) >= 0:
+                res = long_short_ratio_info(pair, interval, 1)
+                if res.status_code == 200:
+                    long_short_info = res.json()[0]
+                    log_info(f"{pair} {interval} 多空比: {float(long_short_info['longAccount']) / float(long_short_info['shortAccount'])}")
+                else:
+                    print(res)
         send_push({
             'title': f'行情通知 - {interval}',
             'content': '\n'.join(message)
