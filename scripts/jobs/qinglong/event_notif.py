@@ -43,7 +43,8 @@ if __name__ == '__main__':
         if boll['turn_bad_idxs'] and boll['turn_bad_idxs'][-1] == data_count - 1:
             log_info(f'{pair} {interval}跌破布林线均线')
 
-
+    # TODO 存起来，以后用来分析
+    # TODO 支持Test Mode，脚本能够以历史数据跑
     if message:
         content = '\n'.join(message)
         for pair in interesting:

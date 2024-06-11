@@ -37,7 +37,7 @@ def with_retry(function: G) -> G:
         while True:
             try:
                 return function(*args, **kwargs)
-            except (ccxt.errors.NetworkError, ccxt.errors.RequestTimeout) as e:
+            except (ccxt.errors.NetworkError, ccxt.errors.RequestTimeout, requests.exceptions.ConnectTimeout) as e:
                 count += 1
                 logger.warn(f"Retry {function} {count} times")
                 time.sleep(2 ** (count - 1))
@@ -206,7 +206,7 @@ def buy(pair: str, spent_usdt: float):
 
     return {"result": result}
 
-def long_short_ratio_info(pair: str, period: str, limit: int):
+def _long_short_ratio_info(pair: str, period: str, limit: int):
     symbol = pair.replace('/', '')
     url = f"https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol={symbol}&period={period}&limit={limit}"
 
@@ -214,6 +214,6 @@ def long_short_ratio_info(pair: str, period: str, limit: int):
     return requests.get(url)
     
 
-
+long_short_ratio_info= with_retry(_long_short_ratio_info)
 
 # __all__ = ['call_with_retry']
