@@ -7,7 +7,9 @@ from lib.dao.event import get_event, set_event
 from lib.dao.exchange import buy_at_market_price, get_remain_money, sell_at_market_price
 from lib.notification.push.push_plus import send_push
 from lib.utils.logger import logger
+from lib.utils.ohlcv_helper import to_df
 from lib.utils.time import curr_ts, unify_dt
+from lib.history import OhlcvHistory
 
 TurtleContext = TypedDict(
     "TurtleContext",
@@ -73,7 +75,7 @@ def turtle_trade(
 
     event_key = f"daily_turtle_trade_for_{pair}"
     context: TurtleContext | None = get_event(event_key)
-
+    history = OhlcvHistory(pair, frame)
     # Init Context
     if context is None:
         remain_money = get_remain_money()
@@ -89,7 +91,7 @@ def turtle_trade(
             "holdMoney": total_money,
             "roundNumber": 0,
             "holdCoin": 0,
-            "initialCoin": transform_to_coin_if_buy(total_money, df["close"].iloc[-1]),
+            "initialCoin": transform_to_coin_if_buy(total_money, history.current().close),
             "latestMaxPrice": -1.0,
             "startTime": curr_ts(),
             "maxRound": max_round,
@@ -102,12 +104,10 @@ def turtle_trade(
     logger.info("Current Context: ")
     logger.info(context)
     # 这里开始的代码应该用context了而不是用函数传进来的参数了
-    # +2这一个就是今天，今天不能算进去，因为今天刚开始还没过完，然后算滚动串口需要多一天
-    df = get_ohclv(
-        pair,
-        context["frame"],
-        limit=max(context["minWindow"], context["maxWindow"]) + 2,
-    )
+    
+    data = history.range_query(datetime.datetime.now() - datetime.timedelta(days=max(context["minWindow"], context["maxWindow"]) + 1), datetime.datetime.now())
+    data.append(history.current())
+    df = to_df(data)
     assert df["timestamp"].iloc[-1].to_pydatetime() == unify_dt(
         datetime.datetime.now(), 86400
     )
