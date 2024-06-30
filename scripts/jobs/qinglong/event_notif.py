@@ -3,7 +3,7 @@ import traceback
 from datetime import datetime, timedelta
 from lib.history import OhlcvHistory, period_to_timerange_in_second
 from lib.utils.ohlcv_helper import * 
-from lib.utils.logger import logger
+from lib.logger import logger
 from lib.notification import send_push
 from lib.dao.exchange import long_short_ratio_info
 

@@ -1,0 +1,60 @@
+from typing import Dict
+from sqlalchemy import MetaData, create_engine, Engine
+from sqlalchemy import Table, Column, Enum, String, DateTime, DECIMAL, BigInteger
+from sqlalchemy.orm import Session as SqlAlchemySession
+from ...model import CryptoHistoryFrame
+from ...config import get_mysql_uri
+
+engine = create_engine(get_mysql_uri())
+
+metadata_obj = MetaData()
+
+def get_cache_table(frame: CryptoHistoryFrame) -> Table:
+    return Table(
+        "crypto_ohlcv_cache_" + frame,
+        metadata_obj,
+        Column("timestamp", BigInteger, primary_key=True),
+        Column("pair", String(20), primary_key=True),
+        Column("open", String(25)),
+        Column("high", String(25)),
+        Column("low", String(25)),
+        Column("close", String(25)),
+        Column("volume", String(25))
+    )
+
+ohlcv_cache_tables: Dict[CryptoHistoryFrame, Table] = {
+    '1d': get_cache_table('1d'),
+    '1h': get_cache_table('1h'),
+    '15m': get_cache_table('15m')
+}
+
+exchange_info = Table(
+    'exchange_info',
+    metadata_obj,
+    Column("pair", String(20), primary_key=True),
+    Column("quote_volume", DECIMAL(20, 6))
+)
+
+trade_action_info = Table(
+    'trade_action_info',
+    metadata_obj,
+    Column("pair", String(20), primary_key=True),
+    Column("timestamp", DateTime, primary_key=True),
+    Column('action', Enum("buy", "sell"), primary_key=True),
+    Column('reason', String(1024)),
+    Column('amount', DECIMAL(15, 10), nullable=False),
+    Column('price', DECIMAL(15, 10), nullable=False),
+    Column('type', Enum("limit", "market"), nullable=False),
+    Column('context', String(4096)),
+    Column('order_id', String(100))
+)
+
+events = Table(
+    'events',
+    metadata_obj,
+    Column("key", String(512), primary_key=True),
+    Column("context", String(4096)),
+    Column('type', Enum("string", "json"), default="string")
+)
+
+metadata_obj.create_all(engine)

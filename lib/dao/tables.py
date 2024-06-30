@@ -35,7 +35,6 @@ class Exchange_Info(Base):
     __tablename__ = "exchange_info"
     pair = Column(String(20), primary_key=True)
     quote_volume = Column(DECIMAL(20, 6))
-    # is_monitoring = Column(Boolean)
 
 
 class Trade_Action_Info(Base):

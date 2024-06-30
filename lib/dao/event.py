@@ -1,7 +1,7 @@
 import json
 from typing import Dict, List
 
-from ..utils.logger import logger
+from ..logger import logger
 from .session import get_session
 from .tables import Events_Cache
 

@@ -14,7 +14,7 @@ from lib.dao.exchange import (
     sell_at_price,
 )
 from lib.notification import send_push
-from lib.utils.logger import logger
+from lib.logger import logger
 from lib.utils.time import curr_ts
 
 interval_min = 10

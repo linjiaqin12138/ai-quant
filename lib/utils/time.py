@@ -1,18 +1,26 @@
-import datetime
+from datetime import datetime
+from ..model import CryptoHistoryFrame
 
+def timeframe_to_second(tframe: CryptoHistoryFrame) -> int:
+    if tframe == '15m':
+        return 15 * 60
+    if tframe == '1d':
+        return 60 * 60 * 24
+    if tframe == '1h':
+        return 60 * 60
+    raise Exception(f'time range {tframe} not support')
 
-def unify_ts(ts_in_sec: float, slot_range: int = 60) -> float:
-    return float(ts_in_sec - ts_in_sec % slot_range)
+def round_datetime(ts: datetime, tframe: CryptoHistoryFrame) -> datetime:
+    if tframe == '1d':
+        return ts.replace(hour=0, minute=0, second=0, microsecond=0)
+    if tframe == '1h':
+        return ts.replace(minute=0, second=0, microsecond=0)
+    if tframe == '15m':
+        return ts.replace(minute=ts.minute // 15 * 15, second=0, microsecond=0)
+    raise Exception(f'time range {tframe} not support')
 
+def dt_to_ts(ts: datetime) -> int:
+    return int(ts.timestamp() * 1000)
 
-# Return in second
-def dt_to_float(dt: datetime.datetime) -> float:
-    return datetime.datetime.timestamp(dt)
-
-
-def curr_ts() -> float:
-    return dt_to_float(datetime.datetime.now())
-
-
-def unify_dt(dt: datetime.datetime, slot_range: int = 60) -> datetime.datetime:
-    return datetime.datetime.fromtimestamp(unify_ts(dt_to_float(dt), slot_range))
+def time_length_in_frame(start: datetime, end: datetime, frame: CryptoHistoryFrame) -> int:
+    return int((dt_to_ts(round_datetime(end, frame)) - dt_to_ts(round_datetime(start, frame))) / timeframe_to_second(frame) / 1000)

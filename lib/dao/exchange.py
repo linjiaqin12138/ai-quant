@@ -7,7 +7,7 @@ from typing import Literal, Optional, TypeAlias, TypeVar
 import ccxt
 import requests
 
-from ..utils.logger import logger
+from ..logger import logger
 from .session import get_session
 from .tables import Trade_Action_Info
 

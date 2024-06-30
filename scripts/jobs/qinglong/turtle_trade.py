@@ -6,7 +6,7 @@ from lib.dao.data_query import get_ohclv
 from lib.dao.event import get_event, set_event
 from lib.dao.exchange import buy_at_market_price, get_remain_money, sell_at_market_price
 from lib.notification.push.push_plus import send_push
-from lib.utils.logger import logger
+from lib.logger import logger
 from lib.utils.ohlcv_helper import to_df
 from lib.utils.time import curr_ts, unify_dt
 from lib.history import OhlcvHistory

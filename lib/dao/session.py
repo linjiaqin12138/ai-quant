@@ -2,7 +2,7 @@ from typing import Any
 
 from sqlalchemy.orm import sessionmaker
 
-from ..utils.logger import logger
+from ..logger import logger
 from .engine import engine
 
 Session = sessionmaker(bind=engine)

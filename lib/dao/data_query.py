@@ -3,7 +3,7 @@ from typing import List, Union
 
 import pandas as pd
 
-from ..utils.logger import logger
+from ..logger import logger
 from ..utils.time import curr_ts, unify_ts
 from .event import get_event, set_event
 from .exchange import fetch_ohlcv, fetch_ticker, load_markets
