@@ -63,8 +63,10 @@ class ContextBase(abc.ABC):
     def __enter__(self):
         if not self._context:
             with self._deps.session:
-                self._context = self.kv_store.get(self.id) or self.init_context(self._params)
-                self.is_dirt = True
+                self._context = self.kv_store.get(self.id)
+                if self._context is None: 
+                    self._context = self.init_context(self._params)
+                    self.is_dirt = True
         return self
     
     def __exit__(self, exc_type, exc_value, traceback_obj):

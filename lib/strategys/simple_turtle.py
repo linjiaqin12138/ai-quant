@@ -90,7 +90,7 @@ def simple_turtle(context: Context, data: List[Ohlcv] = []) -> ResultBase:
     if context.get('buy_round') > 0 and context.get('max_price') < close_price:
         curr_gain = get_total_assets(close_price, context.get('account_coin_amount') , context.get('account_usdt_amount') )
         passed_time = time_pass(context.get('last_time_buy'), curr_time, params.data_frame)
-        deps.notification_logger.msg(f'买入{passed_time}个周期涨到最高价 {close_price}, 总收益率：', change_rate(params.money, curr_gain) * 100, '%')
+        deps.notification_logger.msg(f'{params.symbol} 买入{passed_time}个周期涨到最高价 {close_price}, 总收益率：', change_rate(params.money, curr_gain) * 100, '%')
         context.set('max_price', close_price)
 
     if context.get('buyable'):
@@ -98,7 +98,7 @@ def simple_turtle(context: Context, data: List[Ohlcv] = []) -> ResultBase:
         is_next_round = (context.get('last_time_buy') is None) or time_pass(context.get('last_time_buy') , curr_time, params.data_frame) >= params.max_window
 
         if is_max_window and not is_next_round:
-            deps.notification_logger.msg(f'价格突破{params.max_window}周期最大值, 但不买入')
+            deps.notification_logger.msg(f'{params.symbol} 价格突破{params.max_window}周期最大值, 但不买入')
 
         if is_next_round and is_max_window:
             spent = context.get('account_usdt_amount') * 0.5 if context.get('buy_round') + 1 < params.max_buy_round else context.get('account_usdt_amount') 
@@ -121,9 +121,9 @@ def simple_turtle(context: Context, data: List[Ohlcv] = []) -> ResultBase:
         is_min_window = close_price < df['min_in_window'].iloc[-2]
 
         if is_max_retrieval:
-            deps.notification_logger.msg(f'达到最大回撤 {params.max_retrieval * 100}%, 卖出')
+            deps.notification_logger.msg(f'{params.symbol} 达到最大回撤 {params.max_retrieval * 100}%, 卖出')
         if is_min_window:
-            deps.notification_logger.msg(f'价格跌破{params.min_window}周期最小值，卖出')
+            deps.notification_logger.msg(f'{params.symbol} 价格跌破{params.min_window}周期最小值，卖出')
     
         if is_min_window or is_max_retrieval:
             order = deps.crypto.create_order(params.symbol, 'market', 'sell', 'TURTLE_PLAN', amount = context.get('account_coin_amount') )
