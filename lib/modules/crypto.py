@@ -66,6 +66,7 @@ class CryptoOperationModule:
             return order
     
     def get_ohlcv_history(self, pair: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> CryptoOhlcvHistory:
+        logger.debug(f'get_ohlcv_history with pair: {pair}, frame: {frame}, start: {start}, end: {end}')
         with self.dependency.session: 
             expected_data_length = time_length_in_frame(start, end, frame)
             nomolized_start = round_datetime(start, frame)

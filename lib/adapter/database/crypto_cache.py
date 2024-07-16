@@ -5,6 +5,7 @@ from sqlalchemy import insert, select, and_
 
 from ...utils.time import dt_to_ts
 from ...model import CryptoOhlcvHistory, CryptoHistoryFrame, Ohlcv
+from ...logger import logger
 from .sqlalchemy import ohlcv_cache_tables
 from .session import SqlAlchemySession
 
@@ -22,6 +23,7 @@ class CryptoOhlcvCacheFetcher(CryptoOhlcvCacheFetcherAbstract):
         self.session = session
 
     def range_query(self, pair: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> CryptoOhlcvHistory:
+        logger.debug(f'local database range_query with pair: {pair}, frame: {frame}, start: {start}, end: {end}')
         table = ohlcv_cache_tables[frame]
         stmt = select(table).filter(
             and_(

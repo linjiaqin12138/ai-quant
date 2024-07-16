@@ -1,4 +1,4 @@
-import abc
+import abc, traceback
 from typing import Any, Optional, Callable, List
 from dataclasses import dataclass
 
@@ -67,7 +67,7 @@ class ContextBase(abc.ABC):
                 self.is_dirt = True
         return self
     
-    def __exit__(self, *args):
+    def __exit__(self, exc_type, exc_value, traceback_obj):
         
         if self.is_dirt:
             with self._deps.session:
@@ -75,12 +75,9 @@ class ContextBase(abc.ABC):
                 self.is_dirt = False
                 self._deps.session.commit()
         
-        if len(args) and args[0] and args[1] and args[2]:
-            logger.error(args[2])
+        if exc_type and exc_value and traceback_obj:
             if self._deps.notification_logger:
-                self._deps.notification_logger.msg(args[2])
-            else:
-                logger.error(args[2])
+                self._deps.notification_logger.msg('Script error happened:\n', *traceback.format_tb(traceback_obj))
 
 # StrategyResult = 
 StrategyFunc = Callable[[ContextBase, Optional[List[Ohlcv]]], ResultBase]

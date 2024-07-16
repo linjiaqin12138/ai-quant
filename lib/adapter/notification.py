@@ -4,6 +4,7 @@ import abc
 import requests
 
 from ..config import get_push_token
+from ..logger import logger
 
 class NotificationAbstract(abc.ABC):
 
@@ -17,6 +18,7 @@ class PushPlus(NotificationAbstract):
         if not self.token:
             raise Exception("Push plus token is not set")
     def send(self, content: str, title: str = ''):
+        logger.debug(f'Send Push Plus Notification: title: {title}, content: {content}')
         try:
             # TODO Support Retry
             res = requests.post(

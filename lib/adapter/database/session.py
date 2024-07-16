@@ -2,6 +2,7 @@ import abc
 from dataclasses import dataclass
 from typing import List, Any
 from sqlalchemy import text, Engine
+from ...logger import logger
 from .sqlalchemy import engine as default_engine
 
 @dataclass(frozen=True)
@@ -52,7 +53,8 @@ class SqlAlchemySession(SessionAbstract):
             text(sql),
             params
         )
-        # print(sql, params)
+        logger.debug(f'SQL: {sql}')
+        logger.debug(f'params: {params}')
         return ExecuteResult(
             rows = result.all() if result.returns_rows else [], 
             row_count= result.rowcount

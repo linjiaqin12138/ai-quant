@@ -4,11 +4,9 @@ from typing import Dict
 def get_mysql_uri() -> str:
     username = os.environ.get("MYSQL_USER") or "py"
     password = os.environ.get("MYSQL_PASS") or "wapwap12"
-    hostname = os.environ.get("MYSQL_HOST") or "127.0.0.1",
-    database = os.environ.get("MYSQL_DB") or "python_job",
+    hostname = os.environ.get("MYSQL_HOST") or "127.0.0.1"
+    database = os.environ.get("MYSQL_DB") or "python_job"
     port = os.environ.get("MYSQL_PORT") or 3306
-    # return f"mysql+pymysql://py:wapwap12@127.0.0.1:3306/python_job"
-    # print(f"mysql+pymysql://{username}:{password}@{hostname}:{port}/{database}")
     return f"mysql+pymysql://{username}:{password}@{hostname}:{port}/{database}"
 
 def get_binance_config() -> Dict:

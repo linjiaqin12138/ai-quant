@@ -2,7 +2,7 @@ from typing import List, Any
 from datetime import datetime, timedelta
 from sqlalchemy import create_engine
 
-from lib.adapter.crypto_exchange.base import CryptoExchangeAbstract
+from lib.adapter.crypto_exchange.base import CryptoExchangeAbstract, CryptoTicker
 from lib.adapter.crypto_exchange.binance import BinanceExchange
 from lib.adapter.database.session import SqlAlchemySession
 from lib.model import CryptoOhlcvHistory, Ohlcv
@@ -36,6 +36,9 @@ class FakeExchange(CryptoExchangeAbstract):
                 if params_list[idx][param_idx] != self.called_log[function_name]['params'][idx][param_idx]:
                     return False
         return True
+
+    def fetch_ticker(self, pair: str) -> CryptoTicker:
+        return super().fetch_ticker(pair)
 
     def create_order():
         pass
@@ -72,8 +75,9 @@ def test_can_query_range_from_remote_and_second_time_hit_cache():
     engine = create_engine("sqlite+pysqlite:///:memory:", echo=False)
     metadata_obj.create_all(engine)
     fake_excahnge = FakeExchange()
+    session = SqlAlchemySession(engine)
     dependency = ModuleDependency(
-        session = SqlAlchemySession(engine),
+        session = session,
         exchange = fake_excahnge,
     )
     crypto_module = CryptoOperationModule(dependency)
