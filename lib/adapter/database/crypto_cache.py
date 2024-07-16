@@ -5,23 +5,21 @@ from sqlalchemy import insert, select, and_
 
 from ...utils.time import dt_to_ts
 from ...model import CryptoOhlcvHistory, CryptoHistoryFrame, Ohlcv
-from .sqlalchemy import ohlcv_cache_tables, engine
-from .session import SessionAbstract, SqlAlchemySession
+from .sqlalchemy import ohlcv_cache_tables
+from .session import SqlAlchemySession
 
 class CryptoOhlcvCacheFetcherAbstract(abc.ABC):
-    def __init__(self, session: SessionAbstract):
-        self.session = session
-    @abc.abstractclassmethod
+    @abc.abstractmethod
     def range_query(self, pair: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> CryptoOhlcvHistory:
         raise NotImplementedError
-    @abc.abstractclassmethod
+    @abc.abstractmethod
     def add(self, history: CryptoOhlcvHistory):
         raise NotImplementedError
     
     
 class CryptoOhlcvCacheFetcher(CryptoOhlcvCacheFetcherAbstract):
-    def __init__(self, session: SqlAlchemySession = SqlAlchemySession(engine)):
-        super().__init__(session)
+    def __init__(self, session: SqlAlchemySession):
+        self.session = session
 
     def range_query(self, pair: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> CryptoOhlcvHistory:
         table = ohlcv_cache_tables[frame]

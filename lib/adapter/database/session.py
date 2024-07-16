@@ -46,13 +46,15 @@ class SqlAlchemySession(SessionAbstract):
         self.conn.rollback()
 
     def execute(self, sql: str, params: dict = None) -> ExecuteResult:
+        # if self.conn is None:
+        #     self.conn = self.engine.connect()
         result = self.conn.execute(
             text(sql),
             params
         )
-        
+        # print(sql, params)
         return ExecuteResult(
             rows = result.all() if result.returns_rows else [], 
-            row_count=result.rowcount
+            row_count= result.rowcount
         )
 

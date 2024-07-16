@@ -1,9 +1,9 @@
 import ccxt
 from datetime import datetime 
 from lib.config import get_binance_config
-from lib.model import CryptoOhlcvHistory, CryptoHistoryFrame, Ohlcv, CryptoOrderType, CryptoOrderSide, CryptoOrder
+from lib.model import CryptoOhlcvHistory, CryptoHistoryFrame, Ohlcv, CryptoOrderType, CryptoOrderSide, CryptoOrder, CryptoFee
 from lib.utils.time import dt_to_ts, timeframe_to_second
-from .base import retry_patch, CryptoExchangeAbstract
+from .base import retry_patch, CryptoExchangeAbstract, CryptoTicker
 
 def binance_test_patch(exchange: ccxt.binance) -> ccxt.binance:
     def call_with_test(func):
@@ -27,6 +27,9 @@ class BinanceExchange(CryptoExchangeAbstract):
         self.binance = retry_patch(binance)
         self.test_mode = test_mode
 
+    def fetch_ticker(self, pair: str) -> CryptoTicker:
+        res = self.binance.fetch_ticker(pair)
+        return CryptoTicker(last=res['last'])
 
     def create_order(self, pair: str, type: CryptoOrderType, side: CryptoOrderSide, amount: float, price: float = None) -> CryptoOrder: 
         res = self.binance.create_order(pair, type, side, amount, price)
@@ -40,7 +43,8 @@ class BinanceExchange(CryptoExchangeAbstract):
             side = res.side,
             price = res.price,
             amount= res.amount,
-            cost = res.cost
+            cost = res.cost,
+            fee = CryptoFee(res['fee']['currency'], res['fee']['cost'], res['fee']['rate'])
         )
     
     def fetch_ohlcv(self, pair: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> CryptoOhlcvHistory:

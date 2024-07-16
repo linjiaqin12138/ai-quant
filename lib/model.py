@@ -14,7 +14,11 @@ class Ohlcv:
     low: float
     close: float
     volume: float
-
+@dataclass(frozen=True)
+class CryptoFee:
+    currency: str
+    cost: float
+    rate: Optional[float]
 @dataclass(frozen=True)
 class OhlcvHistory:
     data: List[Ohlcv]
@@ -52,7 +56,7 @@ class CryptoOrder:
     # trades: List[Trade]
     # reduceOnly: Bool
     # postOnly: Bool
-    # fee: Fee
+    fee: CryptoFee
 
 class CryptoTradeInfo:
     pair: str

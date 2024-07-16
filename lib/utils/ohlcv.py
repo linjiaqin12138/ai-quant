@@ -46,7 +46,7 @@ BollInfo = TypedDict(
 def to_df(ohlcv_list: List[Ohlcv]) -> pd.DataFrame:
     df = pd.DataFrame(ohlcv_list)
     df.sort_values(by="timestamp", ascending=True, inplace=True)
-    return df
+    return df.set_index('timestamp')
 
 def macd_info(ohlcv_list: List[Ohlcv]) -> MacdInfo:
     df = to_df(ohlcv_list)

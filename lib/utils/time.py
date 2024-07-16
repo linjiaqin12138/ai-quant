@@ -22,5 +22,8 @@ def round_datetime(ts: datetime, tframe: CryptoHistoryFrame) -> datetime:
 def dt_to_ts(ts: datetime) -> int:
     return int(ts.timestamp() * 1000)
 
+def ts_to_dt(ts: int) -> datetime:
+    return datetime.fromtimestamp(ts/ 1000)
+
 def time_length_in_frame(start: datetime, end: datetime, frame: CryptoHistoryFrame) -> int:
     return int((dt_to_ts(round_datetime(end, frame)) - dt_to_ts(round_datetime(start, frame))) / timeframe_to_second(frame) / 1000)

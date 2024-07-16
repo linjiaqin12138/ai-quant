@@ -5,8 +5,6 @@ from sqlalchemy import create_engine
 from lib.adapter.crypto_exchange.base import CryptoExchangeAbstract
 from lib.adapter.crypto_exchange.binance import BinanceExchange
 from lib.adapter.database.session import SqlAlchemySession
-from lib.adapter.database.crypto_cache import CryptoOhlcvCacheFetcher
-from lib.adapter.database.cryto_trade import CryptoTradeHistory
 from lib.model import CryptoOhlcvHistory, Ohlcv
 from lib.modules.crypto import CryptoOperationModule, ModuleDependency
 from lib.adapter.database.sqlalchemy import metadata_obj
@@ -73,13 +71,10 @@ def test_can_query_range_from_remote_and_second_time_hit_cache():
     # fetcher = OhlcvHistory('BTC/USDT', '1h')
     engine = create_engine("sqlite+pysqlite:///:memory:", echo=False)
     metadata_obj.create_all(engine)
-    session = SqlAlchemySession(engine)
     fake_excahnge = FakeExchange()
     dependency = ModuleDependency(
-        session = session,
-        cache = CryptoOhlcvCacheFetcher(session),
+        session = SqlAlchemySession(engine),
         exchange = fake_excahnge,
-        trade_log = CryptoTradeHistory(session)
     )
     crypto_module = CryptoOperationModule(dependency)
     june_30th_11_clock = datetime(2024, 6, 30, 11, 56, 40, 290935)

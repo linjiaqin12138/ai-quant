@@ -1,4 +1,5 @@
 from typing import TypeVar
+from dataclasses import dataclass
 from datetime import datetime
 import abc
 
@@ -17,6 +18,10 @@ SUPPORT_RETRY_METHODS = [
     'create_order'
 ]
 
+@dataclass
+class CryptoTicker:
+    last: float # 最新价格
+
 def retry_patch(exchange: G) -> G:
     for method in SUPPORT_RETRY_METHODS:
         func = getattr(exchange, method)
@@ -25,6 +30,10 @@ def retry_patch(exchange: G) -> G:
     return exchange
 
 class CryptoExchangeAbstract(abc.ABC):
+
+    @abc.abstractmethod
+    def fetch_ticker(self, pair: str) -> CryptoTicker:
+        raise NotImplementedError
     @abc.abstractmethod
     def fetch_ohlcv(self, pair: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> CryptoOhlcvHistory:
         raise NotImplementedError

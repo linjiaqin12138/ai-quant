@@ -3,8 +3,8 @@ from dataclasses import dataclass
 from typing import List
 
 from ..adapter.crypto_exchange import CryptoExchangeAbstract, BinanceExchange
-from ..adapter.database.crypto_cache import CryptoOhlcvCacheFetcherAbstract, CryptoOhlcvCacheFetcher
-from ..adapter.database.cryto_trade import CryptoTradeHistory, CryptoTradeHistoryAbstract
+from ..adapter.database.crypto_cache import CryptoOhlcvCacheFetcher
+from ..adapter.database.cryto_trade import CryptoTradeHistory
 from ..adapter.database.session import SessionAbstract, SqlAlchemySession
 from ..model import CryptoHistoryFrame, CryptoOhlcvHistory, CryptoOrderSide, CryptoOrderType
 from ..logger import logger
@@ -13,17 +13,11 @@ from ..utils.time import time_length_in_frame, round_datetime, timeframe_to_seco
 @dataclass
 class ModuleDependency:
     session: SessionAbstract
-    cache: CryptoOhlcvCacheFetcherAbstract
-    trade_log: CryptoTradeHistoryAbstract
     exchange: CryptoExchangeAbstract
 
-default_session = SqlAlchemySession()
-default_dependency = ModuleDependency(
-    session = default_session,
-    cache = CryptoOhlcvCacheFetcher(default_session),
-    trade_log = CryptoTradeHistory(default_session),
-    exchange = BinanceExchange()
-)
+    def __init__(self, session: SessionAbstract = None, exchange: CryptoExchangeAbstract = None):
+        self.session = session or SqlAlchemySession()
+        self.exchange = exchange or BinanceExchange()
 
 def get_missed_time_ranges(timerange: List[datetime], start: datetime, end: datetime, frame: CryptoHistoryFrame) -> List[List[datetime]]:
     result = []
@@ -46,13 +40,30 @@ def get_missed_time_ranges(timerange: List[datetime], start: datetime, end: date
     return result
 
 class CryptoOperationModule:
-    def __init__(self, dependency: ModuleDependency = default_dependency):
+    def __init__(self, dependency: ModuleDependency = ModuleDependency()):
         self.dependency = dependency
+        self.cache_store = CryptoOhlcvCacheFetcher(dependency.session)
+        self.trade_log_store = CryptoTradeHistory(dependency.session)
 
-    def create_order(self, pair: str, type: CryptoOrderType, side: CryptoOrderSide, amount: float, reason: str, price: float = None):
+    def create_order(self, pair: str, type: CryptoOrderType, side: CryptoOrderSide, reason: str, amount: float = None, price: float = None, spent: float = None):
+        # sprint('createorder', type, side, reason, amount, price, spent)
         with self.dependency.session:
-            order = self.dependency.exchange.create_order(pair, type, side, amount, price)
-            self.dependency.trade_log.add(order, reason)
+            order = None
+            if type == 'limit' and amount and price:
+                order = self.dependency.exchange.create_order(pair, type, side, amount, price)
+            elif type =='market' and amount:
+                order = self.dependency.exchange.create_order(pair, type, side, amount)
+            elif type =='market' and spent :
+                if side == 'buy':
+                    ticker = self.dependency.exchange.fetch_ticker(pair)
+                    amount = spent / ticker.last
+                else:
+                    amount = spent
+                order = self.dependency.exchange.create_order(pair, type, side, amount)
+            else:
+                raise Exception(f'Unsupported parameters value: {type}, {side}, {amount}, {price}, {spent}')
+            self.trade_log_store.add(order, reason)
+            return order
     
     def get_ohlcv_history(self, pair: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> CryptoOhlcvHistory:
         with self.dependency.session: 
@@ -60,7 +71,7 @@ class CryptoOperationModule:
             nomolized_start = round_datetime(start, frame)
             nomolized_end = round_datetime(end, frame)
             
-            cache_result = self.dependency.cache.range_query(pair, frame, nomolized_start, nomolized_end)
+            cache_result = self.cache_store.range_query(pair, frame, nomolized_start, nomolized_end)
             logger.debug(f'Found {len(cache_result.data)} records locally')
             if len(cache_result.data) == expected_data_length:
                 logger.debug('local database found all required data, return directly.')
@@ -69,7 +80,7 @@ class CryptoOperationModule:
             if len(cache_result.data) == 0:
                 remote_result = self.dependency.exchange.fetch_ohlcv(pair, frame, nomolized_start, nomolized_end)
                 assert expected_data_length == len(remote_result.data)
-                self.dependency.cache.add(remote_result)
+                self.cache_store.add(remote_result)
                 self.dependency.session.commit()
                 return remote_result
             local_timerange = list(map(lambda item: item.timestamp, cache_result.data))
@@ -78,7 +89,7 @@ class CryptoOperationModule:
             logger.debug(f'missed_time_ranges: {miss_time_ranges}')
             for time_range in miss_time_ranges:
                 remote_data = self.dependency.exchange.fetch_ohlcv(pair, frame, time_range[0], time_range[1])
-                self.dependency.cache.add(remote_data)
+                self.cache_store.add(remote_data)
                 result_data.extend(remote_data.data)
             self.dependency.session.commit()
             return CryptoOhlcvHistory(
