@@ -31,7 +31,6 @@ class Context(ContextBase):
 
     def __init__(self, params: Params, deps: Dependency):
         super().__init__(params, deps)
-        self.id = f'{self.id}_TURTLE_PLAN'
 
     def init_id(self, params: Params) -> str:
         return f'{super().init_id(params)}_TURTLE_PLAN'

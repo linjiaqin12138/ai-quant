@@ -2,7 +2,7 @@ from typing import Union, Dict, List
 import abc
 import json
 
-from sqlalchemy import select, update, insert
+from sqlalchemy import select, update, delete
 
 from .session import SqlAlchemySession
 from .sqlalchemy import events
@@ -31,7 +31,7 @@ class KeyValueStore(KeyValueStoreAbstract):
         return json.dumps(v)
     
     def delete(self, key: str):
-        compiled = select(events).where(events.c.key == key).compile()
+        compiled = delete(events).where(events.c.key == key).compile()
         self.session.execute(compiled.string, compiled.params)
 
     def get(self, key: str) -> Union[Value, None]:

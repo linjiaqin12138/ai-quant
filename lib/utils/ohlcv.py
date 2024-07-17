@@ -14,7 +14,11 @@ MacdInfo = TypedDict(
         'dead_cross_idxs': List[int], 
         'turn_good_idxs': List[int],
         'turn_bad_idxs': List[int],
-        'macd_hist': List[float]
+        'macd_hist': List[float],
+        'is_gold_cross': bool,
+        'is_dead_cross': bool,
+        'is_turn_good': bool,
+        'is_turn_bad': bool
     }
 )
 
@@ -23,6 +27,8 @@ SarInfo = TypedDict(
     {
         'turn_up_idxs': List[int], 
         'turn_down_idxs': List[int],
+        'is_turn_up': bool,
+        'is_turn_down': bool,
         'sar': List[float]
     }
 )
@@ -38,10 +44,18 @@ BollInfo = TypedDict(
         'turn_good_idxs': List[int],
         'turn_bad_idxs': List[int],
         'increase_over_band_idxs': List[int],
-        'decrease_over_band_idxs': List[int]
+        'decrease_over_band_idxs': List[int],
+        'is_open': bool,
+        'is_close': bool,
+        'is_turn_good': bool,
+        'is_turn_bad': bool,
+        'is_increase_over': bool,
+        'is_decrease_over': bool
     }
 )
 
+def is_happened(points_idxs: List[int], max_len: int) -> bool:
+    return points_idxs[-1] == max_len - 1
 
 def to_df(ohlcv_list: List[Ohlcv]) -> pd.DataFrame:
     df = pd.DataFrame(ohlcv_list)
@@ -49,6 +63,7 @@ def to_df(ohlcv_list: List[Ohlcv]) -> pd.DataFrame:
     return df.set_index('timestamp')
 
 def macd_info(ohlcv_list: List[Ohlcv]) -> MacdInfo:
+    # if len(ohlcv_list) < 
     df = to_df(ohlcv_list)
     _ ,_ ,macd_hist = talib.MACD(df['close'])
     gold_cross_idxs = []
@@ -56,20 +71,25 @@ def macd_info(ohlcv_list: List[Ohlcv]) -> MacdInfo:
     bad_turn_good_idxs = []
     good_turn_bad_idxs = []
     for i in range(1, len(macd_hist)):
-        if macd_hist[i] > 0 and macd_hist[i-1] <= 0:
+        if macd_hist.iloc[i] > 0 and macd_hist.iloc[i-1] <= 0:
             gold_cross_idxs.append(i)
-        elif macd_hist[i] < 0 and macd_hist[i-1] >= 0:
+        elif macd_hist.iloc[i] < 0 and macd_hist.iloc[i-1] >= 0:
             dead_cross_idxs.append(i)
-        elif macd_hist[i] - macd_hist[i-1] > 0 and macd_hist[i-1] - macd_hist[i-2] < 0 and macd_hist[i] < 0:
+        elif macd_hist.iloc[i] - macd_hist.iloc[i-1] > 0 and macd_hist.iloc[i-1] - macd_hist.iloc[i-2] < 0 and macd_hist.iloc[i] < 0:
             bad_turn_good_idxs.append(i)
-        elif macd_hist[i] - macd_hist[i-1] < 0 and macd_hist[i-1] - macd_hist[i-2] > 0 and macd_hist[i] > 0:
+        elif macd_hist.iloc[i] - macd_hist.iloc[i-1] < 0 and macd_hist.iloc[i-1] - macd_hist.iloc[i-2] > 0 and macd_hist.iloc[i] > 0:
             good_turn_bad_idxs.append(i)
+
     return {
         "gold_cross_idxs": gold_cross_idxs,
         "dead_cross_idxs": dead_cross_idxs,
         "turn_good_idxs": bad_turn_good_idxs,
         "turn_bad_idxs": good_turn_bad_idxs,
-        "macd_hist": macd_hist
+        "macd_hist": list(macd_hist),
+        'is_dead_cross': is_happened(dead_cross_idxs, len(macd_hist)),
+        'is_gold_cross': is_happened(gold_cross_idxs, len(macd_hist)),
+        'is_turn_bad': is_happened(good_turn_bad_idxs, len(macd_hist)),
+        'is_turn_good': is_happened(bad_turn_good_idxs, len(macd_hist))
     }
 
 
@@ -88,7 +108,9 @@ def sar_info(ohlcv_list: List[Ohlcv]) -> SarInfo:
     return {
         "turn_up_idxs": turn_up_idxs,
         "turn_down_idxs": turn_down_idxs,
-        "sar": df['sar']
+        'is_turn_up': is_happened(turn_up_idxs, len(ohlcv_list)),
+        'is_turl_down': is_happened(turn_down_idxs, len(ohlcv_list)),
+        "sar": list(df['sar'])
     }
 
 def boll_info(ohlcv_list: List[Ohlcv]) -> BollInfo: 
@@ -119,19 +141,25 @@ def boll_info(ohlcv_list: List[Ohlcv]) -> BollInfo:
         if df['close'].iloc[i] < df['lowerband'].iloc[i]:
             decrease_over_band_idxs.append(i)
     return {
-        'lowerband': df['lowerband'],
-        'middleband': df['middleband'],
-        'upperband': df['upperband'],
+        'lowerband': list(df['lowerband']),
+        'middleband': list(df['middleband']),
+        'upperband': list(df['upperband']),
         'band_open_idxs': band_open_idxs,
         'band_close_idxs': band_close_idxs,
         'turn_good_idxs': turn_good_idxs,
         'turn_bad_idxs': turn_bad_idxs,
         'increase_over_band_idxs': increase_over_band_idxs,
-        'decrease_over_band_idxs': decrease_over_band_idxs
+        'decrease_over_band_idxs': decrease_over_band_idxs,
+        'is_close': is_happened(band_close_idxs, len(ohlcv_list)),
+        'is_open': is_happened(band_open_idxs, len(ohlcv_list)),
+        'is_turn_good': is_happened(turn_good_idxs, len(ohlcv_list)),
+        'is_turn_bad': is_happened(turn_bad_idxs, len(ohlcv_list)),
+        'is_increase_over': is_happened(increase_over_band_idxs, len(ohlcv_list)),
+        'is_decrease_over': is_happened(decrease_over_band_idxs, len(ohlcv_list)),
     }
 
-pick_close = lambda item: item.close
-change_rate = lambda item1, item2: (item2 - item1) / item1
+pick_close = lambda item: float(item.close)
+change_rate = lambda item1, item2: float((item2 - item1) / item1)
 
 def idxs_to_values_list(ohlcv: List[Ohlcv], idxs: List[int], column = 'close') -> Union[List[Union[float, np.nan]], None]:
     if len(ohlcv) == 0 or len(ohlcv) == 0:
@@ -142,13 +170,12 @@ def idxs_to_values_list(ohlcv: List[Ohlcv], idxs: List[int], column = 'close') -
 
     return result
 
-
 # 计算给定范围内的K线图中到最后一个蜡烛柱的跌幅
-def max_decline_rate(ohlcv_list: List[Ohlcv]) -> Tuple[float]:
+def max_decline_rate(ohlcv_list: List[Ohlcv]) -> float:
     max_item = max(ohlcv_list, key=pick_close)
     return change_rate(max_item, ohlcv_list[-1].close)
 
-# 计算给定范围内的K线图中到最后一个蜡烛柱的跌幅
-def max_increase_rate(ohlcv_list: List[Ohlcv]) -> Tuple[float]:
+# 计算给定范围内的K线图中到最后一个蜡烛柱的涨幅
+def max_increase_rate(ohlcv_list: List[Ohlcv]) -> float:
     min_item = min(ohlcv_list, key=pick_close)
     return change_rate(min_item, ohlcv_list[-1].close)

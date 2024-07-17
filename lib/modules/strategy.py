@@ -71,7 +71,7 @@ class ContextBase(abc.ABC):
     
     def __exit__(self, exc_type, exc_value, traceback_obj):
         
-        if self.is_dirt:
+        if self.is_dirt and exc_value is None:
             with self._deps.session:
                 self.kv_store.set(self.id, self._context)
                 self.is_dirt = False
@@ -79,7 +79,7 @@ class ContextBase(abc.ABC):
         
         if exc_type and exc_value and traceback_obj:
             if self._deps.notification_logger:
-                self._deps.notification_logger.msg('Script error happened:\n', *traceback.format_tb(traceback_obj))
+                self._deps.notification_logger.msg('Script error happened:\n', *traceback.format_tb(traceback_obj), '\n', exc_value)
 
 # StrategyResult = 
 StrategyFunc = Callable[[ContextBase, Optional[List[Ohlcv]]], ResultBase]
