@@ -1,8 +1,9 @@
 import ccxt
 from datetime import datetime 
-from lib.config import get_binance_config
-from lib.model import CryptoOhlcvHistory, CryptoHistoryFrame, Ohlcv, CryptoOrderType, CryptoOrderSide, CryptoOrder, CryptoFee
-from lib.utils.time import dt_to_ts, timeframe_to_second
+from ...config import get_binance_config
+from ...logger import logger
+from ...model import CryptoOhlcvHistory, CryptoHistoryFrame, Ohlcv, CryptoOrderType, CryptoOrderSide, CryptoOrder, CryptoFee
+from ...utils.time import dt_to_ts, timeframe_to_second
 from .base import retry_patch, CryptoExchangeAbstract, CryptoTicker
 
 def binance_test_patch(exchange: ccxt.binance) -> ccxt.binance:
@@ -32,6 +33,7 @@ class BinanceExchange(CryptoExchangeAbstract):
         return CryptoTicker(last=res['last'])
 
     def create_order(self, pair: str, type: CryptoOrderType, side: CryptoOrderSide, amount: float, price: float = None) -> CryptoOrder: 
+        logger.debug(f'binance createorder: {type} {side} amount: {amount}, price: {price}')
         res = self.binance.create_order(pair, type, side, amount, price)
         return CryptoOrder(
             context = res.info,

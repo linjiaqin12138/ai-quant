@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Any, List, TypedDict, Optional
 from datetime import datetime, timedelta
 
-from ..utils.number import change_rate
+from ..utils.number import change_rate, get_total_assets
 
 from ..model import CryptoHistoryFrame, Ohlcv
 from ..utils.time import dt_to_ts, timeframe_to_second, ts_to_dt
@@ -62,9 +62,6 @@ class Context(ContextBase):
 def time_pass(last_time: datetime, now: datetime, frame: CryptoHistoryFrame) -> int:
     return int((now - last_time) / timedelta(seconds=timeframe_to_second(frame)))
 
-def get_total_assets(close_price: float, coin: float, usdt: float) -> float:
-    return coin * close_price + usdt
-
 def simple_turtle(context: Context, data: List[Ohlcv] = []) -> ResultBase:
     params: Params = context._params
     deps = context._deps
@@ -112,7 +109,7 @@ def simple_turtle(context: Context, data: List[Ohlcv] = []) -> ResultBase:
             if context.get('buy_round') >= params.max_buy_round:
                 context.set('buyable', False)
         
-            deps.notification_logger.msg(f'{order.timestamp} 花费 ', order.cost, ' USDT 买入 ', context.get("account_coin_amount"), '个', params.symbol, ', 剩余: ', context.get("account_usdt_amount"), ' USDT')
+            deps.notification_logger.msg(f'{order.timestamp} 花费 ', order.cost, ' USDT 买入 ', order.amount, '个', params.symbol, ', 剩余: ', context.get("account_usdt_amount"), ' USDT')
     
     
     if context.get('sellable') :

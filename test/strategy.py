@@ -1,4 +1,4 @@
-from typing import Type, TypedDict
+from typing import Type, TypedDict, Optional
 from dataclasses import dataclass
 from datetime import datetime
 import numpy as np 
@@ -10,14 +10,20 @@ from lib.model import CryptoFee, CryptoOhlcvHistory, CryptoOrder, CryptoOrderSid
 from lib.modules.notification_logger import NotificationLogger
 from lib.modules.strategy import ContextBase, Dependency, ParamsBase, StrategyFunc
 from lib.modules.crypto import crypto
-from lib.utils.ohlcv import to_df
+from lib.utils.ohlcv import boll_info, macd_info, sar_info, to_df
 from lib.utils.string import random_id
 
 from fake_modules.fake_db import fake_session
 from fake_modules.fake_notification import FakeNotification
 
+IndicatorOptions = TypedDict('IndicatorOptions', {
+    'macd': bool,
+    'sar': bool,
+    'boll': bool
+})
 DrawOptions = TypedDict('DrawOptions', {
-    'enabled': bool
+    'enabled': bool,
+    'indicators': Optional[IndicatorOptions]
 })
 
 @dataclass
@@ -85,7 +91,7 @@ def strategy_test(strategy_func: StrategyFunc, test_options: StrategyTestOptions
     ohlcv_datas = crypto.get_ohlcv_history(params.symbol, params.data_frame, test_options.from_time, test_options.end_time)
     df = to_df(ohlcv_datas.data)
 
-    init_coin = params.money / ohlcv_datas.data[0].close
+    init_coin = params.money / ohlcv_datas.data[test_options.batch_count].close
     df['compaired_gain'] = df['close'] * init_coin
     df['strategy_gain'] = float(params.money)
     df['buy_point'] = np.nan
@@ -99,6 +105,7 @@ def strategy_test(strategy_func: StrategyFunc, test_options: StrategyTestOptions
     with contextClass(params, stub_deps) as context:
         for idx in range(0, len(ohlcv_datas.data)):
             if idx < test_options.batch_count:
+                df.loc[ohlcv_datas.data[idx].timestamp, 'compaired_gain'] = float(params.money)
                 continue
             
             fake_exchange.clear()
@@ -125,6 +132,21 @@ def strategy_test(strategy_func: StrategyFunc, test_options: StrategyTestOptions
             add_plot.append(mpf.make_addplot(df['buy_point'], markersize = 50, type='scatter', color='red', marker='^'))
         if df['sell_point'].any():
             add_plot.append(mpf.make_addplot(df['sell_point'], markersize = 50, type='scatter', color='green', marker='v'))
+
+        if test_options.draw.get('indicators') and test_options.draw.get('indicators').get('macd'):
+            macd = macd_info(ohlcv_datas.data)
+            add_plot.append(mpf.make_addplot(macd['macd_hist_series'].where(macd['macd_hist_series'] >= 0 ), type='bar', panel=2, color='g', alpha=1)),
+            add_plot.append(mpf.make_addplot(macd['macd_hist_series'].where(macd['macd_hist_series'] < 0 ), type='bar', panel=2, color='r', alpha=1)),
+
+        if test_options.draw.get('indicators') and test_options.draw.get('indicators').get('sar'):
+            sar = sar_info(ohlcv_datas.data)
+            add_plot.append(mpf.make_addplot(sar['sar_series'], type='scatter', marker='*', color='yellow'))
+
+        if test_options.draw.get('indicators') and test_options.draw.get('indicators').get('boll'):
+            boll = boll_info(ohlcv_datas.data)
+            add_plot.append(mpf.make_addplot(boll['lowerband_series'], color='red'))
+            add_plot.append(mpf.make_addplot(boll['middleband_series'], color='gray'))
+            add_plot.append(mpf.make_addplot(boll['upperband_series'], color='green'))
 
         mpf.plot(df, type='candle', style='yahoo',
              title=f'{params.symbol} Strategy', ylabel='Price',

@@ -1,6 +1,8 @@
 from datetime import timedelta, datetime
 
 from lib.strategys.simple_turtle import simple_turtle, Params, Context
+from lib.strategys.macd_sar import macd_sar, ParamsBase, Context as MacdSarContext
+from lib.strategys.boll import boll, Params as BollParams, Context as BollContext
 
 from strategy import strategy_test, StrategyTestOptions
 
@@ -25,6 +27,53 @@ def test_simple_turtle_stategy():
         contextClass = Context
     )
 
-    
+def test_macd_sar_stategy():
+    strategy_test(
+        macd_sar, 
+        test_options=StrategyTestOptions(
+            batch_count = 35,
+            from_time =datetime.now() - timedelta(hours=400),
+            end_time = datetime.now(),
+            draw = {
+                'enabled': True,
+                'indicators': {
+                    'macd': True,
+                    'sar': True,
+                    # 'boll': True
+                }
+            }
+        ),
+        params = ParamsBase(
+            money=100,
+            symbol='BAKE/USDT',
+            data_frame='1h',
+        ),
+        contextClass = MacdSarContext
+    )
+
+def test_boll_strategy():
+    strategy_test(
+        boll, 
+        test_options=StrategyTestOptions(
+            batch_count = 21,
+            from_time =datetime.now() - timedelta(hours=1000),
+            end_time = datetime.now() - timedelta(hours=0),
+            draw = {
+                'enabled': True,
+                'indicators': {
+                    # 'macd': True,
+                    # 'sar': True,
+                    'boll': True
+                }
+            }
+        ),
+        params = BollParams(
+            money=100,
+            symbol='BAKE/USDT',
+            data_frame='1h',
+            max_retrieval = 0.1
+        ),
+        contextClass = BollContext
+    )
 
     

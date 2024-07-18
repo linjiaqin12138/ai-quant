@@ -46,7 +46,7 @@ class CryptoOperationModule:
         self.trade_log_store = CryptoTradeHistory(dependency.session)
 
     def create_order(self, pair: str, type: CryptoOrderType, side: CryptoOrderSide, reason: str, amount: float = None, price: float = None, spent: float = None):
-        # sprint('createorder', type, side, reason, amount, price, spent)
+        logger.debug(f'createorder: {type} {side} {reason} amount: {amount}, price: {price}, spent: {spent}')
         with self.dependency.session:
             order = None
             if type == 'limit' and amount and price:
