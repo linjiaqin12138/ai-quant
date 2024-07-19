@@ -46,7 +46,7 @@ class BinanceExchange(CryptoExchangeAbstract):
             price = res['price'],
             amount= res['amount'],
             cost = res['cost'],
-            fee = CryptoFee(res['fee']['currency'], res['fee']['cost'], res['fee']['rate'])
+            fee = CryptoFee(res['fee']['currency'], res['fee']['cost'], res['fee'].get('rate'))
         )
     
     def fetch_ohlcv(self, pair: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> CryptoOhlcvHistory:
