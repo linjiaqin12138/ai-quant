@@ -116,7 +116,7 @@ def sar_info(ohlcv_list: List[Ohlcv]) -> SarInfo:
         "turn_up_idxs": turn_up_idxs,
         "turn_down_idxs": turn_down_idxs,
         'is_turn_up': is_happened(turn_up_idxs, len(ohlcv_list)),
-        'is_turl_down': is_happened(turn_down_idxs, len(ohlcv_list)),
+        'is_turn_down': is_happened(turn_down_idxs, len(ohlcv_list)),
         "sar": list(df['sar']),
         'sar_series': df['sar']
     }

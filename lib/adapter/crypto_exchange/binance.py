@@ -39,7 +39,7 @@ class BinanceExchange(CryptoExchangeAbstract):
             context = res['info'],
             exchange = 'binance',
             id = res['id'],
-            timestamp = datetime.fromtimestamp(res.timestamp / 1000),
+            timestamp = datetime.fromtimestamp(res['timestamp'] / 1000),
             pair = res['symbol'],
             type = res['type'],
             side = res['side'],

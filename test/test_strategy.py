@@ -27,7 +27,7 @@ def test_simple_turtle_stategy():
         contextClass = Context
     )
 
-def test_macd_sar_stategy():
+def test_macd_sar_strategy():
     strategy_test(
         macd_sar, 
         test_options=StrategyTestOptions(
