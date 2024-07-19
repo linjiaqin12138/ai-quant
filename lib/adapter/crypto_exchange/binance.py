@@ -36,16 +36,16 @@ class BinanceExchange(CryptoExchangeAbstract):
         logger.debug(f'binance createorder: {type} {side} amount: {amount}, price: {price}')
         res = self.binance.create_order(pair, type, side, amount, price)
         return CryptoOrder(
-            context = res.info,
+            context = res['info'],
             exchange = 'binance',
-            id = res.id,
+            id = res['id'],
             timestamp = datetime.fromtimestamp(res.timestamp / 1000),
-            pair = res.symbol,
-            type = res.type,
-            side = res.side,
-            price = res.price,
-            amount= res.amount,
-            cost = res.cost,
+            pair = res['symbol'],
+            type = res['type'],
+            side = res['side'],
+            price = res['price'],
+            amount= res['amount'],
+            cost = res['cost'],
             fee = CryptoFee(res['fee']['currency'], res['fee']['cost'], res['fee']['rate'])
         )
     
