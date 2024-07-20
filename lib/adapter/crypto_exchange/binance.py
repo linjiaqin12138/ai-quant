@@ -35,6 +35,7 @@ class BinanceExchange(CryptoExchangeAbstract):
     def create_order(self, pair: str, type: CryptoOrderType, side: CryptoOrderSide, amount: float, price: float = None) -> CryptoOrder: 
         logger.debug(f'binance createorder: {type} {side} amount: {amount}, price: {price}')
         res = self.binance.create_order(pair, type, side, amount, price)
+        logger.debug('Binance create_order result: ', res)
         return CryptoOrder(
             context = res['info'],
             exchange = 'binance',
@@ -46,7 +47,7 @@ class BinanceExchange(CryptoExchangeAbstract):
             price = res['price'],
             amount= res['amount'],
             cost = res['cost'],
-            fee = CryptoFee(res['fee']['currency'], res['fee']['cost'], res['fee'].get('rate'))
+            fee = CryptoFee(res['fee']['currency'], res['fee']['cost'], res['fee'].get('rate')) if res['fee'] else None
         )
     
     def fetch_ohlcv(self, pair: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> CryptoOhlcvHistory:

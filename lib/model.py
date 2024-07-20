@@ -56,7 +56,7 @@ class CryptoOrder:
     # trades: List[Trade]
     # reduceOnly: Bool
     # postOnly: Bool
-    fee: CryptoFee
+    fee: Optional[CryptoFee]
 
 class CryptoTradeInfo:
     pair: str
