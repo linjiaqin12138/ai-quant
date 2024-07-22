@@ -74,10 +74,10 @@ class FakeExchange(CryptoExchangeAbstract):
             pair = pair,
             type = type,
             side = side,
-            amount = amount,
+            _amount = amount,
             price = self.curr_price,
-            cost = self.curr_price * amount + ((0.001 * amount) * self.curr_price),
-            fee = CryptoFee(pair, 0.001 * amount, 0.001) if side == 'buy' else CryptoFee(pair, 0.01 * amount * self.curr_price, 0.001)
+            _cost = self.curr_price * amount,
+            fees = [CryptoFee(pair, 0.001 * amount, 0.001) if side == 'buy' else CryptoFee(pair, 0.01 * amount * self.curr_price, 0.001)]
         )
     
 def strategy_test(strategy_func: StrategyFunc, test_options: StrategyTestOptions, params: ParamsBase, contextClass: Type[ContextBase]):

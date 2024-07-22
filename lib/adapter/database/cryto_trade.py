@@ -20,7 +20,7 @@ class CryptoTradeHistory(CryptoTradeHistoryAbstract):
             timestamp = order.timestamp,
             action = order.side,
             reason = reason,
-            amount = order.amount,
+            amount = order.get_amount(),
             price = order.price,
             type = order.type,
             context = json.dumps(order.context),

@@ -59,21 +59,21 @@ def boll(context: Context, data: List[Ohlcv] = []) -> ResultBase:
 
     if context.get('buyable') and boll_result['is_turn_good']:
         order = deps.crypto.create_order(params.symbol, 'market', 'buy', 'BOLL_PLAN', spent = context.get('account_usdt_amount'))
-        context.set('account_coin_amount', context.get('account_coin_amount') + order.amount)
-        context.set('account_usdt_amount', context.get('account_usdt_amount') - order.cost)
+        context.set('account_coin_amount', context.get('account_coin_amount') + order.get_amount(True))
+        context.set('account_usdt_amount', context.get('account_usdt_amount') - order.get_cost(True))
         context.set('buyable', False)
         context.set('sellable', True)
         context.set('max_price', close_price)
-        deps.notification_logger.msg(f'{order.timestamp} 花费 ', order.cost, ' USDT 买入 ', order.amount, '个', params.symbol, ', 剩余: ', context.get("account_usdt_amount"), ' USDT')
+        deps.notification_logger.msg(f'{order.timestamp} 花费 ', order.get_cost(True), ' USDT 买入 ', order.get_amount(True), '个', params.symbol, ', 剩余: ', context.get("account_usdt_amount"), ' USDT')
     
     elif context.get('sellable') and ((context.get('max_price') and params.max_retrieval and change_rate(context.get('max_price'), close_price) < -params.max_retrieval) or boll_result['is_increase_over']):
         order = deps.crypto.create_order(params.symbol, 'market', 'sell', 'BOLL_PLAN', amount = context.get('account_coin_amount'))
-        context.set('account_coin_amount', context.get('account_coin_amount') - order.amount)
-        context.set('account_usdt_amount', context.get('account_usdt_amount') + order.cost)
+        context.set('account_coin_amount', context.get('account_coin_amount') - order.get_amount(True))
+        context.set('account_usdt_amount', context.get('account_usdt_amount') + order.get_cost(True))
         context.set('buyable', True)
         context.set('sellable', False)
         context.delete('max_price')
-        deps.notification_logger.msg(f'{order.timestamp} 卖出 ', order.amount, ' ', params.symbol, ', 总共', order.cost, ' USDT 剩余: ', context.get("account_usdt_amount"), 'USDT')
+        deps.notification_logger.msg(f'{order.timestamp} 卖出 ', order.get_amount(True), ' ', params.symbol, ', 总共', order.get_cost(True), ' USDT 剩余: ', context.get("account_usdt_amount"), 'USDT')
         
 
     return ResultBase(

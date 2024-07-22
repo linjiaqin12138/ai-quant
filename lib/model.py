@@ -46,17 +46,35 @@ class CryptoOrder:
     side: CryptoOrderSide
     price: float
     # average: Num
-    amount: float
+    _amount: float
     # filled: Num
     # remaining: Num
     # stopPrice: Num
     # takeProfitPrice: Num
     # stopLossPrice: Num
-    cost: float
+    _cost: float
     # trades: List[Trade]
     # reduceOnly: Bool
     # postOnly: Bool
-    fee: Optional[CryptoFee]
+    fees: Optional[List[CryptoFee]]
+
+    def get_amount(self, excluding_fee: bool = False):
+        currency = self.pair.split('/').pop(0)
+        result = self._amount
+        if excluding_fee:
+            for fee in self.fees:
+                if fee.currency == currency:
+                    result -= fee.cost
+        return result
+    
+    def get_cost(self, including_fee: bool = False):
+        currency = self.pair.split('/').pop()
+        result = self._cost
+        if including_fee:
+            for fee in self.fees:
+                if fee.currency == currency:
+                    result += fee.cost
+        return result
 
 class CryptoTradeInfo:
     pair: str

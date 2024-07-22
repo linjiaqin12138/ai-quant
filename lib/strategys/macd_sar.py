@@ -53,19 +53,19 @@ def macd_sar(context: Context, data: List[Ohlcv] = []) -> ResultBase:
     # print(sar_result)
     if context.get('buyable') and macd_result['is_gold_cross']:
         order = deps.crypto.create_order(params.symbol, 'market', 'buy', 'TURTLE_PLAN', spent = context.get('account_usdt_amount'))
-        context.set('account_coin_amount', context.get('account_coin_amount') + order.amount)
-        context.set('account_usdt_amount', context.get('account_usdt_amount') - order.cost)
+        context.set('account_coin_amount', context.get('account_coin_amount') + order.get_amount(True))
+        context.set('account_usdt_amount', context.get('account_usdt_amount') - order.get_cost(True))
         context.set('buyable', False)
         context.set('sellable', True)
-        deps.notification_logger.msg(f'{order.timestamp} 花费 ', order.cost, ' USDT 买入 ', order.amount, '个', params.symbol, ', 剩余: ', context.get("account_usdt_amount"), ' USDT')
+        deps.notification_logger.msg(f'{order.timestamp} 花费 ', order.get_cost(True), ' USDT 买入 ', order.get_amount(True), '个', params.symbol, ', 剩余: ', context.get("account_usdt_amount"), ' USDT')
     
     elif context.get('sellable') and sar_result['is_turn_up']:
         order = deps.crypto.create_order(params.symbol, 'market', 'sell', 'TURTLE_PLAN', amount = context.get('account_coin_amount'))
-        context.set('account_coin_amount', context.get('account_coin_amount') - order.amount)
-        context.set('account_usdt_amount', context.get('account_usdt_amount') + order.cost)
+        context.set('account_coin_amount', context.get('account_coin_amount') - order.get_amount(True))
+        context.set('account_usdt_amount', context.get('account_usdt_amount') + order.get_cost(True))
         context.set('buyable', True)
         context.set('sellable', False)
-        deps.notification_logger.msg(f'{order.timestamp} 卖出 ', order.amount, ' ', params.symbol, ', 总共', order.cost, ' USDT 剩余: ', context.get("account_usdt_amount"), 'USDT')
+        deps.notification_logger.msg(f'{order.timestamp} 卖出 ', order.get_amount(True), ' ', params.symbol, ', 总共', order.get_cost(True), ' USDT 剩余: ', context.get("account_usdt_amount"), 'USDT')
         
 
     return ResultBase(
