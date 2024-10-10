@@ -86,3 +86,15 @@ class CryptoTradeInfo:
     type: Literal['limit', 'market']
     context: dict
     order_id: str
+
+@dataclass
+class HotNewsInfo:
+    news_id: str
+    title: str
+    description: Optional[str]
+    timestamp: datetime
+    url: str
+    platform: str
+
+    reason: Optional[str]
+    mood: Optional[float]

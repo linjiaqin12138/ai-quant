@@ -1,6 +1,16 @@
 import os
 from typing import Dict
 
+from dotenv import load_dotenv
+
+load_dotenv(verbose=True)
+
+def get_log_level() -> str:
+    return os.environ.get("LOG_LEVEL", "INFO").upper()
+
+def get_create_table() -> bool:
+    return os.environ.get("CREATE_TABLE", "FALSE") == "TRUE"
+
 def get_mysql_uri() -> str:
     username = os.environ.get("MYSQL_USER") or "py"
     password = os.environ.get("MYSQL_PASS") or "wapwap12"
@@ -22,6 +32,9 @@ def get_binance_config() -> Dict:
 
 def get_push_token() -> str:
     return os.environ.get("PUSH_PLUS_TOKEN")
+
+def get_baichuan_token() -> str:
+    return os.environ.get("BAI_CHUAN_TOKEN")
 
 def get_http_proxy() -> str:
     return os.environ.get("PROXY")

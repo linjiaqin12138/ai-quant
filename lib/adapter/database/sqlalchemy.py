@@ -1,9 +1,9 @@
 from typing import Dict
-from sqlalchemy import MetaData, create_engine, Engine
-from sqlalchemy import Table, Column, Enum, String, DateTime, DECIMAL, BigInteger
-from sqlalchemy.orm import Session as SqlAlchemySession
+from sqlalchemy import MetaData, create_engine
+from sqlalchemy import Table, Text, Column, Enum, String, DateTime, DECIMAL, BigInteger
+
 from ...model import CryptoHistoryFrame
-from ...config import get_mysql_uri
+from ...config import get_mysql_uri, get_create_table
 
 engine = create_engine(get_mysql_uri())
 
@@ -57,4 +57,19 @@ events = Table(
     Column('type', Enum("string", "json"), default="string")
 )
 
-metadata_obj.create_all(engine)
+hot_news_cache = Table(
+    'hot_news_cache',
+    metadata_obj,
+    Column("news_id", String(512), primary_key=True),
+    Column("platform", String(128)),
+    Column("title", Text),
+    Column('description',Text),
+    Column('url', Text),
+    Column('timestamp', BigInteger),
+    Column('reason', Text),
+    Column('mood', DECIMAL(3,2))
+)
+
+
+if get_create_table():
+    metadata_obj.create_all(engine)

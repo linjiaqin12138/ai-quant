@@ -2,6 +2,8 @@ import json
 import logging
 import os
 
+from .config import get_log_level
+
 
 class JSONFormatter(logging.Formatter):
     def format(self, record):
@@ -14,7 +16,7 @@ class JSONFormatter(logging.Formatter):
         )
 
 
-log_level = getattr(logging, os.environ.get("LOG_LEVEL", "INFO").upper())
+log_level = getattr(logging, get_log_level())
 # file_handler = logging.FileHandler('./quant.log')
 # file_handler.setFormatter(JSONFormatter())
 
@@ -27,6 +29,7 @@ console_handler.setFormatter(
 
 logger = logging.getLogger("quant")
 logger.setLevel(log_level)
+logger.propagate = False
 # 将handler添加到logger中
 logger.addHandler(console_handler)
 # logger.addHandler(file_handler)

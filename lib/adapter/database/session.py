@@ -17,13 +17,16 @@ class SessionAbstract(abc.ABC):
     def __exit__(self, *args):
         self.rollback()
 
-    @abc.abstractclassmethod
+    @abc.abstractmethod
+    def begin(self):
+        return
+    @abc.abstractmethod
     def commit(self):
         raise NotImplementedError
-    @abc.abstractclassmethod
+    @abc.abstractmethod
     def rollback(self):
         raise NotImplementedError
-    @abc.abstractclassmethod
+    @abc.abstractmethod
     def execute(self, sql: str, params: dict) -> ExecuteResult:
         raise NotADirectoryError
 
@@ -31,14 +34,18 @@ class SqlAlchemySession(SessionAbstract):
 
     def __init__(self, engine: Engine = default_engine):
         self.engine = engine
+        self.conn = None
     
     def __enter__(self):
-        self.conn = self.engine.connect()
+        self.begin()
         return super().__enter__()
 
     def __exit__(self, *args):
         super().__exit__(*args)
         self.conn.close()
+
+    def begin(self):
+        self.conn = self.engine.connect()
 
     def commit(self):
         self.conn.commit()

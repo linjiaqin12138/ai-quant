@@ -1,3 +1,4 @@
+python-dotenv
 requests
 Ta-Lib
 pandas
@@ -8,3 +9,5 @@ jupyter
 notebook
 pymysql
 pytest
+aiohttp_socks
+gpt4free
