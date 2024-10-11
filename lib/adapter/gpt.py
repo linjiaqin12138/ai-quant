@@ -1,5 +1,6 @@
 import abc
 import json
+from typing import Optional, TypedDict
 
 import requests
 from g4f.client import Client
@@ -11,8 +12,11 @@ from ..utils.retry import with_retry
 from ..utils.string import extract_json_string
 
 class GptAgentAbstract(abc.ABC):
-    def __init__(self):
-        pass
+    def __init__(self, model: str, system_prompt: Optional[str] = None):
+        self.model = model
+        self.chat_context = []
+        if system_prompt is not None:
+            self.chat_context.append({"role": "system", "content": system_prompt})
 
     @abc.abstractmethod
     def ask(self, question: str)-> str:
@@ -21,34 +25,27 @@ class GptAgentAbstract(abc.ABC):
     def export(self):
         pass
     
-    @abc.abstractmethod
-    def clear(self):
-        pass
-
-    @abc.abstractmethod
     def set_system_prompt(self, prompt: str):
-        pass
+        self.chat_context = [{"role": "system", "content": prompt}]
+
+    def clear(self):
+        if self.chat_context and self.chat_context[0]['role'] == 'system':
+            self.chat_context = self.chat_context[:1]
+        else:
+            self.chat_context = []
 
 
 class BaiChuanAgent(GptAgentAbstract):
+    AdditionalOptions = TypedDict('AdditionalOptions', {
+        'api_endpoint': Optional[str],
+        'token': Optional[str],
+    })
     class BaiChuanApiFailed(Exception):
         ...
-    def __init__(self, model: str, system_prompt: str):
-        super().__init__()
-        self.url = "https://api.baichuan-ai.com/v1/chat/completions"
-        self.api_key = get_baichuan_token()
-        self.model = model
-        self.chat_context = [
-            # assistant
-            {"role": "system", "content": system_prompt}
-        ]
-
-    def set_system_prompt(self, prompt: str):
-        self.clear()
-        self.chat_context[0]['content'] = prompt
-
-    def clear(self):
-        self.chat_context = self.chat_context[:1]
+    def __init__(self, model: str = 'Baichuan3-Turbo-128k', system_prompt: Optional[str] = None, **addtional_options: AdditionalOptions):
+        super().__init__(model, system_prompt)
+        self.url = addtional_options.get('api_endpoint', "https://api.baichuan-ai.com/v1/chat/completions")
+        self.api_key = addtional_options.get('token', get_baichuan_token())
 
     def ask(self, question: str) -> str:
         self.chat_context.append({"role": "user", "content": question})
@@ -108,23 +105,12 @@ class BaiChuanAgent(GptAgentAbstract):
 class G4fAgent(GptAgentAbstract):
     class G4fReplyErrorJson(Exception):
         pass
-    def __init__(self, model: str, system_prompt: str):
-        super().__init__()
+    def __init__(self, model: str = "gpt-3.5-turbo", system_prompt: Optional[str] = None):
+        super().__init__(model, system_prompt)
         self.model = model
         self.client = Client(proxies = {
             "all": get_http_proxy()
         })
-        self.chat_context = [
-            # assistant
-            {"role": "system", "content": system_prompt}
-        ]
-
-    def clear(self):
-        self.chat_context = self.chat_context[:1]
-
-    def set_system_prompt(self, system_prompt: str):
-        self.clear()
-        self.chat_context[0]['content'] = system_prompt
     
     def ask(self, question: str) -> str:
         self.chat_context.append({"role": "user", "content": question})

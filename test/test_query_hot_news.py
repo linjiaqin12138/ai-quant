@@ -1,9 +1,9 @@
 from datetime import datetime
-from lib.adapter.hot_news import all_get_trends
+from lib.adapter.hot_news import hot_news, ALL_SUPPORTED_PLATFORMS
 
 def test_query_trend():
-    for get_trend_function in all_get_trends:
-        res = get_trend_function()
+    for platform in ALL_SUPPORTED_PLATFORMS:
+        res = hot_news.get_hot_news_of_platform(platform)
         assert len(res) > 0
         sample = res[0]
         assert isinstance(sample.news_id, str)
