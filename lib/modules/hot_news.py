@@ -1,5 +1,6 @@
 import abc
 import json
+import traceback
 from dataclasses import dataclass
 from typing import Dict, List, TypedDict, Optional
 
@@ -127,7 +128,7 @@ GPT_SYSTEM_PROMPT_FOR_SUMMARY = """
 <h2>总体展望:</h2>
 <p>[基于以上分析的市场整体展望]</p>
 
-请确保你的回答简洁、客观,并聚焦于最重要的信息。
+提供给你的数据将是一个JSON, 请确保你的回答简洁、客观, 并聚焦于最重要的信息, 区分和过滤掉那些跟市场、政策、资机会无关的新闻, 比如民生、体育或娱乐新闻, 如果没有需要关注的信息, 直接说明即可。
 
 输出格式: HTML
 """
@@ -152,19 +153,20 @@ GptFurtherFilteredItem = TypedDict("GptFurtherFilteredItem", {
 })
 
 LARGE_CONTEXT_MODEL_THRESHOLD = 30000
+
 def common_rsp_validation_success(rsp_json: Optional[dict]) -> bool:
     if rsp_json is None:
         logger.error("GPT response has no Json output")
         return False
-    if rsp_json.get('error'):
-        logger.error("GPT response error")
-        return False
-    if rsp_json.get('code'):
-        if rsp_json.get('code') != 200 or rsp_json.get('gpt') is None:
-            logger.error("GPT response miss gpt or code is not 200")
-            return False
-        else:
-            return True
+    # if rsp_json.get('error'):
+    #     logger.error("GPT response error")
+    #     return False
+    # if rsp_json.get('code'):
+    #     if rsp_json.get('code') != 200 or rsp_json.get('gpt') is None:
+    #         logger.error("GPT response miss gpt or code is not 200")
+    #         return False
+    #     else:
+    #         return True
     result_list = rsp_json.get('result')
     if result_list is None or type(result_list) != list:
         logger.error("GPT response miss result or result is not a list")
@@ -175,8 +177,8 @@ def parse_gpt_basic_filtering_rsp(rsp_text: str) -> Optional[List[GptBasicFilter
     json_result = extract_json_string(rsp_text)
     if not common_rsp_validation_success(json_result):
         return None
-    if json_result.get('code'):
-        return parse_gpt_basic_filtering_rsp(json_result.get('gpt'))
+    # if json_result.get('code'):
+    #     return parse_gpt_basic_filtering_rsp(json_result.get('gpt'))
     result = []
     for item in json_result.get('result'):
         if type(item) == dict and type(item.get('id')) == str and (type(item.get('reason')) == str and len(item.get('reason')) > 0) and (type(item.get('mood')) == float or type(item.get('mood')) == int):
@@ -188,8 +190,8 @@ def parse_gpt_further_filtering_rsp(rsp_text: str) -> Optional[List[GptFurtherFi
     json_result = extract_json_string(rsp_text)
     if not common_rsp_validation_success(json_result):
         return None
-    if json_result.get('code'):
-        return parse_gpt_further_filtering_rsp(json_result.get('gpt'))
+    # if json_result.get('code'):
+    #     return parse_gpt_further_filtering_rsp(json_result.get('gpt'))
     result = []
     for item in json_result.get('result'):
         if (type(item) == dict and type(item.get('id')) == list and len(item.get('id')) > 0) and (type(item.get('reason')) == str and len(item.get('reason')) > 0):
@@ -312,6 +314,8 @@ class HotNewsOperationsModule:
                 if max_records_per_platform.get(platform) is not None:
                     news_from_platform = news_from_platform[:max_records_per_platform.get(platform)]
                 
+                filtered_count = 0
+                total_count = len(news_from_platform)
                 for news in news_from_platform:
                     # 过滤去重
                     if self.dependency.hot_news_cache.setnx(news) > 0:
@@ -321,6 +325,9 @@ class HotNewsOperationsModule:
                             "description": news.description,
                             "url": news.url
                         }))
+                    else:
+                        filtered_count += 1
+                logger.info(f"平台 {platform}: 总新闻数 {total_count}, 过滤掉 {filtered_count} 条重复新闻, 保留 {total_count - filtered_count} 条新闻")
             
             # 准备发送给 GPT 的数据
             gpt_input = json.dumps({"news": all_news}, ensure_ascii=False)
@@ -334,6 +341,7 @@ class HotNewsOperationsModule:
                 agent.set_system_prompt(GPT_SYSTEM_PROMPT_FOR_SUMMARY)
                 return agent.ask(gpt_input)
             except Exception as err:
+                logger.warning(f"Failed to use basic gpt agent with error {err} {traceback.format_exc()}")
                 if agent != self.dependency.gpt_agent_large_context:
                     logger.warning("Retry by large context model")
                     agent = self.dependency.gpt_agent_large_context

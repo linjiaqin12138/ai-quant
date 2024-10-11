@@ -8,25 +8,7 @@ from g4f.errors import *
 from ..config import get_http_proxy, get_baichuan_token, API_MAX_RETRY_TIMES
 from ..logger import logger
 from ..utils.retry import with_retry
-
-retry_decorator = with_retry((
-    ProviderNotFoundError,
-    ProviderNotWorkingError,
-    StreamNotSupportedError,
-    ModelNotFoundError,
-    ModelNotAllowedError,
-    RetryProviderError,
-    RetryNoProviderError,
-    VersionNotFoundError,
-    ModelNotSupportedError,
-    MissingRequirementsError,
-    NestAsyncioError,
-    MissingAuthError,
-    NoImageResponseError,
-    RateLimitError,
-    ResponseError,
-    ResponseStatusError,
-), API_MAX_RETRY_TIMES)
+from ..utils.string import extract_json_string
 
 class GptAgentAbstract(abc.ABC):
     def __init__(self):
@@ -88,7 +70,7 @@ class BaiChuanAgent(GptAgentAbstract):
             response = requests.post(self.url, data=json_data, headers=headers, timeout=60, stream=False)
             logger.info(f"Baichuan API calling statusCode: {response.status_code}")
             logger.debug(f"Baichuan API response header {response.headers}")
-            logger.debug(f"Baichuan API response body {response.content}")
+            logger.debug(f"Baichuan API response body {response.text}")
             return response
         
         rsp = retryable_part()
@@ -124,6 +106,8 @@ class BaiChuanAgent(GptAgentAbstract):
             #     }
         
 class G4fAgent(GptAgentAbstract):
+    class G4fReplyErrorJson(Exception):
+        pass
     def __init__(self, model: str, system_prompt: str):
         super().__init__()
         self.model = model
@@ -144,17 +128,28 @@ class G4fAgent(GptAgentAbstract):
     
     def ask(self, question: str) -> str:
         self.chat_context.append({"role": "user", "content": question})
-        @retry_decorator
+        
+        @with_retry((self.G4fReplyErrorJson, RateLimitError, ResponseError, ResponseStatusError), API_MAX_RETRY_TIMES)
         def retryable_part():
-            logger.debug(f"G4F calling data: {self.chat_context}")
+            logger.debug(f"G4F calling data: {json.dumps(self.chat_context, ensure_ascii=False, indent=2)}")
             logger.info(f"G4F API calling with body size: {len(json.dumps(self.chat_context))} Byte")
-            return self.client.chat.completions.create(
+            rsp= self.client.chat.completions.create(
                 model=self.model,
                 messages=self.chat_context,
                 stream=False
             )
-        rsp = retryable_part()
-        logger.debug(f"GPT response detailes {rsp.to_json()}")
-        rsp_message = rsp.choices[0].message.content or ''
+            logger.debug(f"GPT response detailes {rsp.to_json()}")
+            rsp_message = rsp.choices[0].message.content or ''
+            # G4F 有时候response会是一个JSON，{"code": 200, "status": true, "model": "gpt-3.5-turbo", "gpt": "......."}
+            try_extracted_json = extract_json_string(rsp_message)
+            if try_extracted_json and all(try_extracted_json.get(key) is not None for key in ['code', 'status']):
+                logger.warning(f"G4F response message is an object, provider: {rsp.provider}")
+                if try_extracted_json.get('code') != 200 or try_extracted_json.get('gpt') is None:
+                    raise self.G4fReplyErrorJson(rsp_message)
+                rsp_message = try_extracted_json['gpt']
+            return rsp_message
+        
+        rsp_message = retryable_part()
+        
         self.chat_context.append({"role": "assistant", "content": rsp_message})
         return rsp_message

@@ -1,4 +1,5 @@
 import abc
+import json
 from typing import List, Callable, Any, Literal, Dict
 from datetime import datetime
 import requests
@@ -28,6 +29,7 @@ retry_decorator = with_retry((GetHotFailedError,), API_MAX_RETRY_TIMES)
 
 # 映射函数
 def default_mapper(original_data: dict) -> HotNewsInfo:
+    logger.debug(f"News in raw: {json.dumps(original_data, ensure_ascii=False, indent=2)}")
     timestamp = datetime.now() if original_data.get("timestamp") is None else ts_to_dt(original_data.get("timestamp"))
     news_id = str(original_data.get("id", ""))
     return HotNewsInfo(
@@ -45,13 +47,19 @@ def toutiao_mapper(original_data: dict) -> HotNewsInfo:
     original_data["timestamp"] = None
     return default_mapper(original_data)
 
+def qq_news_mapper(original_data: dict) -> HotNewsInfo:
+    if isinstance(original_data.get("timestamp"), int) and original_data.get("timestamp") < 0:
+        original_data["timestamp"] = None
+    return default_mapper(original_data)
+
 def baidu_mapper(original_data: dict) -> HotNewsInfo:
     original_data["id"] = hash(original_data["title"])[:32]
     return default_mapper(original_data)
 
 SPECIAL_RESPONSE_MAPPER: Dict[NewsPlatform, RspMapper] = {
     "baidu": baidu_mapper,
-    "toutiao": toutiao_mapper
+    "toutiao": toutiao_mapper,
+    'qq-news': qq_news_mapper
 }
 
 # 主要函数

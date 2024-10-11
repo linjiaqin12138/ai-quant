@@ -9,5 +9,6 @@ jupyter
 notebook
 pymysql
 pytest
+curl_cffi
 aiohttp_socks
-gpt4free
+g4f
