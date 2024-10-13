@@ -1,7 +1,7 @@
 from .crypto import crypto
-from .hot_news import hot_news
+from .hot_news import news
 
 __all__ = [
     'crypto'
-    'hot_news'
+    'news'
 ]

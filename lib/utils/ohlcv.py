@@ -59,6 +59,48 @@ BollInfo = TypedDict(
     }
 )
 
+Sam5Info = TypedDict(
+    'Sam5Info', 
+    {
+        'sma5': List[float],
+        'sma5_series': pd.Series
+    }
+)
+
+Sam20Info = TypedDict(
+    'Sam20Info', 
+    {
+        'sma20': List[float],
+        'sma20_series': pd.Series
+    }
+)
+
+RsiInfo = TypedDict(
+    'RsiInfo', 
+    {
+        'rsi': List[float],
+        'rsi_series': pd.Series
+    }
+)
+
+StochasticOscillatorInfo = TypedDict(
+    'StochasticOscillatorInfo', 
+    {
+        'stoch_k': List[float],
+        'stoch_d': List[float],
+        'stoch_k_series': pd.Series,
+        'stoch_d_series': pd.Series
+    }
+)
+
+AtrInfo = TypedDict(
+    'AtrInfo',
+    {
+        'atr': List[float],
+        'atr_series': pd.Series
+    }
+)
+
 def is_happened(points_idxs: List[int], max_len: int) -> bool:
     return len(points_idxs) > 0 and points_idxs[-1] == max_len - 1
 
@@ -120,6 +162,54 @@ def sar_info(ohlcv_list: List[Ohlcv]) -> SarInfo:
         "sar": list(df['sar']),
         'sar_series': df['sar']
     }
+
+def sam5_info(ohlcv_list: List[Ohlcv]) -> Sam5Info:
+    assert len(ohlcv_list) > 4
+    df = to_df(ohlcv_list)
+    df['sma5'] = talib.SMA(df['close'], timeperiod=5)
+    return {
+        'sma5': list(df['sma5']),
+        'sma5_series': df['sma5']
+    }
+
+def sam20_info(ohlcv_list: List[Ohlcv]) -> Sam20Info:
+    assert len(ohlcv_list) > 19
+    df = to_df(ohlcv_list)
+    df['sma20'] = talib.SMA(df['close'], timeperiod=20)
+    return {
+        'sma20': list(df['sma20']),
+        'sma20_series': df['sma20']
+    }
+
+def rsi_info(ohlcv_list: List[Ohlcv]) -> RsiInfo:
+    assert len(ohlcv_list) > 13
+    df = to_df(ohlcv_list)
+    df['rsi'] = talib.RSI(df['close'], timeperiod=14)
+    return {
+        'rsi': list(df['rsi']),
+        'rsi_series': df['rsi']
+    }
+
+def stochastic_oscillator_info(ohlcv_list: List[Ohlcv]) -> StochasticOscillatorInfo:
+    assert len(ohlcv_list) > 13
+    df = to_df(ohlcv_list)
+    df['stoch_k'], df['stoch_d'] = talib.STOCH(df['high'], df['low'], df['close'], fastk_period=14, slowk_period=3, slowd_period=3)
+    return {
+        'stoch_k': list(df['stoch_k']),
+        'stoch_d': list(df['stoch_d']),
+        'stoch_k_series': df['stoch_k'],
+        'stoch_d_series': df['stoch_d']
+    }
+
+def atr_info(ohlcv_list: List[Ohlcv]) -> AtrInfo:
+    assert len(ohlcv_list) > 13  # ATR typically uses a 14-day period
+    df = to_df(ohlcv_list)
+    df['atr'] = talib.ATR(df['high'], df['low'], df['close'], timeperiod=14)
+    return {
+        'atr': list(df['atr']),
+        'atr_series': df['atr']
+    }
+
 
 def boll_info(ohlcv_list: List[Ohlcv]) -> BollInfo: 
     assert len(ohlcv_list) > 20

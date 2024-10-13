@@ -3,6 +3,7 @@ import string
 import json
 from hashlib import sha256
 from typing import Optional
+from urllib.parse import quote
 
 def random_id(length: int = 10) -> str:
     return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
@@ -25,3 +26,6 @@ def extract_json_string(s: str) -> Optional[dict]:
         return try_parse_json(s[start_index:end_index+1])
     else:
         return None
+    
+def url_encode(s: str) -> str:
+    return quote(s, safe='')

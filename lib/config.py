@@ -40,3 +40,13 @@ def get_http_proxy() -> str:
     return os.environ.get("PROXY")
 
 API_MAX_RETRY_TIMES = int(os.environ.get("API_MAX_RETRY_TIMES") or 5)
+
+if __name__ == "__main__":
+    print(get_mysql_uri())
+    print(get_binance_config())
+    print(get_http_proxy())
+    print(get_log_level())
+    print(get_create_table())
+    print(get_push_token())
+    print(get_baichuan_token())
+    print(API_MAX_RETRY_TIMES)

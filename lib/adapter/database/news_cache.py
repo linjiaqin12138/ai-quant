@@ -2,27 +2,27 @@ from typing import Union, TypedDict
 import abc
 
 from sqlalchemy import select, insert
-from ...model import HotNewsInfo
+from ...model import NewsInfo
 from ...utils.time import dt_to_ts, ts_to_dt
 from .session import SqlAlchemySession
 from .sqlalchemy import hot_news_cache
 
 class HotNewsCacheAbstract(abc.ABC):
     @abc.abstractmethod
-    def add(self, news: HotNewsInfo):
+    def add(self, news: NewsInfo):
         raise NotImplementedError
     @abc.abstractmethod
-    def setnx(self, news: HotNewsInfo) -> int:
+    def setnx(self, news: NewsInfo) -> int:
         raise NotImplementedError
     @abc.abstractmethod
-    def get(self, id: str) -> Union[HotNewsInfo, None]:
+    def get(self, id: str) -> Union[NewsInfo, None]:
         raise NotImplementedError
 
 class HotNewsCache(HotNewsCacheAbstract):
     def __init__(self, session: SqlAlchemySession):
         self.session = session
 
-    def add(self, news: HotNewsInfo):
+    def add(self, news: NewsInfo):
         compiled = insert(hot_news_cache).values(
             news_id = news.news_id,
             title = news.title,
@@ -35,11 +35,11 @@ class HotNewsCache(HotNewsCacheAbstract):
         ).compile()
         self.session.execute(compiled.string, compiled.params)
 
-    def get(self, id: str) -> Union[HotNewsInfo, None]:
+    def get(self, id: str) -> Union[NewsInfo, None]:
         compiled = select(hot_news_cache).where(hot_news_cache.c.news_id == id).compile()
         res = self.session.execute(compiled.string, compiled.params)
         if len(res.rows) > 0:
-            return HotNewsInfo(
+            return NewsInfo(
                 news_id=res.rows[0].news_id,
                 description=res.rows[0].description,
                 title=res.rows[0].title,
@@ -51,7 +51,7 @@ class HotNewsCache(HotNewsCacheAbstract):
             )
         return None
     
-    def setnx(self, news: HotNewsInfo) -> int:
+    def setnx(self, news: NewsInfo) -> int:
         if self.get(news.news_id) is not None:
             return 0
         self.add(news)

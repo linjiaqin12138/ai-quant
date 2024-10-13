@@ -4,12 +4,12 @@ import traceback
 from dataclasses import dataclass
 from typing import Dict, List, TypedDict, Optional
 
-from ..model import HotNewsInfo
+from ..model import NewsInfo
 from ..logger import logger
 from ..utils.string import extract_json_string
 from ..utils.object import remove_none
 from ..utils.list import filter_by
-from ..adapter.hot_news import hot_news, HotNewsAbstract, NewsPlatform, ALL_SUPPORTED_PLATFORMS
+from ..adapter.news import news, NewsAbstract, HotNewsPlatform, ALL_SUPPORTED_PLATFORMS
 from ..adapter.database.news_cache import HotNewsCache, HotNewsCacheAbstract
 from ..adapter.database.session import SessionAbstract ,SqlAlchemySession
 from ..adapter.gpt import GptAgentAbstract, G4fAgent, BaiChuanAgent
@@ -202,14 +202,14 @@ def parse_gpt_further_filtering_rsp(rsp_text: str) -> Optional[List[GptFurtherFi
 @dataclass
 class ModuleDependencyAbstract(abc.ABC):
     hot_news_cache: HotNewsCacheAbstract
-    hot_news_fetcher: HotNewsAbstract
+    hot_news_fetcher: NewsAbstract
     basic_gpt_gent: GptAgentAbstract
     gpt_agent_large_context: GptAgentAbstract
 
 class ModuleDependency(ModuleDependencyAbstract):
     def __init__(self, session: SessionAbstract = SqlAlchemySession()):
         self.session = session
-        self.hot_news_fetcher = hot_news
+        self.hot_news_fetcher = news
         self.hot_news_cache = HotNewsCache(session=session)
         self.basic_gpt_gent = G4fAgent("gpt-4-turbo", '')
         self.gpt_agent_large_context = BaiChuanAgent("Baichuan3-Turbo-128k", '')
@@ -227,12 +227,12 @@ class ModuleDependency(ModuleDependencyAbstract):
 class HotNewsOperationsModule:
     def __init__(self, dependency: ModuleDependencyAbstract = ModuleDependency()):
         self.dependency = dependency
-    def _further_filter_news_from_different_patform(self, trend_news: List[HotNewsInfo]) -> List[HotNewsInfo]:
+    def _further_filter_news_from_different_patform(self, trend_news: List[NewsInfo]) -> List[NewsInfo]:
         if len(trend_news) == 0:
             return []
       
         to_ask_gpt: List[GptFurtherAskingNewsItem] = []
-        final_result: List[HotNewsInfo] = []
+        final_result: List[NewsInfo] = []
         for news in trend_news:
             to_ask_gpt.append(remove_none({
                 "id": news.news_id,
@@ -260,11 +260,11 @@ class HotNewsOperationsModule:
                         self.dependency.hot_news_cache.setnx(news)
             return final_result
         
-    def _filter_news_from_platform(self, trend_news: List[HotNewsInfo]) -> List[HotNewsInfo]:
+    def _filter_news_from_platform(self, trend_news: List[NewsInfo]) -> List[NewsInfo]:
         if len(trend_news) == 0:
             return []
         to_ask_gpt: List[GptBasicAskingNewsItem] = []
-        final_result: List[HotNewsInfo] = []
+        final_result: List[NewsInfo] = []
         start_from = 0
         for news in trend_news:
             # 防止重复
@@ -305,7 +305,7 @@ class HotNewsOperationsModule:
             start_from += 10
         return final_result
 
-    def get_hot_news_summary_report(self, platforms: NewsPlatform = ALL_SUPPORTED_PLATFORMS, max_records_per_platform: Dict[NewsPlatform, int] = {}) -> str:
+    def get_hot_news_summary_report(self, platforms: HotNewsPlatform = ALL_SUPPORTED_PLATFORMS, max_records_per_platform: Dict[HotNewsPlatform, int] = {}) -> str:
         all_news: List[Dict] = []
         
         with self.dependency:
@@ -349,8 +349,8 @@ class HotNewsOperationsModule:
                     return agent.ask(gpt_input)
                 raise err
         
-    def get_latest_valuable_news(self, platforms: NewsPlatform = ALL_SUPPORTED_PLATFORMS, max_records_per_platform: Dict[NewsPlatform, int]={}) -> List[HotNewsInfo]:
-        gpt_analysis_result: List[HotNewsInfo] = []
+    def get_latest_valuable_news(self, platforms: HotNewsPlatform = ALL_SUPPORTED_PLATFORMS, max_records_per_platform: Dict[HotNewsPlatform, int]={}) -> List[NewsInfo]:
+        gpt_analysis_result: List[NewsInfo] = []
         with self.dependency:
             for platform in platforms:
                 news_from_platform = self.dependency.hot_news_fetcher.get_hot_news_of_platform(platform)
@@ -360,4 +360,4 @@ class HotNewsOperationsModule:
             logger.info("The first round of news screening is complete.")
             return self._further_filter_news_from_different_patform(gpt_analysis_result)
 
-hot_news = HotNewsOperationsModule()
+news = HotNewsOperationsModule()

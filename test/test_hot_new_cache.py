@@ -1,10 +1,10 @@
 from datetime import datetime
-from lib.adapter.database.news_cache import HotNewsInfo
+from lib.adapter.database.news_cache import NewsInfo
 from fake_modules.fake_db import test_hot_new_cache, fake_session
 
 def test_hot_new_cache_ok():
     with fake_session:
-        res = test_hot_new_cache.setnx(HotNewsInfo(
+        res = test_hot_new_cache.setnx(NewsInfo(
             news_id = "9f86d081884c7d659a2feaa0c55ad015",
             title = "This is a title",
             description = "This is a test description",
@@ -18,7 +18,7 @@ def test_hot_new_cache_ok():
         fake_session.commit()
     
     with fake_session:
-        res = test_hot_new_cache.setnx(HotNewsInfo(
+        res = test_hot_new_cache.setnx(NewsInfo(
             news_id = "9f86d081884c7d659a2feaa0c55ad015",
             title = "This is a duplicate record title",
             description = "This is a duplicate record description",

@@ -8,7 +8,7 @@ from ..model import CryptoHistoryFrame, Ohlcv
 from ..utils.time import dt_to_ts, timeframe_to_second, ts_to_dt
 from ..utils.ohlcv import to_df
 from ..modules.notification_logger import NotificationLogger
-from ..modules.strategy import Dependency, ParamsBase, ResultBase, ContextBase
+from ..modules.strategy import DependencyAbstract, CryptoDependency, ParamsBase, ResultBase, ContextBase
 
 ContextDict = TypedDict('Context', {
     'account_usdt_amount': float,
@@ -29,7 +29,7 @@ class Params(ParamsBase):
 
 class Context(ContextBase):
 
-    def __init__(self, params: Params, deps: Dependency):
+    def __init__(self, params: Params, deps: DependencyAbstract):
         super().__init__(params, deps)
 
     def init_id(self, params: Params) -> str:
@@ -138,7 +138,7 @@ def simple_turtle(context: Context, data: List[Ohlcv] = []) -> ResultBase:
     )
 
 def run(params: dict, notification: NotificationLogger):
-    with Context(params = Params(**params), deps=Dependency(notification=notification)) as context:
+    with Context(params = Params(**params), deps=CryptoDependency(notification=notification)) as context:
         simple_turtle(context)
 
 

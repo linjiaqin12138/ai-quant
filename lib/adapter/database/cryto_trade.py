@@ -1,20 +1,40 @@
 import abc
 import json
-from sqlalchemy import insert
+from typing import List, TypedDict
+from sqlalchemy import insert, select
+
+from ...utils.object import omit_keys
 
 from ...adapter.database.session import SqlAlchemySession
 from ...model import CryptoOrder
 from .sqlalchemy import trade_action_info
+
+TradeHistoryWithComment = TypedDict('TradeHistoryWithComment', {
+    'order': CryptoOrder,
+    'comment': str
+})
 
 class CryptoTradeHistoryAbstract(abc.ABC):
     @abc.abstractmethod
     def add(self, order: CryptoOrder, reason: str):
         raise NotImplementedError
     
+    @abc.abstractmethod
+    def get_trade_history_by_reason(self, reason: str) -> List[TradeHistoryWithComment]:
+        raise NotImplementedError
+    
 class CryptoTradeHistory(CryptoTradeHistoryAbstract):
     def __init__(self, session: SqlAlchemySession):
         self.session = session
-    def add(self, order: CryptoOrder, reason: str):
+    def get_trade_history_by_reason(self, reason: str) -> List[TradeHistoryWithComment]:
+        stmt = select(trade_action_info).where(trade_action_info.c.reason == reason).order_by(trade_action_info.c.timestamp.desc())
+        compiled = stmt.compile()
+        records = self.session.execute(compiled.string, compiled.params)
+        def convert_order(record):
+            record['context'] = json.loads(record['context'])
+            return CryptoOrder(**omit_keys(record.order, ['comment', 'reason']))
+        return [TradeHistoryWithComment(order=convert_order(record), comment=record.comment) for record in records.rows]
+    def add(self, order: CryptoOrder, reason: str, comment: str = None):
         stmt = insert(trade_action_info).values(
             pair = order.pair,
             timestamp = order.timestamp,
@@ -24,7 +44,8 @@ class CryptoTradeHistory(CryptoTradeHistoryAbstract):
             price = order.price,
             type = order.type,
             context = json.dumps(order.context),
-            order_id = order.id
+            order_id = order.id,
+            comment = comment
         )
         compiled = stmt.compile()
         self.session.execute(compiled.string, compiled.params)

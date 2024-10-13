@@ -7,7 +7,7 @@ from ..model import Ohlcv
 from ..utils.time import timeframe_to_second
 from ..utils.ohlcv import macd_info, sar_info
 from ..modules.notification_logger import NotificationLogger
-from ..modules.strategy import Dependency, ParamsBase, ResultBase, ContextBase
+from ..modules.strategy import DependencyAbstract, CryptoDependency, ParamsBase, ResultBase, ContextBase
 
 ContextDict = TypedDict('Context', {
     'account_usdt_amount': float,
@@ -19,7 +19,7 @@ ContextDict = TypedDict('Context', {
 
 class Context(ContextBase):
 
-    def __init__(self, params: ParamsBase, deps: Dependency):
+    def __init__(self, params: ParamsBase, deps: DependencyAbstract):
         super().__init__(params, deps)
 
     def init_id(self, params: ParamsBase) -> str:
@@ -73,7 +73,7 @@ def macd_sar(context: Context, data: List[Ohlcv] = []) -> ResultBase:
     )
 
 def run(params: dict, notification: NotificationLogger):
-    with Context(params = ParamsBase(**params), deps=Dependency(notification=notification)) as context:
+    with Context(params = ParamsBase(**params), deps=CryptoDependency(notification=notification)) as context:
         macd_sar(context)
 
 

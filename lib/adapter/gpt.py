@@ -1,5 +1,7 @@
 import abc
 import json
+import asyncio
+import sys
 from typing import Optional, TypedDict
 
 import requests
@@ -111,6 +113,8 @@ class G4fAgent(GptAgentAbstract):
         self.client = Client(proxies = {
             "all": get_http_proxy()
         })
+        if sys.platform == 'win32':
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     
     def ask(self, question: str) -> str:
         self.chat_context.append({"role": "user", "content": question})

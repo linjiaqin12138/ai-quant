@@ -8,8 +8,8 @@ from lib.adapter.database.crypto_cache import CryptoOhlcvCacheFetcher
 from lib.adapter.database.session import SqlAlchemySession
 from lib.model import CryptoFee, CryptoOhlcvHistory, CryptoOrder, CryptoOrderSide
 from lib.modules.notification_logger import NotificationLogger
-from lib.modules.strategy import ContextBase, Dependency, ParamsBase, StrategyFunc
-from lib.modules.crypto import crypto
+from lib.modules.strategy import ContextBase, CryptoDependency, ParamsBase, StrategyFunc
+from lib.modules.crypto import crypto, CryptoOperationModule, ModuleDependency
 from lib.utils.ohlcv import boll_info, macd_info, sar_info, to_df
 from lib.utils.string import random_id
 
@@ -79,11 +79,11 @@ class FakeExchange(CryptoExchangeAbstract):
             _cost = self.curr_price * amount,
             fees = [CryptoFee(pair, 0.001 * amount, 0.001) if side == 'buy' else CryptoFee(pair, 0.01 * amount * self.curr_price, 0.001)]
         )
-    
+
 def strategy_test(strategy_func: StrategyFunc, test_options: StrategyTestOptions, params: ParamsBase, contextClass: Type[ContextBase]):
     fake_exchange = FakeExchange(fake_session)
-    stub_deps = Dependency(
-        exchange=fake_exchange,
+    stub_deps = CryptoDependency(
+        crypto=CryptoOperationModule(ModuleDependency(exchange=fake_exchange, session=fake_session)),
         session=fake_session,
         notification= NotificationLogger('Test-Strategy', FakeNotification())
     )
@@ -149,7 +149,7 @@ def strategy_test(strategy_func: StrategyFunc, test_options: StrategyTestOptions
             add_plot.append(mpf.make_addplot(boll['upperband_series'], color='green'))
 
         mpf.plot(df, type='candle', style='yahoo',
-             title=f'{params.symbol} Strategy', ylabel='Price',
-             addplot=add_plot,
-             figscale=1.5, figsize=(16, 10)
-            )
+            title=f'{params.symbol} Strategy', ylabel='Price',
+            addplot=add_plot,
+            figscale=1.5, figsize=(16, 10)
+        )

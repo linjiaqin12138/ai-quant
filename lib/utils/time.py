@@ -1,4 +1,5 @@
-from datetime import datetime
+from typing import Optional
+from datetime import datetime, timezone, timedelta
 from ..model import CryptoHistoryFrame
 
 def timeframe_to_second(tframe: CryptoHistoryFrame) -> int:
@@ -24,3 +25,14 @@ def ts_to_dt(ts: int) -> datetime:
 
 def time_length_in_frame(start: datetime, end: datetime, frame: CryptoHistoryFrame) -> int:
     return int((dt_to_ts(round_datetime(end, frame)) - dt_to_ts(round_datetime(start, frame))) / timeframe_to_second(frame) / 1000)
+
+def get_utc_now_isoformat() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+def utc_isoformat_to_dt(s: str) -> datetime:
+    return datetime.fromisoformat(s)
+
+def hours_ago(hours: int, zone: Optional[timezone]) -> datetime:
+    if zone:
+        return datetime.now(zone) - timedelta(hours=hours)
+    return datetime.now() - timedelta(hours=hours)

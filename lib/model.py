@@ -88,7 +88,7 @@ class CryptoTradeInfo:
     order_id: str
 
 @dataclass
-class HotNewsInfo:
+class NewsInfo:
     news_id: str
     title: str
     description: Optional[str]

@@ -45,8 +45,8 @@ class CryptoOperationModule:
         self.cache_store = CryptoOhlcvCacheFetcher(dependency.session)
         self.trade_log_store = CryptoTradeHistory(dependency.session)
 
-    def create_order(self, pair: str, type: CryptoOrderType, side: CryptoOrderSide, reason: str, amount: float = None, price: float = None, spent: float = None):
-        logger.debug(f'createorder: {type} {side} {reason} amount: {amount}, price: {price}, spent: {spent}')
+    def create_order(self, pair: str, type: CryptoOrderType, side: CryptoOrderSide, reason: str, amount: float = None, price: float = None, spent: float = None, comment: str = None):
+        logger.debug(f'createorder: {type} {side} {reason} amount: {amount}, price: {price}, spent: {spent}, comment: {comment}')
         with self.dependency.session:
             order = None
             if type == 'limit' and amount and price:
@@ -62,7 +62,8 @@ class CryptoOperationModule:
                 order = self.dependency.exchange.create_order(pair, type, side, amount)
             else:
                 raise Exception(f'Unsupported parameters value: {type}, {side}, {amount}, {price}, {spent}')
-            self.trade_log_store.add(order, reason)
+            self.trade_log_store.add(order, reason, comment)
+            self.dependency.session.commit()
             return order
     
     def get_ohlcv_history(self, pair: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> CryptoOhlcvHistory:
@@ -102,3 +103,9 @@ class CryptoOperationModule:
             )
 
 crypto = CryptoOperationModule()
+
+__all__ = [
+    'crypto', 
+    'CryptoOperationModule',
+    'ModuleDependency'
+]

@@ -8,7 +8,7 @@ from ..model import Ohlcv
 from ..utils.time import timeframe_to_second
 from ..utils.ohlcv import boll_info
 from ..modules.notification_logger import NotificationLogger
-from ..modules.strategy import Dependency, ParamsBase, ResultBase, ContextBase
+from ..modules.strategy import CryptoDependency, ParamsBase, ResultBase, ContextBase
 
 ContextDict = TypedDict('Context', {
     'account_usdt_amount': float,
@@ -22,9 +22,9 @@ ContextDict = TypedDict('Context', {
 class Params(ParamsBase):
     max_retrieval: Optional[float] = None
 
-class Context(ContextBase):
+class Context(ContextBase[CryptoDependency]):
 
-    def __init__(self, params: Params, deps: Dependency):
+    def __init__(self, params: Params, deps: CryptoDependency):
         super().__init__(params, deps)
 
     def init_id(self, params: Params) -> str:
@@ -81,7 +81,7 @@ def boll(context: Context, data: List[Ohlcv] = []) -> ResultBase:
     )
 
 def run(params: dict, notification: NotificationLogger):
-    with Context(params = Params(**params), deps=Dependency(notification=notification)) as context:
+    with Context(params = Params(**params), deps=CryptoDependency(notification=notification)) as context:
         boll(context)
 
 

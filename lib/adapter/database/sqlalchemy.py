@@ -41,19 +41,20 @@ trade_action_info = Table(
     Column("pair", String(20), primary_key=True),
     Column("timestamp", DateTime, primary_key=True),
     Column('action', Enum("buy", "sell"), primary_key=True),
-    Column('reason', String(1024)),
+    Column('reason', String(1024), index=True),
     Column('amount', DECIMAL(15, 10), nullable=False),
     Column('price', DECIMAL(15, 10), nullable=False),
     Column('type', Enum("limit", "market"), nullable=False),
     Column('context', String(4096)),
-    Column('order_id', String(100))
+    Column('order_id', String(100)),
+    Column('comment', Text)
 )
 
 events = Table(
     'events',
     metadata_obj,
     Column("key", String(512), primary_key=True),
-    Column("context", String(4096)),
+    Column("context", Text),
     Column('type', Enum("string", "json"), default="string")
 )
 
