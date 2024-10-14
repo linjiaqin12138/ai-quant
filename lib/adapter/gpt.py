@@ -62,11 +62,11 @@ class BaiChuanAgent(GptAgentAbstract):
             "Authorization": "Bearer " + self.api_key
         }
 
-        @with_retry((self.BaiChuanApiFailed), API_MAX_RETRY_TIMES)
+        @with_retry((self.BaiChuanApiFailed, requests.exceptions.ConnectionError, requests.exceptions.Timeout), API_MAX_RETRY_TIMES)
         def retryable_part():
             logger.debug(f"Baichuan API calling data: {json_data}")
             logger.info(f"Baichuan API calling with body size: {len(json_data)} Byte")
-            response = requests.post(self.url, data=json_data, headers=headers, timeout=60, stream=False)
+            response = requests.post(self.url, data=json_data, headers=headers, stream=False)
             logger.info(f"Baichuan API calling statusCode: {response.status_code}")
             logger.debug(f"Baichuan API response header {response.headers}")
             logger.debug(f"Baichuan API response body {response.text}")
