@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from curl_cffi import requests as curl_requests
 import requests
+import curl_cffi
 
 from ..model import NewsInfo
 from ..config import API_MAX_RETRY_TIMES, get_http_proxy
@@ -84,7 +85,7 @@ def get_news_of_cointime(after: Optional[datetime] = None) -> List[NewsInfo]:
     last_timestamp = now
 
     while True:
-        @with_retry((requests.exceptions.RequestException), API_MAX_RETRY_TIMES)
+        @with_retry((curl_cffi.requests.exceptions.Timeout, curl_cffi.requests.exceptions.ConnectionError), API_MAX_RETRY_TIMES)
         def retryable_part():
             """
             可重试的API请求部分。

@@ -103,8 +103,8 @@ def gpt_analysis(context: Context, data: List[Ohlcv]) -> str:
     atr = round_to_5(atr_info(data)['atr'][-1])
     # 获取最新的加密货币新闻
     latest_news = context._deps.gpt_summary_news(coin_name)
-    trade_history_text = '\n'.join(map_by(context.get('operation_history'), lambda x : '-' + x))
-    ohlcv_text = '\n'.join(['[', '\n'.join(map_by(data_for_gpt, lambda x : '    ' + x)), ']'])
+    trade_history_text = '\n'.join(map_by(context.get('operation_history'), lambda x : '- ' + x))
+    ohlcv_text = '\n'.join(['[', '\n'.join(map_by(data_for_gpt, lambda x : '    ' + json.dumps(x))), ']'])
     # 准备发送给GPT的提示
     prompt = f"""
 分析以下加密货币的信息，并给出交易建议：
@@ -145,6 +145,7 @@ def gpt_analysis(context: Context, data: List[Ohlcv]) -> str:
 """
     #TODO: 添加历史交易情况
     logger.debug(prompt)
+    context._deps.notification_logger.msg(prompt)
     context._deps.agent.set_system_prompt(f"""
 你是一位经验丰富的加密货币交易专家，擅长分析市场数据、技术指标和新闻信息。你的专长包括：
 1. 解读OHLCV数据，识别价格趋势和交易量变化。
@@ -222,7 +223,7 @@ def gpt(context: Context) -> ResultBase:
         params.symbol, 
         params.data_frame, 
         datetime.now() - (expected_data_length) * timedelta(seconds = timeframe_to_second(params.data_frame)),
-        datetime.now()           
+        datetime.now()
     ).data
     
     advice_json = gpt_analysis(context, data)
@@ -230,17 +231,17 @@ def gpt(context: Context) -> ResultBase:
     coin_name = params.symbol.split('/')[0]
     if advice_json['action'] == 'buy':
         order = deps.crypto.create_order(params.symbol, 'market', 'buy', f'GPT_PLAN_{params.symbol}', spent = advice_json['cost'], comment=advice_json['reason'])
-        context.set('account_coin_amount', context.get('account_coin_amount') + order.get_amount())
-        context.set('account_usdt_amount', context.get('account_usdt_amount') - order.get_cost())
-        operation_infomation = f'{order.timestamp.isoformat()} 价格: {order.price} 花费{order.get_cost()}USDT买入{order.get_amount()}个{coin_name}, 剩余:{context.get("account_usdt_amount")}USDT, 持有{context.get("account_coin_amount")}{coin_name}'
-        context.set('operation_history', context.get('operation_history') + [operation_infomation])
+        context.set('account_coin_amount', context.get('account_coin_amount') + order.get_amount(True))
+        context.set('account_usdt_amount', context.get('account_usdt_amount') - order.get_cost(True))
+        operation_infomation = f'{order.timestamp.isoformat()} 价格: {order.price} 花费{order.get_cost(True)}USDT买入{order.get_amount(True)}个{coin_name}, 剩余:{context.get("account_usdt_amount")}USDT, 持有{context.get("account_coin_amount")}{coin_name}'
+        context.set('operation_history', context.get('operation_history') + [operation_infomation + f"理由：{advice_json['reason']}"])
         deps.notification_logger.msg(operation_infomation)
     elif advice_json['action'] == 'sell':
         order = deps.crypto.create_order(params.symbol, 'market', 'sell', f'GPT_PLAN_{params.symbol}', amount = advice_json['amount'], comment=advice_json['reason'])
-        context.set('account_coin_amount', context.get('account_coin_amount') - order.get_amount())
-        context.set('account_usdt_amount', context.get('account_usdt_amount') + order.get_cost())
+        context.set('account_coin_amount', context.get('account_coin_amount') - order.get_amount(True))
+        context.set('account_usdt_amount', context.get('account_usdt_amount') + order.get_cost(True))
         operation_infomation = f'{order.timestamp.isoformat()} 价格: {order.price} 卖出{order.get_amount(True)}个{coin_name}, 获得{order.get_cost(True)}USDT, 剩余:{context.get("account_usdt_amount")}USDT, 持有{context.get("account_coin_amount")}{coin_name}'
-        context.set('operation_history', context.get('operation_history') + [operation_infomation])
+        context.set('operation_history', context.get('operation_history') + [operation_infomation + f"理由：{advice_json['reason']}"])
         deps.notification_logger.msg(operation_infomation)
 
     return ResultBase(

@@ -3,7 +3,7 @@ import argparse
 import traceback
 
 from typing import List
-from lib.modules import hot_news
+from lib.modules.hot_news import news
 from lib.adapter.notification import PushPlus, NotificationAbstract
 from lib.logger import logger
 
@@ -23,7 +23,7 @@ class JobContext:
 
     def run(self):
         try:
-            report = hot_news.get_hot_news_summary_report(self.platforms)
+            report = news.get_hot_news_summary_report(self.platforms)
             self.push.send(title='今日新闻', content=report)
         except Exception as err:
             logger.error(f"Unknown error: {err}")

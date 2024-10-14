@@ -22,7 +22,7 @@ def main():
     args = parse_command_line()
     cfg = read_json_file(args.config)
 
-    with NotificationLogger(f'GPT交易法', PushPlus()) as logger:
+    with NotificationLogger(f'GPT交易法 {cfg.get('symbol')}', PushPlus()) as logger:
         run(cfg, logger)
     
 main()
