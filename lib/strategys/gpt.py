@@ -8,11 +8,10 @@ from ..utils.list import filter_by, map_by
 from ..utils.string import extract_json_string
 from ..utils.ohlcv import atr_info, boll_info, macd_info, sam20_info, sam5_info,rsi_info, stochastic_oscillator_info
 from ..utils.number import get_total_assets, is_nan, remain_significant_digits
-from ..utils.time import timeframe_to_second
-from ..adapter.database.session import SessionAbstract
-from ..adapter.gpt import GptAgentAbstract, BaiChuanAgent
+from ..utils.time import timeframe_to_second, to_utc_isoformat
+from ..adapter.gpt import GptAgentAbstract, get_agent_by_model
 from ..adapter.notification import NotificationAbstract
-from ..adapter.news import news, NewsAbstract
+from ..adapter.news import news
 from ..modules.notification_logger import NotificationLogger
 from ..modules.strategy import CryptoDependency, ParamsBase, ResultBase, ContextBase
 
@@ -77,13 +76,13 @@ def gpt_analysis(context: Context, data: List[Ohlcv]) -> str:
     # 将数据转换为适合GPT分析的格式
     data_for_gpt = [
         {
-            "timestamp": ohlcv.timestamp.isoformat(),
+            "timestamp": to_utc_isoformat(ohlcv.timestamp),
             "open": ohlcv.open,
             "high": ohlcv.high,
             "low": ohlcv.low,
             "close": ohlcv.close,
             "volume": ohlcv.volume
-        } for ohlcv in data[-20:]  # 使用最近的20个数据点
+        } for ohlcv in data[-30:]  # 使用最近的30个数据点
     ]
 
     coin_name = context._params.symbol.split('/')[0]
@@ -109,7 +108,7 @@ def gpt_analysis(context: Context, data: List[Ohlcv]) -> str:
     prompt = f"""
 分析以下加密货币的信息，并给出交易建议：
 
-1. 最近20天的OHLCV数据:
+1. 最近{len(data_for_gpt)}天的OHLCV数据:
 {ohlcv_text}
 
 2. 技术指标:
@@ -156,8 +155,8 @@ def gpt_analysis(context: Context, data: List[Ohlcv]) -> str:
 请基于提供的数据和信息，给出一个JSON格式的响应，包含下一步的行动建议（"buy"、"sell"或"hold"），具体的交易数量，以及相应的理由。
 回复格式应为JSON，包含以下字段：
 - action: "buy"（买入）, "sell"（卖出）或 "hold"（不动）
-- amount: (Required when action is sell) action为sell时返回卖出的{coin_name}数量，action为buy时返回花费的USDT数量
-- cost: (Required when action is buy) action为buy时返回花费的USDT数量
+- amount: (Required when action is sell) action为sell时返回卖出的{coin_name}数量，不得超过持有的{coin_name}数量
+- cost: (Required when action is buy) action为buy时返回花费的USDT数量, 不得超过持有的USDT数量
 - reason: 做出此决定的简要理由
 
 响应格式例子：
@@ -181,9 +180,8 @@ Example 3:
 }}
 ```
 
-注意：交易数量应该是合理的，不要超过当前可用的USDT余额或持仓量。
-"""
-    )
+注意：交易数量应该是合理的，不要超过仓位信息中给出的可用的USDT余额或{coin_name}持仓量。
+""")
     class GptReplyNotValid(Exception):
         pass
 
@@ -233,15 +231,16 @@ def gpt(context: Context) -> ResultBase:
         order = deps.crypto.create_order(params.symbol, 'market', 'buy', f'GPT_PLAN_{params.symbol}', spent = advice_json['cost'], comment=advice_json['reason'])
         context.set('account_coin_amount', context.get('account_coin_amount') + order.get_amount(True))
         context.set('account_usdt_amount', context.get('account_usdt_amount') - order.get_cost(True))
-        operation_infomation = f'{order.timestamp.isoformat()} 价格: {order.price} 花费{order.get_cost(True)}USDT买入{order.get_amount(True)}个{coin_name}, 剩余:{context.get("account_usdt_amount")}USDT, 持有{context.get("account_coin_amount")}{coin_name}'
-        context.set('operation_history', context.get('operation_history') + [operation_infomation + f"理由：{advice_json['reason']}"])
+        operation_infomation = f'{to_utc_isoformat(order.timestamp)} 价格: {order.price} 花费{order.get_cost(True)}USDT买入{order.get_amount(True)}个{coin_name}, 剩余:{context.get("account_usdt_amount")}USDT, 持有{context.get("account_coin_amount")}{coin_name}'
+        context.set('operation_history', context.get('operation_history') + [operation_infomation])
+        # context.set('operation_history', context.get('operation_history') + [operation_infomation + f"理由：{advice_json['reason']}"])
         deps.notification_logger.msg(operation_infomation)
     elif advice_json['action'] == 'sell':
         order = deps.crypto.create_order(params.symbol, 'market', 'sell', f'GPT_PLAN_{params.symbol}', amount = advice_json['amount'], comment=advice_json['reason'])
         context.set('account_coin_amount', context.get('account_coin_amount') - order.get_amount(True))
         context.set('account_usdt_amount', context.get('account_usdt_amount') + order.get_cost(True))
-        operation_infomation = f'{order.timestamp.isoformat()} 价格: {order.price} 卖出{order.get_amount(True)}个{coin_name}, 获得{order.get_cost(True)}USDT, 剩余:{context.get("account_usdt_amount")}USDT, 持有{context.get("account_coin_amount")}{coin_name}'
-        context.set('operation_history', context.get('operation_history') + [operation_infomation + f"理由：{advice_json['reason']}"])
+        operation_infomation = f'{to_utc_isoformat(order.timestamp)} 价格: {order.price} 卖出{order.get_amount(True)}个{coin_name}, 获得{order.get_cost(True)}USDT, 剩余:{context.get("account_usdt_amount")}USDT, 持有{context.get("account_coin_amount")}{coin_name}'
+        context.set('operation_history', context.get('operation_history') + [operation_infomation])
         deps.notification_logger.msg(operation_infomation)
 
     return ResultBase(
@@ -255,5 +254,5 @@ def run(cmd_params: dict, notification: NotificationLogger):
         data_frame='1d', 
         symbol = cmd_params.get('symbol')
     )
-    with Context(params = params, deps=GptStrategyDependency(notification=notification, agent=BaiChuanAgent(model))) as context:
+    with Context(params = params, deps=GptStrategyDependency(notification=notification, agent=get_agent_by_model(model))) as context:
         gpt(context)

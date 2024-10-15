@@ -143,3 +143,17 @@ class G4fAgent(GptAgentAbstract):
         
         self.chat_context.append({"role": "assistant", "content": rsp_message})
         return rsp_message
+
+class TestAgent(GptAgentAbstract):
+    def __init__(self, model = "human", system_prompt = ''):
+        super().__init__(model, system_prompt)
+
+    def ask(self, question: str) -> str:
+        user_input = input(question)
+        return user_input
+
+def get_agent_by_model(model: str) -> GptAgentAbstract:
+    if model.startswith("Baichuan"):
+        return BaiChuanAgent(model)
+    else:
+        return G4fAgent(model)

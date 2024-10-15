@@ -27,8 +27,12 @@ def time_length_in_frame(start: datetime, end: datetime, frame: CryptoHistoryFra
     return int((dt_to_ts(round_datetime(end, frame)) - dt_to_ts(round_datetime(start, frame))) / timeframe_to_second(frame) / 1000)
 
 def get_utc_now_isoformat() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+    return to_utc_isoformat(datetime.now())
 
+def to_utc_isoformat(dt: datetime) -> str:
+    utc_dt = dt.astimezone(timezone.utc)
+    return utc_dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+    
 def utc_isoformat_to_dt(s: str) -> datetime:
     return datetime.fromisoformat(s)
 
