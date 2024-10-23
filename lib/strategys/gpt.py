@@ -135,7 +135,7 @@ def gpt_analysis(context: Context, data: List[Ohlcv]) -> str:
 
 4. 当前仓位信息:
 - USDT余额: {context.get('account_usdt_amount')}
-- {coin_name}持仓量: {context.get('account_coin_amount')}
+- {coin_name}持仓量: {context.get('account_coin_amount')} (价值约{context.get('account_coin_amount') * data[-1].close} USDT)
 
 5. 历史交易情况：
 {trade_history_text}
@@ -180,7 +180,9 @@ Example 3:
 }}
 ```
 
-注意：交易数量应该是合理的，不要超过仓位信息中给出的可用的USDT余额或{coin_name}持仓量。
+注意：
+1. 交易数量应该是合理的，不要超过仓位信息中给出的可用的USDT余额或{coin_name}持仓量。
+2. 买入消耗不得低于5USDT，卖出的币总价值不得低于5USDT，避免资金量过低引起的交易失败
 """)
     class GptReplyNotValid(Exception):
         pass
