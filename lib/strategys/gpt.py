@@ -103,7 +103,13 @@ def gpt_analysis(context: Context, data: List[Ohlcv]) -> str:
     # 获取最新的加密货币新闻
     latest_news = context._deps.gpt_summary_news(coin_name)
     trade_history_text = '\n'.join(map_by(context.get('operation_history'), lambda x : '- ' + x))
-    ohlcv_text = '\n'.join(['[', '\n'.join(map_by(data_for_gpt, lambda x : '    ' + json.dumps(x))), ']'])
+    ohlcv_text = '\n'.join([
+        '[', 
+            ',\n'.join(
+                map_by(data_for_gpt, lambda x : '    ' + json.dumps(x))
+            ), 
+        ']'
+    ])
     # 准备发送给GPT的提示
     prompt = f"""
 分析以下加密货币的信息，并给出交易建议：
@@ -134,8 +140,8 @@ def gpt_analysis(context: Context, data: List[Ohlcv]) -> str:
 {latest_news}
 
 4. 当前仓位信息:
-- USDT余额: {context.get('account_usdt_amount')}
-- {coin_name}持仓量: {context.get('account_coin_amount')} (价值约{context.get('account_coin_amount') * data[-1].close} USDT)
+- USDT余额: {round_to_5(context.get('account_usdt_amount'))}
+- {coin_name}持仓量: {round_to_5(context.get('account_coin_amount'))} (价值约{round_to_5(context.get('account_coin_amount') * data[-1].close)} USDT)
 
 5. 历史交易情况：
 {trade_history_text}
@@ -233,7 +239,7 @@ def gpt(context: Context) -> ResultBase:
         order = deps.crypto.create_order(params.symbol, 'market', 'buy', f'GPT_PLAN_{params.symbol}', spent = advice_json['cost'], comment=advice_json['reason'])
         context.set('account_coin_amount', context.get('account_coin_amount') + order.get_amount(True))
         context.set('account_usdt_amount', context.get('account_usdt_amount') - order.get_cost(True))
-        operation_infomation = f'{to_utc_isoformat(order.timestamp)} 价格: {order.price} 花费{order.get_cost(True)}USDT买入{order.get_amount(True)}个{coin_name}, 剩余:{context.get("account_usdt_amount")}USDT, 持有{context.get("account_coin_amount")}{coin_name}'
+        operation_infomation = f'{to_utc_isoformat(order.timestamp)} 价格: {order.price} 花费{order.get_cost(True)}USDT买入{order.get_amount(True)}个{coin_name}, 剩余:{round_to_5(context.get("account_usdt_amount"))}USDT, 持有{round_to_5(context.get("account_coin_amount"))}{coin_name}'
         context.set('operation_history', context.get('operation_history') + [operation_infomation])
         # context.set('operation_history', context.get('operation_history') + [operation_infomation + f"理由：{advice_json['reason']}"])
         deps.notification_logger.msg(operation_infomation)
@@ -241,7 +247,7 @@ def gpt(context: Context) -> ResultBase:
         order = deps.crypto.create_order(params.symbol, 'market', 'sell', f'GPT_PLAN_{params.symbol}', amount = advice_json['amount'], comment=advice_json['reason'])
         context.set('account_coin_amount', context.get('account_coin_amount') - order.get_amount(True))
         context.set('account_usdt_amount', context.get('account_usdt_amount') + order.get_cost(True))
-        operation_infomation = f'{to_utc_isoformat(order.timestamp)} 价格: {order.price} 卖出{order.get_amount(True)}个{coin_name}, 获得{order.get_cost(True)}USDT, 剩余:{context.get("account_usdt_amount")}USDT, 持有{context.get("account_coin_amount")}{coin_name}'
+        operation_infomation = f'{to_utc_isoformat(order.timestamp)} 价格: {order.price} 卖出{order.get_amount(True)}个{coin_name}, 获得{order.get_cost(True)}USDT, 剩余:{round_to_5(context.get("account_usdt_amount"))}USDT, 持有{round_to_5(context.get("account_coin_amount"))}{coin_name}'
         context.set('operation_history', context.get('operation_history') + [operation_infomation])
         deps.notification_logger.msg(operation_infomation)
 

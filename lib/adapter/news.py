@@ -163,8 +163,11 @@ def get_trend_of_cn_platform(platform: HotNewsPlatform) -> List[NewsInfo]:
         return []
     
     logger.info(f"Getting trend of platform {platform}")
-    res = requests.get(endpoint_of(platform))
+    @with_retry((requests.exceptions.Timeout), API_MAX_RETRY_TIMES)
+    def retryable_part():
+        return requests.get(endpoint_of(platform))
     
+    res =retryable_part()
     if not (res.status_code == 200 and res.json()["code"] == 200):
         raise GetHotFailedError(f'Failed to get hot news from {platform}, statusCode {res.status_code}, body: {res.content}')
     

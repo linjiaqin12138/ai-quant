@@ -3,7 +3,7 @@ import abc
 
 import requests
 
-from ..config import get_push_token
+from ..config import get_push_token, API_MAX_RETRY_TIMES
 from ..logger import logger
 from ..utils.retry import with_retry
 
@@ -22,6 +22,7 @@ class PushPlus(NotificationAbstract):
     def send(self, content: str, title: str = ''):
         logger.debug(f'Send Push Plus Notification: title: {title}, content: {content}')
     
+        @with_retry((requests.exceptions.Timeout), API_MAX_RETRY_TIMES)
         def retryable_part():
             res = requests.post(
                 "http://www.pushplus.plus/send",

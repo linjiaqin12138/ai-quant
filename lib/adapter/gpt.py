@@ -81,7 +81,7 @@ class BaiChuanAgent(GptAgentAbstract):
         raise self.BaiChuanApiFailed(f"API failed with error: {rsp.text}")
         
         
-        return retryable_part()
+        # return retryable_part()
             # {
             #     "id": "chatcmpl-M0bc0015KKZqooq",
             #     "object": "chat.completion",
