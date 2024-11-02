@@ -36,7 +36,12 @@ def to_utc_isoformat(dt: datetime) -> str:
 def utc_isoformat_to_dt(s: str) -> datetime:
     return datetime.fromisoformat(s)
 
-def hours_ago(hours: int, zone: Optional[timezone]) -> datetime:
+def days_ago(days: int, zone: Optional[timezone] = None) -> datetime:
+    if zone:
+        return datetime.now(zone) - timedelta(days=days)
+    return datetime.now() - timedelta(days=days)
+
+def hours_ago(hours: int, zone: Optional[timezone] = None) -> datetime:
     if zone:
         return datetime.now(zone) - timedelta(hours=hours)
     return datetime.now() - timedelta(hours=hours)

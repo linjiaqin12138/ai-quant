@@ -8,7 +8,8 @@ from ..utils.list import filter_by, map_by
 from ..utils.string import extract_json_string
 from ..utils.ohlcv import atr_info, boll_info, macd_info, sam20_info, sam5_info,rsi_info, stochastic_oscillator_info
 from ..utils.number import get_total_assets, is_nan, remain_significant_digits
-from ..utils.time import timeframe_to_second, to_utc_isoformat
+from ..utils.time import timeframe_to_second, to_utc_isoformat, days_ago
+from ..adapter.crypto_exchange import BinanceExchange
 from ..adapter.gpt import GptAgentAbstract, get_agent_by_model
 from ..adapter.notification import NotificationAbstract
 from ..adapter.news import news
@@ -102,7 +103,12 @@ def gpt_analysis(context: Context, data: List[Ohlcv]) -> str:
     atr = round_to_5(atr_info(data)['atr'][-1])
     # 获取最新的加密货币新闻
     latest_news = context._deps.gpt_summary_news(coin_name)
-    trade_history_text = '\n'.join(map_by(context.get('operation_history'), lambda x : '- ' + x))
+   
+    binance_exchange = BinanceExchange()
+    global_long_short_account = binance_exchange.get_u_base_global_long_short_account_ratio(pair=context._params.symbol, frame=context._params.data_frame, start=days_ago(1))[0]['longShortRatio']
+    top_long_short_account = binance_exchange.get_u_base_top_long_short_account_ratio(pair=context._params.symbol, frame=context._params.data_frame, start=days_ago(1))[0]['longShortRatio']
+    top_long_short_amount = binance_exchange.get_u_base_top_long_short_ratio(pair=context._params.symbol, frame=context._params.data_frame, start=days_ago(1))[0]['longShortRatio']
+    
     ohlcv_text = '\n'.join([
         '[', 
             ',\n'.join(
@@ -139,12 +145,14 @@ def gpt_analysis(context: Context, data: List[Ohlcv]) -> str:
 3. 最新相关新闻:
 {latest_news}
 
-4. 当前仓位信息:
+4. 交易所多空比数据：
+- 多空持仓人数比：{global_long_short_account}
+- 大户账户数多空比: {top_long_short_account}
+- 大户持仓量多空比: {top_long_short_amount}
+
+5. 当前仓位信息:
 - USDT余额: {round_to_5(context.get('account_usdt_amount'))}
 - {coin_name}持仓量: {round_to_5(context.get('account_coin_amount'))} (价值约{round_to_5(context.get('account_coin_amount') * data[-1].close)} USDT)
-
-5. 历史交易情况：
-{trade_history_text}
 
 请根据这些信息分析市场趋势，并给出具体的交易建议。
 """
@@ -250,6 +258,8 @@ def gpt(context: Context) -> ResultBase:
         operation_infomation = f'{to_utc_isoformat(order.timestamp)} 价格: {order.price} 卖出{order.get_amount(True)}个{coin_name}, 获得{order.get_cost(True)}USDT, 剩余:{round_to_5(context.get("account_usdt_amount"))}USDT, 持有{round_to_5(context.get("account_coin_amount"))}{coin_name}'
         context.set('operation_history', context.get('operation_history') + [operation_infomation])
         deps.notification_logger.msg(operation_infomation)
+
+    deps.notification_logger('\n'.join(map_by(context.get('operation_history'), lambda x : '- ' + x)))
 
     return ResultBase(
         total_assets = get_total_assets(data[-1].close, context.get('account_coin_amount'), context.get('account_usdt_amount'))

@@ -15,7 +15,13 @@ G = TypeVar('G')
 
 SUPPORT_RETRY_METHODS = [
     'fetch_ohlcv',
-    'create_order'
+    'create_order',
+    'fetch_ticker',
+
+    # Binance
+    'fapidataGetGloballongshortaccountratio',
+    'fapidataGetToplongshortaccountratio',
+    'fapidataGetToplongshortpositionratio'
 ]
 
 @dataclass

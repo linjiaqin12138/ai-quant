@@ -1,9 +1,11 @@
 import ccxt
-from datetime import datetime 
+from typing import TypedDict, List, Callable, TypeVar, Any, Dict
+from datetime import datetime
 from ...config import get_binance_config
 from ...logger import logger
 from ...model import CryptoOhlcvHistory, CryptoHistoryFrame, Ohlcv, CryptoOrderType, CryptoOrderSide, CryptoOrder, CryptoFee
-from ...utils.time import dt_to_ts, timeframe_to_second
+from ...utils.time import dt_to_ts, timeframe_to_second, time_length_in_frame, ts_to_dt
+from ...utils.list import map_by 
 from .base import retry_patch, CryptoExchangeAbstract, CryptoTicker
 
 def binance_test_patch(exchange: ccxt.binance) -> ccxt.binance:
@@ -21,6 +23,28 @@ def binance_test_patch(exchange: ccxt.binance) -> ccxt.binance:
         if callable(func):
             setattr(exchange, method, call_with_test(func))
 
+LongShortAccountInfo = TypedDict('LongShortAccountInfo', {
+    "longAccount": float,
+    "shortAccount": float,
+    "longShortRatio": float,
+    "timestamp": datetime
+})
+
+G = TypeVar("G")
+def with_slice(slice_count: int, frame: CryptoHistoryFrame) -> Callable[[G], G]:
+    def decorator(function: G) -> G:
+        def slice_func(total_start: int, total_count: int) -> List[Dict[str, Any]]:
+            data = []
+            slice_start = total_start
+            while total_count > 0:
+                limit = slice_count if total_count > 500 else total_count
+                data.extend(function(slice_start, limit))
+                total_count -= limit
+                slice_start += (limit * timeframe_to_second(frame) * 1000)
+            return data
+        return slice_func
+    return decorator
+
 class BinanceExchange(CryptoExchangeAbstract):
 
     def __init__(self, test_mode: bool = False):
@@ -32,6 +56,35 @@ class BinanceExchange(CryptoExchangeAbstract):
         res = self.binance.fetch_ticker(pair)
         return CryptoTicker(last=res['last'])
 
+    def _get_long_short_info_factory(self, api: str, pair: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> List[LongShortAccountInfo]:
+        start_in_ts = dt_to_ts(start)
+        total = time_length_in_frame(start, end, frame)
+
+        def datetime_mapper(x: dict):
+            x['timestamp'] = ts_to_dt(int(x['timestamp']))
+            return x
+        
+        @with_slice(500, frame)
+        def sliced_fetch(start: int, limit: int):
+            biance_api_func = getattr(self.binance, api)
+            return biance_api_func({
+                "symbol": pair.replace("/", ""),
+                "period": frame,
+                "limit": limit,
+                "startTime": start
+            })
+        
+        return map_by(sliced_fetch(start_in_ts, total), datetime_mapper)
+    # https://developers.binance.com/docs/zh-CN/derivatives/usds-margined-futures/market-data/rest-api/Top-Trader-Long-Short-Ratio
+    def get_u_base_top_long_short_ratio(self, pair: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> List[LongShortAccountInfo]:
+        return self._get_long_short_info_factory('fapidataGetToplongshortpositionratio', pair, frame, start, end)
+    # https://developers.binance.com/docs/zh-CN/derivatives/usds-margined-futures/market-data/rest-api/Top-Long-Short-Account-Ratio
+    def get_u_base_top_long_short_account_ratio(self, pair: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> List[LongShortAccountInfo]:
+        return self._get_long_short_info_factory('fapidataGetToplongshortaccountratio', pair, frame, start, end)
+    # https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Long-Short-Ratio
+    def get_u_base_global_long_short_account_ratio(self, pair: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> List[LongShortAccountInfo]:
+        return self._get_long_short_info_factory('fapidataGetGloballongshortaccountratio', pair, frame, start, end)
+        
     def create_order(self, pair: str, type: CryptoOrderType, side: CryptoOrderSide, amount: float, price: float = None) -> CryptoOrder: 
         logger.debug(f'binance createorder: {type} {side} amount: {amount}, price: {price}')
         res = self.binance.create_order(pair, type, side, amount, price)
@@ -53,31 +106,25 @@ class BinanceExchange(CryptoExchangeAbstract):
     
     def fetch_ohlcv(self, pair: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> CryptoOhlcvHistory:
         start_in_ts = dt_to_ts(start)
-        end_in_ts = dt_to_ts(end)
-        interval_in_ms = timeframe_to_second(frame) * 1000
-        total = int((end_in_ts - start_in_ts) / interval_in_ms)
+        total = time_length_in_frame(start, end, frame)
 
-        data = []
-        while total > 0:
-            limit = 500 if total > 500 else total
-            data.extend(self.binance.fetch_ohlcv(pair, frame, since=start_in_ts, limit=limit))
-            total -= 500
-            start_in_ts += (500 * timeframe_to_second(frame) * 1000)
+        @with_slice(500, frame)
+        def sliced_fetch(start: int, limit: int):
+            return self.binance.fetch_ohlcv(pair, frame, since=start, limit=limit)
+    
         return CryptoOhlcvHistory(
             pair = pair,
             frame = frame,
             exchange = 'binance',
-            data = list(
-                map(
-                    lambda item: Ohlcv(
-                        timestamp = datetime.fromtimestamp(item[0] / 1000), 
-                        open = item[1], 
-                        high = item[2], 
-                        low = item[3], 
-                        close = item[4], 
-                        volume = item[5]
-                    ), 
-                    data
+            data = map_by(
+                sliced_fetch(start_in_ts, total),
+                lambda item: Ohlcv(
+                    timestamp = datetime.fromtimestamp(item[0] / 1000), 
+                    open = item[1], 
+                    high = item[2], 
+                    low = item[3], 
+                    close = item[4], 
+                    volume = item[5]
                 )
             )
         )
