@@ -108,7 +108,8 @@ def gpt_analysis(context: Context, data: List[Ohlcv]) -> str:
     global_long_short_account = binance_exchange.get_u_base_global_long_short_account_ratio(pair=context._params.symbol, frame=context._params.data_frame, start=days_ago(1))[0]['longShortRatio']
     top_long_short_account = binance_exchange.get_u_base_top_long_short_account_ratio(pair=context._params.symbol, frame=context._params.data_frame, start=days_ago(1))[0]['longShortRatio']
     top_long_short_amount = binance_exchange.get_u_base_top_long_short_ratio(pair=context._params.symbol, frame=context._params.data_frame, start=days_ago(1))[0]['longShortRatio']
-    
+    future_rate = round_to_5(binance_exchange.get_latest_futures_price_info(context._params.symbol)['lastFundingRate'])
+
     ohlcv_text = '\n'.join([
         '[', 
             ',\n'.join(
@@ -145,10 +146,11 @@ def gpt_analysis(context: Context, data: List[Ohlcv]) -> str:
 3. 最新相关新闻:
 {latest_news}
 
-4. 交易所多空比数据：
+4. 币安交易所{coin_name}的U本位合约数据：
 - 多空持仓人数比：{global_long_short_account}
 - 大户账户数多空比: {top_long_short_account}
 - 大户持仓量多空比: {top_long_short_amount}
+- 资金费率：{future_rate}
 
 5. 当前仓位信息:
 - USDT余额: {round_to_5(context.get('account_usdt_amount'))}
@@ -259,7 +261,7 @@ def gpt(context: Context) -> ResultBase:
         context.set('operation_history', context.get('operation_history') + [operation_infomation])
         deps.notification_logger.msg(operation_infomation)
 
-    deps.notification_logger('\n'.join(map_by(context.get('operation_history'), lambda x : '- ' + x)))
+    deps.notification_logger.msg('\n'.join(map_by(context.get('operation_history'), lambda x : '- ' + x)))
 
     return ResultBase(
         total_assets = get_total_assets(data[-1].close, context.get('account_coin_amount'), context.get('account_usdt_amount'))

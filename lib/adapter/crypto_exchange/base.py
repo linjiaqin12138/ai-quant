@@ -21,7 +21,8 @@ SUPPORT_RETRY_METHODS = [
     # Binance
     'fapidataGetGloballongshortaccountratio',
     'fapidataGetToplongshortaccountratio',
-    'fapidataGetToplongshortpositionratio'
+    'fapidataGetToplongshortpositionratio',
+    'fapipublicGetPremiumindex'
 ]
 
 @dataclass

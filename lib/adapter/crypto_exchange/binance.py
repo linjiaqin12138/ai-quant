@@ -30,6 +30,17 @@ LongShortAccountInfo = TypedDict('LongShortAccountInfo', {
     "timestamp": datetime
 })
 
+LatestFuturesPriceInfo = TypedDict('LatestFuturesPriceInfo', {
+    'symbol': str,
+    'markPrice': float,
+    'indexPrice': float,
+    'estimatedSettlePrice': float,
+    'lastFundingRate': float,  # 最近更新的资金费率
+    'interestRate': float,
+    'nextFundingTime': float,
+    'time': datetime # 更新时间
+})
+
 G = TypeVar("G")
 def with_slice(slice_count: int, frame: CryptoHistoryFrame) -> Callable[[G], G]:
     def decorator(function: G) -> G:
@@ -84,7 +95,14 @@ class BinanceExchange(CryptoExchangeAbstract):
     # https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Long-Short-Ratio
     def get_u_base_global_long_short_account_ratio(self, pair: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> List[LongShortAccountInfo]:
         return self._get_long_short_info_factory('fapidataGetGloballongshortaccountratio', pair, frame, start, end)
-        
+    
+    def get_latest_futures_price_info(self, pair: str) -> LatestFuturesPriceInfo:
+        rsp = self.binance.fapipublicGetPremiumindex({
+            "symbol": pair.replace("/", "")
+        })
+        rsp['lastFundingRate'] = float(rsp['lastFundingRate'])
+    
+        return rsp
     def create_order(self, pair: str, type: CryptoOrderType, side: CryptoOrderSide, amount: float, price: float = None) -> CryptoOrder: 
         logger.debug(f'binance createorder: {type} {side} amount: {amount}, price: {price}')
         res = self.binance.create_order(pair, type, side, amount, price)
