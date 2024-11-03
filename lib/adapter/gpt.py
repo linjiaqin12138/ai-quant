@@ -5,10 +5,11 @@ import sys
 from typing import Optional, TypedDict
 
 import requests
+from g4f import debug as g4f_debug
 from g4f.client import Client
 from g4f.errors import *
 
-from ..config import get_http_proxy, get_baichuan_token, API_MAX_RETRY_TIMES
+from ..config import get_http_proxy, get_baichuan_token, API_MAX_RETRY_TIMES, get_log_level
 from ..logger import logger
 from ..utils.retry import with_retry
 from ..utils.string import extract_json_string
@@ -115,6 +116,8 @@ class G4fAgent(GptAgentAbstract):
         })
         if sys.platform == 'win32':
             asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+        if 'DEBUG' == get_log_level():
+            g4f_debug.logging = True
     
     def ask(self, question: str) -> str:
         self.chat_context.append({"role": "user", "content": question})

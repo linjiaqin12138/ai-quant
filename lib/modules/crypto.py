@@ -1,3 +1,4 @@
+import abc
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 from typing import List
@@ -6,7 +7,7 @@ from ..adapter.crypto_exchange import CryptoExchangeAbstract, BinanceExchange
 from ..adapter.database.crypto_cache import CryptoOhlcvCacheFetcher
 from ..adapter.database.cryto_trade import CryptoTradeHistory
 from ..adapter.database.session import SessionAbstract, SqlAlchemySession
-from ..model import CryptoHistoryFrame, CryptoOhlcvHistory, CryptoOrderSide, CryptoOrderType
+from ..model import CryptoHistoryFrame, CryptoOhlcvHistory, CryptoOrder, CryptoOrderSide, CryptoOrderType
 from ..logger import logger
 from ..utils.time import time_length_in_frame, round_datetime, timeframe_to_second
 
@@ -39,13 +40,22 @@ def get_missed_time_ranges(timerange: List[datetime], start: datetime, end: date
     
     return result
 
-class CryptoOperationModule:
+class CryptoOperationAbstract(abc.ABC):
+    @abc.abstractmethod
+    def create_order(self, pair: str, type: CryptoOrderType, side: CryptoOrderSide, reason: str, amount: float = None, price: float = None, spent: float = None, comment: str = None) -> CryptoOrder:
+        pass
+
+    @abc.abstractmethod
+    def get_ohlcv_history(self, pair: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> CryptoOhlcvHistory:
+        pass
+
+class CryptoOperationModule(CryptoOperationAbstract):
     def __init__(self, dependency: ModuleDependency = ModuleDependency()):
         self.dependency = dependency
         self.cache_store = CryptoOhlcvCacheFetcher(dependency.session)
         self.trade_log_store = CryptoTradeHistory(dependency.session)
 
-    def create_order(self, pair: str, type: CryptoOrderType, side: CryptoOrderSide, reason: str, amount: float = None, price: float = None, spent: float = None, comment: str = None):
+    def create_order(self, pair: str, type: CryptoOrderType, side: CryptoOrderSide, reason: str, amount: float = None, price: float = None, spent: float = None, comment: str = None) -> CryptoOrder:
         logger.debug(f'createorder: {type} {side} {reason} amount: {amount}, price: {price}, spent: {spent}, comment: {comment}')
         with self.dependency.session:
             order = None
@@ -107,5 +117,6 @@ crypto = CryptoOperationModule()
 __all__ = [
     'crypto', 
     'CryptoOperationModule',
+    'CryptoOperationAbstract'
     'ModuleDependency'
 ]

@@ -6,7 +6,7 @@ from ..adapter.database.kv_store import KeyValueStore
 from ..adapter.database.session import SessionAbstract, SqlAlchemySession
 
 from ..model import CryptoHistoryFrame, Ohlcv
-from ..modules.crypto import CryptoOperationModule, crypto as default_crypto
+from ..modules.crypto import CryptoOperationAbstract, crypto as default_crypto
 from ..modules.notification_logger import NotificationLogger
 
 
@@ -41,7 +41,7 @@ class CryptoDependency(DependencyAbstract):
     # 这里我纠结了好久究竟crypto注入还是注入session然后里面build一个crypto
     # 最后决定注入crypto，因为这样就不用关心session的开启关闭，同时crypto模块相对独立，方便测试
     # crypto模块内部自己会开启关闭session，而且不能依赖外部是否失败成功都要在做了交易所操作之后根据交易所操作来commit
-    def __init__(self, session: SessionAbstract = None, crypto: CryptoOperationModule = None, notification: Optional[NotificationLogger] = None):
+    def __init__(self, session: SessionAbstract = None, crypto: CryptoOperationAbstract = None, notification: Optional[NotificationLogger] = None):
         self.session = session or SqlAlchemySession()
         self.kv_store = KeyValueStore(session = self.session)
         self.crypto = crypto or default_crypto

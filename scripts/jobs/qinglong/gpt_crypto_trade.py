@@ -1,6 +1,6 @@
 
 import argparse
-from lib.adapter.notification import PushPlus, NotificationAbstract
+from lib.adapter.notification import PushPlus
 
 from lib.modules.notification_logger import NotificationLogger
 from lib.strategys.gpt import run

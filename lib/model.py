@@ -56,7 +56,7 @@ class CryptoOrder:
     # trades: List[Trade]
     # reduceOnly: Bool
     # postOnly: Bool
-    fees: Optional[List[CryptoFee]]
+    fees: List[CryptoFee]
 
     def get_amount(self, excluding_fee: bool = False):
         currency = self.pair.split('/').pop(0)

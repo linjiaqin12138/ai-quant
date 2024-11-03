@@ -1,3 +1,4 @@
+from typing import List, Any
 import math
 
 def change_rate(before: float, after: float) -> float:
@@ -8,6 +9,9 @@ def get_total_assets(price: float, coin: float, usdt: float) -> float:
 
 def is_nan(num: float) -> bool:
     return math.isnan(num)
+
+def mean(*args: List[Any]) -> Any:
+    return sum(args) / len(args)
 
 def remain_significant_digits(num: float, n: int) -> float:
     if num == 0:
