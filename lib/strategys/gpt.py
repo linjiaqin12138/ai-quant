@@ -254,7 +254,7 @@ Example 3:
         except Exception as err:
             raise GptReplyNotValid(err)
 
-    @with_retry((GptReplyNotValid, g4f.errors.RetryProviderError), 3)
+    @with_retry((GptReplyNotValid, g4f.errors.RetryProviderError, g4f.errors.RateLimitError, g4f.errors.ResponseError, g4f.errors.ResponseStatusError), 3)
     def retryable_part() -> GptAdviceDict:
         agent = context._deps.get_a_voter_agent()
         agent.clear()
