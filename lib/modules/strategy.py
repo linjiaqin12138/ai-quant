@@ -58,13 +58,14 @@ class CryptoDependency(DependencyAbstract):
             self.session.commit()
 
 T = TypeVar('T', bound=DependencyAbstract)
-class ContextBase(abc.ABC, Generic[T]):
+U = TypeVar('U', bound=ParamsBase)
+class ContextBase(abc.ABC, Generic[T, U]):
     def __init__(self, params: ParamsBase, deps: DependencyAbstract = CryptoDependency()):
         self.id = self.init_id(params)
         self.is_dirt = False
 
         self._deps: T = deps
-        self._params = params
+        self._params: U = params
         self._context = None
     
     @abc.abstractmethod

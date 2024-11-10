@@ -22,7 +22,7 @@ class FakeCryptoOperation(CryptoOperationAbstract):
             context = {},
             exchange = 'binance',
             id =random_id(),
-            timestamp = datetime.now(),
+            timestamp = self.history.data[-1].timestamp,
             pair = pair,
             type = type,
             side = side,

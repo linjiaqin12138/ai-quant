@@ -22,7 +22,7 @@ ContextDict = TypedDict('Context', {
 class Params(ParamsBase):
     max_retrieval: Optional[float] = None
 
-class Context(ContextBase[CryptoDependency]):
+class Context(ContextBase[CryptoDependency, Params]):
 
     def __init__(self, params: Params, deps: CryptoDependency):
         super().__init__(params, deps)

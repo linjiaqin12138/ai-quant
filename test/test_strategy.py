@@ -6,13 +6,16 @@ from lib.modules.notification_logger import NotificationLogger
 from lib.strategys.simple_turtle import simple_turtle, Params, Context
 from lib.strategys.macd_sar import macd_sar, ParamsBase, Context as MacdSarContext
 from lib.strategys.boll import boll, Params as BollParams, Context as BollContext
-from lib.strategys.gpt import GptStrategyDependency, gpt as gpt_strategy, Context as GptContext
+from lib.strategys.gpt import GptStrategyDependency, gpt as gpt_strategy, Context as GptContext, FutureDataFetcherAbstract, GptStrategyParams
 
 from lib.utils.list import map_by
+from lib.utils.time import dt_to_ts
 from strategy import strategy_test, StrategyTestOptions
 from fake_modules.fake_notification import FakeNotification
-from fake_modules.fake_db import get_fake_session
+from fake_modules.fake_db import get_fake_session, fake_kv_store_auto_commit
 from fake_modules.fake_crypto import fake_crypto
+from fake_modules.fake_news import fakenews
+from fake_modules.fake_gpt import fake_gpt
 
 def test_simple_turtle_stategy():
     strategy_test(
@@ -83,16 +86,24 @@ def test_boll_strategy():
         ),
         contextClass = BollContext
     )
-
+    
 def test_gpt_strategy():
-    params = ParamsBase(
+    params = GptStrategyParams(
         money=100, 
         data_frame='1d', 
-        symbol = 'DOGE/USDT'
+        symbol = 'DOGE/USDT',
+        strategy_prefer="中长期投资",
+        risk_prefer="风险喜好型"
     )
     fake_crypto.set_history(
         CryptoOhlcvHistory(
             data=[
+                Ohlcv(timestamp=datetime(2024, 8, 29, 8, 0), open=0.09965, high=0.10259, low=0.09827, close=0.10037, volume=415351459.0), 
+                Ohlcv(timestamp=datetime(2024, 8, 30, 8, 0), open=0.10037, high=0.10315, low=0.09697, close=0.10177, volume=628171409.0), 
+                Ohlcv(timestamp=datetime(2024, 8, 31, 8, 0), open=0.10177, high=0.10239, low=0.10035, close=0.10128, volume=261630981.0), 
+                Ohlcv(timestamp=datetime(2024, 9, 1, 8, 0), open=0.10128, high=0.10153, low=0.09388, close=0.09509, volume=440544625.0), 
+                Ohlcv(timestamp=datetime(2024, 9, 2, 8, 0), open=0.09508, high=0.09992, low=0.09409, close=0.09912, volume=456484773.0), 
+                Ohlcv(timestamp=datetime(2024, 9, 3, 8, 0), open=0.09912, high=0.10081, low=0.09639, close=0.09677, volume=353919096.0),
                 Ohlcv(timestamp=datetime(2024, 9, 4, 8, 0), open=0.09678, high=0.09951, low=0.09184, close=0.098, volume=657720121.0), 
                 Ohlcv(timestamp=datetime(2024, 9, 5, 8, 0), open=0.09799, high=0.09917, low=0.096, close=0.09842, volume=407742111.0), 
                 Ohlcv(timestamp=datetime(2024, 9, 6, 8, 0), open=0.09842, high=0.09944, low=0.08893, close=0.09254, volume=1019311885.0), 
@@ -160,12 +171,133 @@ def test_gpt_strategy():
         )
     )
     fake_crypto.set_price(0.15546)
+    fake_gpt.set_reply("""
+以下是加密货币新闻的总结，特别关注对DOGE有影响的内容：
+
+1. **市场动态**：今日恐慌与贪婪指数为74，表明市场处于贪婪状态。BTC突破69500美元，ETH突破2500美元，而AAVE突破140美元。主流加密货币的行情显示，市场整体呈上涨趋势，可能会对DOGE产生正面影响。
+
+2. **宏观经济数据**：美国10月非农就业数据低于预期，导致美元指数反弹并重回104水平。这一宏观经济数据可能会影响加密货币市场的整体情绪，间接影响DOGE的价格。
+
+3. **政策变化**：中国人民银行副行长陆磊表示，比特币越接近资产则距离广泛流通的货币越遥远。这一言论反映了官方对于加密货币的态度，可能会对市场产生一定影响，包括DOGE在内的加密货币可能会受到政策导向的影响。
+
+4. **国际局势**：保守党新领袖Kemi Badenoch当选，虽然该党以支持加密货币而闻名，但Badenoch在加密货币方面并不是很活跃。这一政治变动可能会对英国乃至全球的加密货币政策产生影响，间接影响DOGE的价格。
+
+5. **DOGE币相关新闻**：本次提供的新闻中未提及直接关于DOGE的具体新闻，但上述市场动态、政策变化、国际局势等因素都可能间接影响DOGE的价格。
+
+6. **DOGE项目的最新进展**：本次提供的新闻中未提及关于DOGE项目的最新进展。通常情况下，DOGE项目的更新、合作伙伴关系的建立或者社区活动等都会直接影响DOGE的价格和市场表现。
+
+综上所述，虽然本次新闻摘要中没有直接关于DOGE的新闻，但市场动态、宏观经济数据、政策变化、国际局势等因素都可能间接影响DOGE的价格。投资者应密切关注这些因素的发展，以便更好地把握投资机会。
+""")
+    fakenews.set_news("cointime", [])
+    fake_kv_store_auto_commit.set(
+        'DOGE/USDT_1d_100_GPT',
+        {
+            "account_usdt_amount": 120.68, 
+            "account_coin_amount": 0.222, 
+            "operation_history": [
+                {
+                    "timestamp": dt_to_ts(datetime(2024, 10, 16, 0, 1, 3)),  
+                    "price": 0.11753,
+                    
+                    "action": "buy",
+                    "amount": 84.915,
+                    "cost": 9.99005,
+                    "remaining_usdt": 20.0347,
+                    "remaining_coin": 703.296,
+                    "position_ratio": 0.8,
+                    "summary": "技术指标良好建仓"
+                },
+                {
+                    "timestamp": dt_to_ts(datetime(2024, 10, 18, 0, 1, 20)), 
+                    "price": 0.12971,
+                    "action": "sell",
+                    "amount": 703.0,
+                    "cost": 91.27731613,
+                    "remaining_usdt": 111.31201613,
+                    "remaining_coin": 0.296,
+                    "position_ratio": 0.003,
+                    "summary": "获利了结大部分仓位"
+                },
+                {
+                    "timestamp": dt_to_ts(datetime(2024, 10, 19, 0, 1, 8)), 
+                    "price": 0.13724,
+                    "action": "buy",
+                    "amount": 727.272,
+                    "cost": 99.91072,
+                    "remaining_usdt": 11.401296130000006,
+                    "remaining_coin": 727.5680000000001,
+                    "position_ratio": 0.89,
+                    "summary": "市场走强重新建仓"
+                },
+                {
+                    "timestamp": dt_to_ts(datetime(2024, 10, 22, 0, 1, 12)),
+                    "price": 0.14395,
+                    "action": "sell",
+                    "amount": 363.0,
+                    "cost": 52.30610385,
+                    "remaining_usdt": 63.707399980000005,
+                    "remaining_coin": 364.5680000000001,
+                    "position_ratio": 0.45,
+                    "summary": "减仓一半锁定利润"
+                },
+                {
+                    "timestamp": dt_to_ts(datetime(2024, 10, 23, 0, 2, 3)),
+                    "price": 0.13989,
+                    "action": "sell",
+                    "amount": 364.0,
+                    "cost": 50.970879960000005,
+                    "remaining_usdt": 114.67827994000001,
+                    "remaining_coin": 0.5680000000000973,
+                    "position_ratio": 0.007,
+                    "summary": "清仓规避风险"
+                },
+                {
+                    "timestamp": dt_to_ts(datetime(2024, 10, 28, 0, 1, 40)),
+                    "price": 0.14431,
+                    "action": "buy",
+                    "amount": 345.654,
+                    "cost": 49.93126,
+                    "remaining_usdt": 64.747,
+                    "remaining_coin": 346.22,
+                    "position_ratio": 0.43,
+                    "summary": "市场企稳重新进场"
+                },
+                {
+                    "timestamp": dt_to_ts(datetime(2024, 11, 1, 0, 1, 43)),
+                    "price": 0.1615,
+                    "action": "sell",
+                    "amount": 346.0,
+                    "cost": 55.934878999999995,
+                    "remaining_usdt": 120.68,
+                    "remaining_coin": 0.222,
+                    "position_ratio": 0.003,
+                    "summary": "高位获利了结"
+                }
+            ]
+        }
+    )
+    
+    class FutureDataFetcher(FutureDataFetcherAbstract):
+        def get_latest_futures_price_info(self, pair: str) -> float:
+            return 0.0001
+        
+        def get_u_base_global_long_short_account_ratio(self, pair: str) -> float:
+            return 1.9904
+        
+        def get_u_base_top_long_short_account_ratio(self, pair: str) -> float:
+            return 1.9976
+        
+        def get_u_base_top_long_short_ratio(self, pair: str) -> float:
+            return 2.6734
+        
     deps = GptStrategyDependency(
         notification=NotificationLogger('Test-Strategy', FakeNotification()),
-        news_summary_agent=get_agent_by_model('gpt-3.5-turbo'),
-        voter_agents=map_by(['llama-3.2-90b', 'grok-2-mini', 'qwen-2-72b', 'Baichuan3-Turbo', 'gpt-4-turbo'], get_agent_by_model),
+        news_summary_agent=fake_gpt,
+        voter_agents=map_by(['dolphin-2.9.1-llama-3-70b', 'qwen-2-72b', 'gemma-2b-27b', 'wizardlm-2-8x22b', 'lzlv-70b', 'llama-3.1-405b'], get_agent_by_model),
         crypto=fake_crypto,
-        session=get_fake_session()
+        session=get_fake_session(),
+        news_adapter = fakenews,
+        future_data=FutureDataFetcher()
     )
     with GptContext(params = params, deps=deps) as context:
         gpt_strategy(context)

@@ -45,3 +45,8 @@ def hours_ago(hours: int, zone: Optional[timezone] = None) -> datetime:
     if zone:
         return datetime.now(zone) - timedelta(hours=hours)
     return datetime.now() - timedelta(hours=hours)
+
+def minutes_ago(minutes: int, zone: Optional[timezone] = None) -> datetime:
+    if zone:
+        return datetime.now(zone) - timedelta(minutes=minutes)
+    return datetime.now() - timedelta(minutes=minutes)

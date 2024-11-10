@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine
 from lib.adapter.database.sqlalchemy import metadata_obj
-from lib.adapter.database.kv_store import KeyValueStore
+from lib.adapter.database.kv_store import KeyValueStore, KeyValueStoreAbstract, Value
 from lib.adapter.database.news_cache import HotNewsCache
 from lib.adapter.database.session import SqlAlchemySession
 
@@ -14,3 +14,22 @@ test_hot_new_cache = HotNewsCache(fake_session)
 
 def get_fake_session() -> SqlAlchemySession:
     return SqlAlchemySession(engine)
+
+class FakeKvStore(KeyValueStoreAbstract):
+    session = get_fake_session()
+    kv_store = KeyValueStore(session)
+    def set(self, key: str, val: Value):
+        with self.session:
+            self.kv_store.set(key, val)
+            self.session.commit()
+    
+    def get(self, key: str) -> Value | None:
+        with self.session:
+            return self.kv_store.get(key)
+    
+    def delete(self, key: str):
+        with self.session:
+            self.kv_store.delete(key)
+            self.session.commit()
+
+fake_kv_store_auto_commit = FakeKvStore()
