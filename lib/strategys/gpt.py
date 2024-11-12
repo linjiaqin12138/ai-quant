@@ -96,7 +96,7 @@ class FutureDataFetcher(FutureDataFetcherAbstract):
     binance_exchange = BinanceExchange()
 
     def get_latest_futures_price_info(self, pair: str) -> float:
-        return self.binance_exchange.get_latest_futures_price_info(pair=pair, frame='15m', start=minutes_ago(30))[-1]['lastFundingRate']
+        return self.binance_exchange.get_latest_futures_price_info(pair=pair)['lastFundingRate']
     
     def get_u_base_global_long_short_account_ratio(self, pair: str) -> float:
         return self.binance_exchange.get_u_base_global_long_short_account_ratio(pair=pair, frame='15m', start=minutes_ago(30))[-1]['longShortRatio']
@@ -309,21 +309,23 @@ Example 3:
     def validate_gpt_advice(advice: str) -> GptAdviceDict:
         try:
             advice_json = extract_json_string(advice)
-            assert isinstance(advice_json, dict)
-            assert 'action' in advice_json
-            assert advice_json['action'] in ['buy', 'sell', 'hold']
-            assert 'reason' in advice_json
-            assert isinstance(advice_json['reason'], str)
+            assert isinstance(advice_json, dict), "GPT回复必须是一个字典格式"
+            assert 'action' in advice_json, "GPT回复缺少'action'字段"
+            assert advice_json['action'] in ['buy', 'sell', 'hold'], f"无效的action值: {advice_json['action']}, 必须是'buy'/'sell'/'hold'之一"
+            assert 'reason' in advice_json, "GPT回复缺少'reason'字段"
+            assert isinstance(advice_json['reason'], str), "'reason'字段必须是字符串类型"
             if advice_json['action'] != 'hold':
-                assert 'summary' in advice_json
+                assert 'summary' in advice_json, f"{advice_json['action']}操作必须包含'summary'字段"
             if advice_json['action'] == 'buy':
-                assert 'cost' in advice_json
-                assert isinstance(advice_json['cost'], float)
-                assert advice_json['cost'] > 0 and advice_json['cost'] <= context.get('account_usdt_amount')
+                assert 'cost' in advice_json, "买入操作缺少'cost'字段"
+                assert isinstance(advice_json['cost'], float), "'cost'字段必须是浮点数类型"
+                assert advice_json['cost'] > 0, "'cost'必须大于0"
+                assert advice_json['cost'] <= context.get('account_usdt_amount'), f"买入金额{advice_json['cost']}超过可用USDT余额{context.get('account_usdt_amount')}"
             elif advice_json['action'] == 'sell':   
-                assert 'amount' in advice_json
-                assert isinstance(advice_json['amount'], float)
-                assert advice_json['amount'] > 0 and advice_json['amount'] <= context.get('account_coin_amount')
+                assert 'amount' in advice_json, "卖出操作缺少'amount'字段"
+                assert isinstance(advice_json['amount'], float), "'amount'字段必须是浮点数类型"
+                assert advice_json['amount'] > 0, "'amount'必须大于0"
+                assert advice_json['amount'] <= context.get('account_coin_amount'), f"卖出数量{advice_json['amount']}超过持仓数量{context.get('account_coin_amount')}"
             return advice_json
         except Exception as err:
             raise GptReplyNotValid(err)

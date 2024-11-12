@@ -19,7 +19,7 @@ HotNewsPlatform = Literal["baidu", "36kr", "qq-news", "sina-news", "sina", "zhih
 LatestNewsPlatform = Literal["cointime"]
 RspMapper = Callable[[Any], NewsInfo]
 ALL_SUPPORTED_PLATFORMS: List[HotNewsPlatform | LatestNewsPlatform] = ["cointime", "baidu", "36kr", "qq-news", "sina-news", "sina", "zhihu", "huxiu", "netease-news", "toutiao", "cointime"]
-API_ENDPOINT = "https://api-hot.efefee.cn/"
+API_ENDPOINT = "https://api-hot.imsyy.top/"
 # 异常类定义
 class GetHotFailedError(Exception):
     pass
