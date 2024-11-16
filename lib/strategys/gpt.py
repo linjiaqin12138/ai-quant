@@ -96,16 +96,16 @@ class FutureDataFetcher(FutureDataFetcherAbstract):
     binance_exchange = BinanceExchange()
 
     def get_latest_futures_price_info(self, pair: str) -> float:
-        return self.binance_exchange.get_latest_futures_price_info(pair=pair)['lastFundingRate']
+        return self.binance_exchange.get_latest_futures_price_info(pair)[-1]['lastFundingRate']
     
     def get_u_base_global_long_short_account_ratio(self, pair: str) -> float:
-        return self.binance_exchange.get_u_base_global_long_short_account_ratio(pair=pair, frame='15m', start=minutes_ago(30))[-1]['longShortRatio']
+        return self.binance_exchange.get_u_base_global_long_short_account_ratio(pair, '15m', start=minutes_ago(30))[-1]['longShortRatio']
     
     def get_u_base_top_long_short_account_ratio(self, pair: str) -> float:
-        return self.binance_exchange.get_u_base_top_long_short_account_ratio(pair=pair, frame='15m', start=minutes_ago(30))[-1]['longShortRatio']
+        return self.binance_exchange.get_u_base_top_long_short_account_ratio(pair, '15m', start=minutes_ago(30))[-1]['longShortRatio']
     
     def get_u_base_top_long_short_ratio(self, pair: str) -> float:
-        return self.binance_exchange.get_u_base_top_long_short_ratio(pair=pair, frame='15m', start=minutes_ago(30))[-1]['longShortRatio']
+        return self.binance_exchange.get_u_base_top_long_short_ratio(pair, '15m', start=minutes_ago(30))[-1]['longShortRatio']
 
 class GptStrategyDependency(CryptoDependency):
     def __init__(self, notification: NotificationLogger, news_summary_agent: GptAgentAbstract, voter_agents: List[GptAgentAbstract], crypto: CryptoOperationAbstract = None, session: SessionAbstract = None, news_adapter: NewsAbstract = news, future_data: FutureDataFetcherAbstract = None):
@@ -363,7 +363,7 @@ Example 3:
         return {
             'action': 'sell',
             'amount': mean_result('amount', vote_result['sell']),
-            'summary': vote_result['buy'][0]['summary'],
+            'summary': vote_result['sell'][0]['summary'],
             'reason': combine_reason(vote_result['sell'])
         }
     
