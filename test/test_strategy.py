@@ -293,7 +293,7 @@ def test_gpt_strategy():
     deps = GptStrategyDependency(
         notification=NotificationLogger('Test-Strategy', FakeNotification()),
         news_summary_agent=fake_gpt,
-        voter_agents=map_by(['dolphin-2.9.1-llama-3-70b', 'qwen-2-72b', 'gemma-2b-27b', 'wizardlm-2-8x22b', 'lzlv-70b', 'llama-3.1-405b'], get_agent_by_model),
+        voter_agents=map_by(['Baichuan3-Turbo', 'dolphin-2.9.1-llama-3-70b', 'qwen-2-72b', 'gemma-2b-27b', 'wizardlm-2-8x22b', 'lzlv-70b', 'llama-3.1-405b'], lambda m: get_agent_by_model(m)),
         crypto=fake_crypto,
         session=get_fake_session(),
         news_adapter = fakenews,
