@@ -18,7 +18,8 @@ from ..utils.string import hash, url_encode
 HotNewsPlatform = Literal["baidu", "36kr", "qq-news", "sina-news", "sina", "zhihu", "huxiu", "netease-news", "toutiao"]
 LatestNewsPlatform = Literal["cointime"]
 RspMapper = Callable[[Any], NewsInfo]
-ALL_SUPPORTED_PLATFORMS: List[HotNewsPlatform | LatestNewsPlatform] = ["cointime", "baidu", "36kr", "qq-news", "sina-news", "sina", "zhihu", "huxiu", "netease-news", "toutiao", "cointime"]
+ALL_HOT_NEWS_PLATFORMS: List[HotNewsPlatform] = ["baidu", "36kr", "qq-news", "sina-news", "sina", "zhihu", "huxiu", "netease-news", "toutiao"]
+ALL_SUPPORTED_PLATFORMS: List[HotNewsPlatform | LatestNewsPlatform] = ["cointime", "baidu", "36kr", "qq-news", "sina-news", "sina", "zhihu", "huxiu", "netease-news", "toutiao"]
 API_ENDPOINT = "https://api-hot.imsyy.top/"
 # 异常类定义
 class GetHotFailedError(Exception):
@@ -163,7 +164,7 @@ def get_trend_of_cn_platform(platform: HotNewsPlatform) -> List[NewsInfo]:
         return []
     
     logger.info(f"Getting trend of platform {platform}")
-    @with_retry((requests.exceptions.Timeout), API_MAX_RETRY_TIMES)
+    @with_retry((requests.exceptions.Timeout, requests.exceptions.SSLError), API_MAX_RETRY_TIMES)
     def retryable_part():
         return requests.get(endpoint_of(platform))
     

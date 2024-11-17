@@ -1,12 +1,14 @@
 import ccxt
 from typing import TypedDict, List, Callable, TypeVar, Any, Dict
 from datetime import datetime
-from ...config import get_binance_config
-from ...logger import logger
-from ...model import CryptoOhlcvHistory, CryptoHistoryFrame, Ohlcv, CryptoOrderType, CryptoOrderSide, CryptoOrder, CryptoFee
-from ...utils.time import dt_to_ts, timeframe_to_second, time_length_in_frame, ts_to_dt
-from ...utils.list import map_by 
-from .base import retry_patch, CryptoExchangeAbstract, CryptoTicker
+from ....config import get_binance_config
+from ....logger import logger
+from ....model import CryptoOhlcvHistory, TradeTicker, CryptoHistoryFrame, Ohlcv, OrderType, OrderSide, CryptoOrder
+from ....utils.time import dt_to_ts, timeframe_to_second, time_length_in_frame, ts_to_dt
+from ....utils.list import map_by 
+from ..api import ExchangeAPI
+from .base import retry_patch
+
 
 def binance_test_patch(exchange: ccxt.binance) -> ccxt.binance:
     def call_with_test(func):
@@ -56,18 +58,18 @@ def with_slice(slice_count: int, frame: CryptoHistoryFrame) -> Callable[[G], G]:
         return slice_func
     return decorator
 
-class BinanceExchange(CryptoExchangeAbstract):
+class BinanceExchange(ExchangeAPI):
 
     def __init__(self, test_mode: bool = False):
         binance = ccxt.binance(get_binance_config())
         self.binance = retry_patch(binance)
         self.test_mode = test_mode
 
-    def fetch_ticker(self, pair: str) -> CryptoTicker:
-        res = self.binance.fetch_ticker(pair)
-        return CryptoTicker(last=res['last'])
+    def fetch_ticker(self, symbol: str) -> TradeTicker:
+        res = self.binance.fetch_ticker(symbol)
+        return TradeTicker(last=res['last'])
 
-    def _get_long_short_info_factory(self, api: str, pair: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> List[LongShortAccountInfo]:
+    def _get_long_short_info_factory(self, api: str, symbol: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> List[LongShortAccountInfo]:
         start_in_ts = dt_to_ts(start)
         total = time_length_in_frame(start, end, frame)
 
@@ -79,7 +81,7 @@ class BinanceExchange(CryptoExchangeAbstract):
         def sliced_fetch(start: int, limit: int):
             biance_api_func = getattr(self.binance, api)
             return biance_api_func({
-                "symbol": pair.replace("/", ""),
+                "symbol": symbol.replace("/", ""),
                 "period": frame,
                 "limit": limit,
                 "startTime": start
@@ -87,25 +89,25 @@ class BinanceExchange(CryptoExchangeAbstract):
         
         return map_by(sliced_fetch(start_in_ts, total), datetime_mapper)
     # https://developers.binance.com/docs/zh-CN/derivatives/usds-margined-futures/market-data/rest-api/Top-Trader-Long-Short-Ratio
-    def get_u_base_top_long_short_ratio(self, pair: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> List[LongShortAccountInfo]:
-        return self._get_long_short_info_factory('fapidataGetToplongshortpositionratio', pair, frame, start, end)
+    def get_u_base_top_long_short_ratio(self, symbol: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> List[LongShortAccountInfo]:
+        return self._get_long_short_info_factory('fapidataGetToplongshortpositionratio', symbol, frame, start, end)
     # https://developers.binance.com/docs/zh-CN/derivatives/usds-margined-futures/market-data/rest-api/Top-Long-Short-Account-Ratio
-    def get_u_base_top_long_short_account_ratio(self, pair: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> List[LongShortAccountInfo]:
-        return self._get_long_short_info_factory('fapidataGetToplongshortaccountratio', pair, frame, start, end)
+    def get_u_base_top_long_short_account_ratio(self, symbol: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> List[LongShortAccountInfo]:
+        return self._get_long_short_info_factory('fapidataGetToplongshortaccountratio', symbol, frame, start, end)
     # https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Long-Short-Ratio
-    def get_u_base_global_long_short_account_ratio(self, pair: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> List[LongShortAccountInfo]:
-        return self._get_long_short_info_factory('fapidataGetGloballongshortaccountratio', pair, frame, start, end)
+    def get_u_base_global_long_short_account_ratio(self, symbol: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> List[LongShortAccountInfo]:
+        return self._get_long_short_info_factory('fapidataGetGloballongshortaccountratio', symbol, frame, start, end)
     
-    def get_latest_futures_price_info(self, pair: str) -> LatestFuturesPriceInfo:
+    def get_latest_futures_price_info(self, symbol: str) -> LatestFuturesPriceInfo:
         rsp = self.binance.fapipublicGetPremiumindex({
-            "symbol": pair.replace("/", "")
+            "symbol": symbol.replace("/", "")
         })
         rsp['lastFundingRate'] = float(rsp['lastFundingRate'])
     
         return rsp
-    def create_order(self, pair: str, type: CryptoOrderType, side: CryptoOrderSide, amount: float, price: float = None) -> CryptoOrder: 
+    def create_order(self, symbol: str, type: OrderType, side: OrderSide, amount: float, price: float = None) -> CryptoOrder: 
         logger.debug(f'binance createorder: {type} {side} amount: {amount}, price: {price}')
-        res = self.binance.create_order(pair, type, side, amount, price)
+        res = self.binance.create_order(symbol, type, side, amount, price)
         logger.debug('Binance create_order result: ')
         logger.debug(res)
         return CryptoOrder(
@@ -113,25 +115,25 @@ class BinanceExchange(CryptoExchangeAbstract):
             exchange = 'binance',
             id = res['id'],
             timestamp = datetime.fromtimestamp(res['timestamp'] / 1000),
-            pair = res['symbol'],
+            symbol = res['symbol'],
             type = res['type'],
             side = res['side'],
             price = res['price'],
             _amount= res['amount'],
             _cost = res['cost'],
-            fees = list(map(lambda fee: CryptoFee(fee['currency'], fee['cost'], fee.get('rate')), res['fees']))
+            fees = list(map(lambda fee: Fee(fee['currency'], fee['cost'], fee.get('rate')), res['fees']))
         )
     
-    def fetch_ohlcv(self, pair: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> CryptoOhlcvHistory:
+    def fetch_ohlcv(self, symbol: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> CryptoOhlcvHistory:
         start_in_ts = dt_to_ts(start)
         total = time_length_in_frame(start, end, frame)
 
         @with_slice(500, frame)
         def sliced_fetch(start: int, limit: int):
-            return self.binance.fetch_ohlcv(pair, frame, since=start, limit=limit)
+            return self.binance.fetch_ohlcv(symbol, frame, since=start, limit=limit)
     
         return CryptoOhlcvHistory(
-            pair = pair,
+            symbol = symbol,
             frame = frame,
             exchange = 'binance',
             data = map_by(

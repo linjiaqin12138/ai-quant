@@ -14,7 +14,7 @@ def with_retry(retry_errors: Tuple[Exception], max_retry_times: int) -> Callable
                     return function(*args, **kwargs)
                 except retry_errors as e:
                     count += 1
-                    logger.warn(f"Retry {function} {count} times for err: {e}")
+                    logger.warning(f"Retry {function} {count} times for err: {e}")
                     time.sleep(2 ** (count - 1))
                     if count >= max_retry_times:
                         raise e

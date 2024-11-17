@@ -58,7 +58,7 @@ def boll(context: Context, data: List[Ohlcv] = []) -> ResultBase:
         context.set('max_price', close_price)
 
     if context.get('buyable') and boll_result['is_turn_good']:
-        order = deps.crypto.create_order(params.symbol, 'market', 'buy', 'BOLL_PLAN', spent = context.get('account_usdt_amount'))
+        order = deps.crypto.create_order(params.symbol, 'market', 'buy', f'BOLL_PLAN_{params.symbol}', spent = context.get('account_usdt_amount'))
         context.set('account_coin_amount', context.get('account_coin_amount') + order.get_amount(True))
         context.set('account_usdt_amount', context.get('account_usdt_amount') - order.get_cost(True))
         context.set('buyable', False)
@@ -67,7 +67,7 @@ def boll(context: Context, data: List[Ohlcv] = []) -> ResultBase:
         deps.notification_logger.msg(f'{order.timestamp} 花费 ', order.get_cost(True), ' USDT 买入 ', order.get_amount(True), '个', params.symbol, ', 剩余: ', context.get("account_usdt_amount"), ' USDT')
     
     elif context.get('sellable') and ((context.get('max_price') and params.max_retrieval and change_rate(context.get('max_price'), close_price) < -params.max_retrieval) or boll_result['is_increase_over']):
-        order = deps.crypto.create_order(params.symbol, 'market', 'sell', 'BOLL_PLAN', amount = context.get('account_coin_amount'))
+        order = deps.crypto.create_order(params.symbol, 'market', 'sell', f'BOLL_PLAN_{params.symbol}', amount = context.get('account_coin_amount'))
         context.set('account_coin_amount', context.get('account_coin_amount') - order.get_amount(True))
         context.set('account_usdt_amount', context.get('account_usdt_amount') + order.get_cost(True))
         context.set('buyable', True)

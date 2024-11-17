@@ -9,12 +9,12 @@ engine = create_engine(get_mysql_uri())
 
 metadata_obj = MetaData()
 
-def get_cache_table(frame: CryptoHistoryFrame) -> Table:
+def get_cache_table(market_type: str, frame: CryptoHistoryFrame) -> Table:
     return Table(
-        "crypto_ohlcv_cache_" + frame,
+        market_type + "_ohlcv_cache_" + frame,
         metadata_obj,
+        Column("symbol", String(20), primary_key=True),
         Column("timestamp", BigInteger, primary_key=True),
-        Column("pair", String(20), primary_key=True),
         Column("open", String(25)),
         Column("high", String(25)),
         Column("low", String(25)),
@@ -22,23 +22,16 @@ def get_cache_table(frame: CryptoHistoryFrame) -> Table:
         Column("volume", String(25))
     )
 
-ohlcv_cache_tables: Dict[CryptoHistoryFrame, Table] = {
-    '1d': get_cache_table('1d'),
-    '1h': get_cache_table('1h'),
-    '15m': get_cache_table('15m')
+crypto_ohlcv_cache_tables: Dict[CryptoHistoryFrame, Table] = {
+    '1d': get_cache_table('crypto', '1d'),
+    '1h': get_cache_table('crypto', '1h'),
+    '15m': get_cache_table('crypto', '15m')
 }
-
-exchange_info = Table(
-    'exchange_info',
-    metadata_obj,
-    Column("pair", String(20), primary_key=True),
-    Column("quote_volume", DECIMAL(20, 6))
-)
 
 trade_action_info = Table(
     'trade_action_info',
     metadata_obj,
-    Column("pair", String(20), primary_key=True),
+    Column("symbol", String(20), primary_key=True),
     Column("timestamp", DateTime, primary_key=True),
     Column('action', Enum("buy", "sell"), primary_key=True),
     Column('reason', String(1024), index=True),

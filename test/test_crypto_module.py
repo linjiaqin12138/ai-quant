@@ -2,16 +2,16 @@ from typing import List, Any
 from datetime import datetime, timedelta
 from sqlalchemy import create_engine
 
-from lib.adapter.crypto_exchange.base import CryptoExchangeAbstract, CryptoTicker
-from lib.adapter.crypto_exchange.binance import BinanceExchange
+from lib.adapter.exchange.api import ExchangeAPI
+from lib.adapter.exchange.crypto_exchange.binance import BinanceExchange
 from lib.adapter.database.session import SqlAlchemySession
-from lib.model import CryptoOhlcvHistory, Ohlcv
+from lib.model import CryptoOhlcvHistory, Ohlcv, TradeTicker
 from lib.modules.crypto import CryptoOperationModule, ModuleDependency
 from lib.adapter.database.sqlalchemy import metadata_obj
 from lib.utils.time import timeframe_to_second
 from lib.logger import logger
 
-class FakeExchange(CryptoExchangeAbstract):
+class FakeExchange(ExchangeAPI):
     called_log = { 
         'fetch_ohlcv': {
             'times': 0,
@@ -37,18 +37,18 @@ class FakeExchange(CryptoExchangeAbstract):
                     return False
         return True
 
-    def fetch_ticker(self, pair: str) -> CryptoTicker:
-        return super().fetch_ticker(pair)
+    def fetch_ticker(self, symbol: str) -> TradeTicker:
+        return super().fetch_ticker(symbol)
 
     def create_order():
         pass
 
-    def fetch_ohlcv(self, pair, frame, start, end) -> CryptoOhlcvHistory:
+    def fetch_ohlcv(self, symbol, frame, start, end) -> CryptoOhlcvHistory:
         self.called_log['fetch_ohlcv']['times'] += 1
         self.called_log['fetch_ohlcv']['params'].append([
-            pair, frame, start, end
+            symbol, frame, start, end
         ])
-        logger.debug(f'call fetch_ohlcv with params {pair}, {frame}, {start}, {end}')
+        logger.debug(f'call fetch_ohlcv with params {symbol}, {frame}, {start}, {end}')
         data_count = int((end - start) / timedelta(seconds=timeframe_to_second(frame)))
         data = []
         for i in range(data_count):
@@ -64,7 +64,7 @@ class FakeExchange(CryptoExchangeAbstract):
             )
         
         return CryptoOhlcvHistory(
-            pair = pair, 
+            symbol = symbol, 
             frame = frame, 
             exchange = 'fake', 
             data = data

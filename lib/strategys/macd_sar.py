@@ -52,7 +52,7 @@ def macd_sar(context: Context, data: List[Ohlcv] = []) -> ResultBase:
     sar_result = sar_info(data)
     # print(sar_result)
     if context.get('buyable') and macd_result['is_gold_cross']:
-        order = deps.crypto.create_order(params.symbol, 'market', 'buy', 'TURTLE_PLAN', spent = context.get('account_usdt_amount'))
+        order = deps.crypto.create_order(params.symbol, 'market', 'buy', f'MACD_SAR_{params.symbol}', spent = context.get('account_usdt_amount'))
         context.set('account_coin_amount', context.get('account_coin_amount') + order.get_amount(True))
         context.set('account_usdt_amount', context.get('account_usdt_amount') - order.get_cost(True))
         context.set('buyable', False)
@@ -60,7 +60,7 @@ def macd_sar(context: Context, data: List[Ohlcv] = []) -> ResultBase:
         deps.notification_logger.msg(f'{order.timestamp} 花费 ', order.get_cost(True), ' USDT 买入 ', order.get_amount(True), '个', params.symbol, ', 剩余: ', context.get("account_usdt_amount"), ' USDT')
     
     elif context.get('sellable') and sar_result['is_turn_up']:
-        order = deps.crypto.create_order(params.symbol, 'market', 'sell', 'TURTLE_PLAN', amount = context.get('account_coin_amount'))
+        order = deps.crypto.create_order(params.symbol, 'market', 'sell', f'MACD_SAR_{params.symbol}', amount = context.get('account_coin_amount'))
         context.set('account_coin_amount', context.get('account_coin_amount') - order.get_amount(True))
         context.set('account_usdt_amount', context.get('account_usdt_amount') + order.get_cost(True))
         context.set('buyable', True)

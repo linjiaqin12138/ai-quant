@@ -1,10 +1,10 @@
 from datetime import datetime
-from lib.adapter.database.news_cache import NewsInfo
-from fake_modules.fake_db import test_hot_new_cache, fake_session
+from lib.adapter.database.news_cache import HotNewsCache, NewsInfo
+from fake_modules.fake_db import get_fake_session
 
 def test_hot_new_cache_ok():
-    with fake_session:
-        res = test_hot_new_cache.setnx(NewsInfo(
+    with get_fake_session() as fake_session:
+        res = HotNewsCache(fake_session).setnx(NewsInfo(
             news_id = "9f86d081884c7d659a2feaa0c55ad015",
             title = "This is a title",
             description = "This is a test description",
@@ -17,8 +17,9 @@ def test_hot_new_cache_ok():
         assert res == 1
         fake_session.commit()
     
-    with fake_session:
-        res = test_hot_new_cache.setnx(NewsInfo(
+    with get_fake_session() as fake_session:
+        cache_store = HotNewsCache(fake_session)
+        res = cache_store.setnx(NewsInfo(
             news_id = "9f86d081884c7d659a2feaa0c55ad015",
             title = "This is a duplicate record title",
             description = "This is a duplicate record description",
@@ -29,7 +30,7 @@ def test_hot_new_cache_ok():
             mood=0
         ))
         assert res == 0
-        res = test_hot_new_cache.get("9f86d081884c7d659a2feaa0c55ad015")
+        res = cache_store.get("9f86d081884c7d659a2feaa0c55ad015")
         assert res != None
         fake_session.execute("delete from hot_news_cache")
         fake_session.commit()

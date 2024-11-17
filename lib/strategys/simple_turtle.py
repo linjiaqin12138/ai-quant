@@ -98,7 +98,7 @@ def simple_turtle(context: Context, data: List[Ohlcv] = []) -> ResultBase:
 
         if is_next_round and is_max_window:
             spent = context.get('account_usdt_amount') * 0.5 if context.get('buy_round') + 1 < params.max_buy_round else context.get('account_usdt_amount') 
-            order = deps.crypto.create_order(params.symbol, 'market', 'buy', 'TURTLE_PLAN', spent = spent)
+            order = deps.crypto.create_order(params.symbol, 'market', 'buy', f'TURTLE_PLAN_{params.symbol}', spent = spent)
 
             context.set('sellable', True)
             context.set('account_usdt_amount', context.get('account_usdt_amount') - order.get_cost(True))
@@ -122,7 +122,7 @@ def simple_turtle(context: Context, data: List[Ohlcv] = []) -> ResultBase:
             deps.notification_logger.msg(f'{params.symbol} 价格跌破{params.min_window}周期最小值，卖出')
     
         if is_min_window or is_max_retrieval:
-            order = deps.crypto.create_order(params.symbol, 'market', 'sell', 'TURTLE_PLAN', amount = context.get('account_coin_amount') )
+            order = deps.crypto.create_order(params.symbol, 'market', 'sell', f'TURTLE_PLAN_{params.symbol}', amount = context.get('account_coin_amount') )
             context.set('buyable', True)
             context.set('sellable', False)
             context.set('account_usdt_amount', context.get('account_usdt_amount') + order.get_cost(True))

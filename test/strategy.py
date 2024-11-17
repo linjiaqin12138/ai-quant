@@ -3,10 +3,10 @@ from dataclasses import dataclass
 from datetime import datetime
 import numpy as np 
 import mplfinance as mpf
-from lib.adapter.crypto_exchange.base import CryptoExchangeAbstract, CryptoTicker
-from lib.adapter.database.crypto_cache import CryptoOhlcvCacheFetcher
+from lib.adapter.exchange.api import ExchangeAPI
+from lib.adapter.database.ohlcv_cache import CryptoOhlcvCacheFetcher
 from lib.adapter.database.session import SqlAlchemySession
-from lib.model import CryptoFee, CryptoOhlcvHistory, CryptoOrder, CryptoOrderSide
+from lib.model import OrderFee, CryptoOhlcvHistory, CryptoOrder, OrderSide, TradeTicker
 from lib.modules.notification_logger import NotificationLogger
 from lib.modules.strategy import ContextBase, CryptoDependency, ParamsBase, StrategyFunc
 from lib.modules.crypto import crypto, CryptoOperationModule, ModuleDependency
@@ -33,7 +33,7 @@ class StrategyTestOptions:
     end_time: datetime
     draw: DrawOptions
 
-class FakeExchange(CryptoExchangeAbstract):
+class FakeExchange(ExchangeAPI):
     curr_time: datetime
     curr_price: float
     is_buy: bool
@@ -52,15 +52,15 @@ class FakeExchange(CryptoExchangeAbstract):
         self.is_buy = False
         self.is_sell = False
 
-    def fetch_ticker(self, pair: str) -> CryptoTicker:
-        return CryptoTicker(last = self.curr_price)
+    def fetch_ticker(self, symbol: str) -> TradeTicker:
+        return TradeTicker(last = self.curr_price)
     
-    def fetch_ohlcv(self, pair, frame, start, end) -> CryptoOhlcvHistory:
+    def fetch_ohlcv(self, symbol, frame, start, end) -> CryptoOhlcvHistory:
         cache = CryptoOhlcvCacheFetcher(self.fake_session)
         with self.fake_session:
-            return cache.range_query(pair, frame, start, end)
+            return cache.range_query(symbol, frame, start, end)
     
-    def create_order(self, pair, type, side: CryptoOrderSide, amount, _price = None) -> CryptoOrder:
+    def create_order(self, symbol, type, side: OrderSide, amount, _price = None) -> CryptoOrder:
         if side == 'buy':
             self.is_buy = True
         if side == 'sell':
@@ -71,13 +71,13 @@ class FakeExchange(CryptoExchangeAbstract):
             exchange = 'binance',
             id = random_id(10),
             timestamp = self.curr_time,
-            pair = pair,
+            symbol = symbol,
             type = type,
             side = side,
             _amount = amount,
             price = self.curr_price,
             _cost = self.curr_price * amount,
-            fees = [CryptoFee(pair, 0.001 * amount, 0.001) if side == 'buy' else CryptoFee(pair, 0.01 * amount * self.curr_price, 0.001)]
+            fees = [OrderFee(symbol, 0.001 * amount, 0.001) if side == 'buy' else OrderFee(symbol, 0.01 * amount * self.curr_price, 0.001)]
         )
 
 def strategy_test(strategy_func: StrategyFunc, test_options: StrategyTestOptions, params: ParamsBase, contextClass: Type[ContextBase]):

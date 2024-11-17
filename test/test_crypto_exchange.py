@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 
-from lib.adapter.crypto_exchange.binance import BinanceExchange
+from lib.adapter.exchange.crypto_exchange.binance import BinanceExchange
 
 def test_can_query_range_from_remote():
     binance = BinanceExchange(True)

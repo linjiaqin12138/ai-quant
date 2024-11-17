@@ -52,7 +52,7 @@ def report():
         logger.info(f"Send push message: {message}")
         result = send_push({"content": message, "title": f"过去{interval_min}分钟行情"})
         if not result["success"]:
-            logger.warn("Send push failed")
+            logger.warning("Send push failed")
     else:
         logger.info("No important message need to be reported")
 

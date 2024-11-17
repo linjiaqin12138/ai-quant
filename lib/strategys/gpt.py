@@ -14,7 +14,7 @@ from ..utils.ohlcv import atr_info, boll_info, macd_info, sam20_info, sam5_info,
 from ..utils.number import get_total_assets, is_nan, mean, remain_significant_digits
 from ..utils.time import dt_to_ts, timeframe_to_second, to_utc_isoformat, minutes_ago, ts_to_dt
 from ..adapter.database.session import SessionAbstract
-from ..adapter.crypto_exchange import BinanceExchange
+from ..adapter.exchange.crypto_exchange import BinanceExchange
 from ..adapter.gpt import GptAgentAbstract, get_agent_by_model
 from ..adapter.news import news, NewsAbstract
 from ..modules.notification_logger import NotificationLogger
@@ -78,43 +78,43 @@ class GptStrategyParams(ParamsBase):
     strategy_prefer: Optional[str]
     risk_prefer: Optional[str]
 
-class FutureDataFetcherAbstract(abc.ABC):
+class OtherDataFetcherAbstract(abc.ABC):
     @abc.abstractmethod
-    def get_u_base_global_long_short_account_ratio(self, pair: str) -> float:
+    def get_u_base_global_long_short_account_ratio(self, symbol: str) -> float:
         pass 
     @abc.abstractmethod
-    def get_u_base_top_long_short_account_ratio(self, pair: str) -> float:
+    def get_u_base_top_long_short_account_ratio(self, symbol: str) -> float:
         pass
     @abc.abstractmethod
-    def get_u_base_top_long_short_ratio(self, pair: str) -> float:
+    def get_u_base_top_long_short_ratio(self, symbol: str) -> float:
         pass 
     @abc.abstractmethod
-    def get_latest_futures_price_info(self, pair: str) -> float:
+    def get_latest_futures_price_info(self, symbol: str) -> float:
         pass
 
-class FutureDataFetcher(FutureDataFetcherAbstract):
+class OtherDataFetcher(OtherDataFetcherAbstract):
     binance_exchange = BinanceExchange()
 
-    def get_latest_futures_price_info(self, pair: str) -> float:
-        return self.binance_exchange.get_latest_futures_price_info(pair)[-1]['lastFundingRate']
+    def get_latest_futures_price_info(self, symbol: str) -> float:
+        return self.binance_exchange.get_latest_futures_price_info(symbol)[-1]['lastFundingRate']
     
-    def get_u_base_global_long_short_account_ratio(self, pair: str) -> float:
-        return self.binance_exchange.get_u_base_global_long_short_account_ratio(pair, '15m', start=minutes_ago(30))[-1]['longShortRatio']
+    def get_u_base_global_long_short_account_ratio(self, symbol: str) -> float:
+        return self.binance_exchange.get_u_base_global_long_short_account_ratio(symbol, '15m', start=minutes_ago(30))[-1]['longShortRatio']
     
-    def get_u_base_top_long_short_account_ratio(self, pair: str) -> float:
-        return self.binance_exchange.get_u_base_top_long_short_account_ratio(pair, '15m', start=minutes_ago(30))[-1]['longShortRatio']
+    def get_u_base_top_long_short_account_ratio(self, symbol: str) -> float:
+        return self.binance_exchange.get_u_base_top_long_short_account_ratio(symbol, '15m', start=minutes_ago(30))[-1]['longShortRatio']
     
-    def get_u_base_top_long_short_ratio(self, pair: str) -> float:
-        return self.binance_exchange.get_u_base_top_long_short_ratio(pair, '15m', start=minutes_ago(30))[-1]['longShortRatio']
+    def get_u_base_top_long_short_ratio(self, symbol: str) -> float:
+        return self.binance_exchange.get_u_base_top_long_short_ratio(symbol, '15m', start=minutes_ago(30))[-1]['longShortRatio']
 
 class GptStrategyDependency(CryptoDependency):
-    def __init__(self, notification: NotificationLogger, news_summary_agent: GptAgentAbstract, voter_agents: List[GptAgentAbstract], crypto: CryptoOperationAbstract = None, session: SessionAbstract = None, news_adapter: NewsAbstract = news, future_data: FutureDataFetcherAbstract = None):
+    def __init__(self, notification: NotificationLogger, news_summary_agent: GptAgentAbstract, voter_agents: List[GptAgentAbstract], crypto: CryptoOperationAbstract = None, session: SessionAbstract = None, news_adapter: NewsAbstract = news, future_data: OtherDataFetcherAbstract = None):
         super().__init__(notification = notification, crypto=crypto, session=session)
         self.news_summary_agent = news_summary_agent
         self._curr_voter_idx = -1
         self.voter_agents = voter_agents
         self.news_modules = news_adapter
-        self.future_data = future_data or FutureDataFetcher()
+        self.future_data = future_data or OtherDataFetcher()
 
     def get_a_voter_agent(self) -> GptAgentAbstract:
         self._curr_voter_idx = (self._curr_voter_idx + 1) % len(self.voter_agents)
@@ -196,9 +196,9 @@ def gpt_analysis(context: Context, data: List[Ohlcv]) -> GptAdviceDict:
     # 获取最新的加密货币新闻
     latest_news = context._deps.gpt_summary_news(coin_name)
    
-    global_long_short_account = context._deps.future_data.get_u_base_global_long_short_account_ratio(pair=context._params.symbol)
-    top_long_short_account = context._deps.future_data.get_u_base_top_long_short_account_ratio(pair=context._params.symbol)
-    top_long_short_amount = context._deps.future_data.get_u_base_top_long_short_ratio(pair=context._params.symbol)
+    global_long_short_account = context._deps.future_data.get_u_base_global_long_short_account_ratio(symbol=context._params.symbol)
+    top_long_short_account = context._deps.future_data.get_u_base_top_long_short_account_ratio(symbol=context._params.symbol)
+    top_long_short_amount = context._deps.future_data.get_u_base_top_long_short_ratio(symbol=context._params.symbol)
     future_rate = round_to_5(context._deps.future_data.get_latest_futures_price_info(context._params.symbol))
     trade_history_arr = context.get('operation_history')[-10:] if len(context.get('operation_history')) > 10 else context.get('operation_history')
     trade_history_text = "\n".join(map_by(trade_history_arr, lambda x: '- ' + format_operation_record(x, coin_name)) if len(trade_history_arr) > 0 else "暂无交易历史")
