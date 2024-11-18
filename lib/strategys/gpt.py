@@ -96,7 +96,7 @@ class OtherDataFetcher(OtherDataFetcherAbstract):
     binance_exchange = BinanceExchange()
 
     def get_latest_futures_price_info(self, symbol: str) -> float:
-        return self.binance_exchange.get_latest_futures_price_info(symbol)[-1]['lastFundingRate']
+        return self.binance_exchange.get_latest_futures_price_info(symbol)['lastFundingRate']
     
     def get_u_base_global_long_short_account_ratio(self, symbol: str) -> float:
         return self.binance_exchange.get_u_base_global_long_short_account_ratio(symbol, '15m', start=minutes_ago(30))[-1]['longShortRatio']
@@ -436,9 +436,9 @@ def run(cmd_params: dict, notification: NotificationLogger):
         news_summary_agent=get_agent_by_model(cmd_params.get('news_summary_agent')),
         voter_agents=map_by(cmd_params.get('voter_agents'), lambda m: get_agent_by_model(m, {
             "temperature": 0.2,       # 控制随机性
-            "top_p": 0.9,             # 核采样设置
-            "frequency_penalty": 0.3, # 减少重复
-            "presence_penalty": 0.2   # 保持适当的新词
+            # "top_p": 0.9,             # 核采样设置
+            # "frequency_penalty": 0.3, # 减少重复
+            # "presence_penalty": 0.2   # 保持适当的新词
         }))
     )
     with Context(params = params, deps=deps) as context:
