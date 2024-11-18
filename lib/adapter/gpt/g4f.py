@@ -3,7 +3,6 @@ import json
 import sys
 from typing import Optional
 
-import requests
 from g4f import debug as g4f_debug
 from g4f.client import Client
 from g4f.errors import *

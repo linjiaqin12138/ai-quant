@@ -12,3 +12,4 @@ pytest
 curl_cffi
 aiohttp_socks
 g4f
+akshare

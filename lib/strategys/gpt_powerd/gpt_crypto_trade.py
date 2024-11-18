@@ -6,45 +6,26 @@ from datetime import datetime, timedelta
 
 import g4f
 
-from ..model import CryptoOrder, NewsInfo, Ohlcv
-from ..utils.retry import with_retry
-from ..utils.list import filter_by, map_by
-from ..utils.string import extract_json_string
-from ..utils.ohlcv import atr_info, boll_info, macd_info, sam20_info, sam5_info,rsi_info, stochastic_oscillator_info
-from ..utils.number import get_total_assets, is_nan, mean, remain_significant_digits
-from ..utils.time import dt_to_ts, timeframe_to_second, to_utc_isoformat, minutes_ago, ts_to_dt
-from ..adapter.database.session import SessionAbstract
-from ..adapter.exchange.crypto_exchange import BinanceExchange
-from ..adapter.gpt import GptAgentAbstract, get_agent_by_model
-from ..adapter.news import news, NewsAbstract
-from ..modules.notification_logger import NotificationLogger
-from ..modules.strategy import CryptoDependency, ParamsBase, ResultBase, ContextBase
-from ..modules.crypto import CryptoOperationAbstract
+from ...model import CryptoOrder, NewsInfo, Ohlcv
+from ...utils.retry import with_retry
+from ...utils.list import filter_by, map_by
+from ...utils.ohlcv import atr_info, boll_info, macd_info, sam20_info, sam5_info,rsi_info, stochastic_oscillator_info
+from ...utils.number import get_total_assets, is_nan, mean
+from ...utils.time import dt_to_ts, timeframe_to_second, to_utc_isoformat, minutes_ago, ts_to_dt
+from ...adapter.database.session import SessionAbstract
+from ...adapter.exchange.crypto_exchange import BinanceExchange
+from ...adapter.gpt import GptAgentAbstract, get_agent_by_model
+from ...adapter.news import news, NewsAbstract
+from ...modules.notification_logger import NotificationLogger
+from ...modules.strategy import CryptoDependency, ParamsBase, ResultBase, ContextBase
+from ...modules.crypto import CryptoOperationAbstract
+from .common import GptAdviceDict, round_to_5, map_by_round_to_5, GptReplyNotValid, validate_gpt_advice
 
 ContextDict = TypedDict('Context', {
     'account_usdt_amount': float,
     'account_coin_amount': float,
     'operation_history': List[str]
 })
-
-GptAdviceDict = Union[
-    TypedDict('GptAdviceDictBuy', {
-        "action": Literal["buy"],
-        "cost": float,
-        "summary": str,
-        "reason": str
-    }),
-    TypedDict('GptAdviceDictSell', {
-        "action": Literal["sell"],
-        "amount": float,
-        "summary": str,
-        "reason": str
-    }),
-    TypedDict('GptAdviceDictHold', {
-        "action": Literal["hold"],
-        "reason": str
-    }),
-]
 
 OperationRecord = TypedDict('OperationRecord', {
     'timestamp': int,
@@ -58,9 +39,6 @@ OperationRecord = TypedDict('OperationRecord', {
     'summary': str
 })
 
-round_to_5 = lambda x: remain_significant_digits(x, 5)
-map_by_round_to_5 = lambda x: map_by(x, round_to_5)
-
 def format_operation_record(record: OperationRecord, coin_name: str) -> str:
     date_str = ts_to_dt(record['timestamp']).strftime('%Y-%m-%d')
     action_desc = {
@@ -69,9 +47,6 @@ def format_operation_record(record: OperationRecord, coin_name: str) -> str:
     }[record['action']]
     
     return f"{date_str} {action_desc}, 仓位{int(record['position_ratio']*100)}%, 原因: {record['summary']}"
-
-class GptReplyNotValid(Exception):
-    pass
 
 @dataclass
 class GptStrategyParams(ParamsBase):
@@ -306,37 +281,13 @@ Example 3:
 
     vote_result: Dict[str, List[GptAdviceDict]] = { 'buy': [], 'sell':[], 'hold': [] }
 
-    def validate_gpt_advice(advice: str) -> GptAdviceDict:
-        try:
-            advice_json = extract_json_string(advice)
-            assert isinstance(advice_json, dict), "GPT回复必须是一个字典格式"
-            assert 'action' in advice_json, "GPT回复缺少'action'字段"
-            assert advice_json['action'] in ['buy', 'sell', 'hold'], f"无效的action值: {advice_json['action']}, 必须是'buy'/'sell'/'hold'之一"
-            assert 'reason' in advice_json, "GPT回复缺少'reason'字段"
-            assert isinstance(advice_json['reason'], str), "'reason'字段必须是字符串类型"
-            if advice_json['action'] != 'hold':
-                assert 'summary' in advice_json, f"{advice_json['action']}操作必须包含'summary'字段"
-            if advice_json['action'] == 'buy':
-                assert 'cost' in advice_json, "买入操作缺少'cost'字段"
-                assert isinstance(advice_json['cost'], float), "'cost'字段必须是浮点数类型"
-                assert advice_json['cost'] > 0, "'cost'必须大于0"
-                assert advice_json['cost'] <= context.get('account_usdt_amount'), f"买入金额{advice_json['cost']}超过可用USDT余额{context.get('account_usdt_amount')}"
-            elif advice_json['action'] == 'sell':   
-                assert 'amount' in advice_json, "卖出操作缺少'amount'字段"
-                assert isinstance(advice_json['amount'], float), "'amount'字段必须是浮点数类型"
-                assert advice_json['amount'] > 0, "'amount'必须大于0"
-                assert advice_json['amount'] <= context.get('account_coin_amount'), f"卖出数量{advice_json['amount']}超过持仓数量{context.get('account_coin_amount')}"
-            return advice_json
-        except Exception as err:
-            raise GptReplyNotValid(err)
-
     @with_retry((GptReplyNotValid, g4f.errors.RetryProviderError, g4f.errors.RateLimitError, g4f.errors.ResponseError, g4f.errors.ResponseStatusError), 3)
     def retryable_part() -> GptAdviceDict:
         agent = context._deps.get_a_voter_agent()
         agent.clear()
         agent.set_system_prompt(voter_system_prompt)
         advice_rsp = agent.ask(voter_asking_prompt)
-        advice_json = validate_gpt_advice(advice_rsp)
+        advice_json = validate_gpt_advice(advice_rsp, context.get('account_usdt_amount'), context.get('account_coin_amount'))
         context._deps.notification_logger.msg(f"{agent.model}: {advice_json}")
         return advice_json
     

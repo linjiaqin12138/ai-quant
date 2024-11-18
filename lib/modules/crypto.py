@@ -10,7 +10,7 @@ from ..adapter.database.cryto_trade import CryptoTradeHistory
 from ..adapter.database.session import SessionAbstract, SqlAlchemySession
 from ..model import CryptoHistoryFrame, CryptoOhlcvHistory, CryptoOrder, OrderSide, OrderType
 from ..logger import logger
-from ..utils.time import time_length_in_frame, round_datetime, timeframe_to_second
+from ..utils.time import time_length_in_frame, round_datetime_in_period, timeframe_to_second
 
 @dataclass
 class ModuleDependency:
@@ -24,8 +24,8 @@ class ModuleDependency:
 def get_missed_time_ranges(timerange: List[datetime], start: datetime, end: datetime, frame: CryptoHistoryFrame) -> List[List[datetime]]:
     result = []
     interval = timeframe_to_second(frame)
-    rounded_start = round_datetime(start, frame)
-    rounded_end = round_datetime(end, frame)
+    rounded_start = round_datetime_in_period(start, frame)
+    rounded_end = round_datetime_in_period(end, frame)
 
     if rounded_start < timerange[0]:
         result.append([rounded_start, timerange[0]])
@@ -81,8 +81,8 @@ class CryptoOperationModule(CryptoOperationAbstract):
         logger.debug(f'get_ohlcv_history with symbol: {symbol}, frame: {frame}, start: {start}, end: {end}')
         with self.dependency.session: 
             expected_data_length = time_length_in_frame(start, end, frame)
-            nomolized_start = round_datetime(start, frame)
-            nomolized_end = round_datetime(end, frame)
+            nomolized_start = round_datetime_in_period(start, frame)
+            nomolized_end = round_datetime_in_period(end, frame)
             
             cache_result = self.cache_store.range_query(symbol, frame, nomolized_start, nomolized_end)
             logger.debug(f'Found {len(cache_result.data)} records locally')

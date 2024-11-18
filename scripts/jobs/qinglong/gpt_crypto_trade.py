@@ -3,7 +3,7 @@ import argparse
 from lib.adapter.notification import PushPlus
 
 from lib.modules.notification_logger import NotificationLogger
-from lib.strategys.gpt import run
+from lib.strategys.gpt_powerd.gpt_crypto_trade import run
 from lib.utils.file import read_json_file
 
 def parse_command_line() -> argparse.Namespace:

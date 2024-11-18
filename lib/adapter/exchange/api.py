@@ -1,8 +1,5 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Optional
-
-from lib.model.crypto import CryptoOrder
 
 from ...model.common import OhlcvHistory, Order, OrderSide, OrderType, TradeTicker
 

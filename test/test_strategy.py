@@ -7,7 +7,7 @@ from lib.modules.notification_logger import NotificationLogger
 from lib.strategys.simple_turtle import simple_turtle, Params, Context
 from lib.strategys.macd_sar import macd_sar, ParamsBase, Context as MacdSarContext
 from lib.strategys.boll import boll, Params as BollParams, Context as BollContext
-from lib.strategys.gpt import GptStrategyDependency, gpt as gpt_strategy, Context as GptContext, OtherDataFetcherAbstract, GptStrategyParams
+from lib.strategys.gpt_powerd.gpt_crypto_trade import GptStrategyDependency, gpt as gpt_strategy, Context as GptContext, OtherDataFetcherAbstract, GptStrategyParams
 
 from lib.utils.list import map_by
 from lib.utils.time import dt_to_ts
