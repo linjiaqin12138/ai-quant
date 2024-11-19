@@ -18,10 +18,8 @@ class CnMarketExchange(ExchangeAPI):
                  'etf' - ETF基金
                  'index' - 指数
         """
-        if symbol.startswith(('51', '15', '16')):  # ETF基金
+        if symbol.startswith(('51', '15', '16')):  # ETF场内基金
             return 'etf'
-        elif symbol.startswith(('000001', '000300', '399001', '000016')):  # 主要指数
-            return 'index'
         else:  # A股股票
             return 'stock'
     
@@ -31,9 +29,6 @@ class CnMarketExchange(ExchangeAPI):
         
         if symbol_type == 'etf':
             df = ak.fund_etf_spot_em()  # ETF实时行情
-        elif symbol_type == 'index':
-            # TODO 这里是错误的，对于指数以后再研究
-            df = ak.stock_zh_index_spot()  # 指数实时行情
         else:
             df = ak.stock_zh_a_spot_em()  # A股实时行情
             
@@ -43,7 +38,7 @@ class CnMarketExchange(ExchangeAPI):
             last=float(stock_data['最新价']),
         )
 
-    def fetch_ohlcv(self, symbol: str, frame: CnStockHistoryFrame, start: datetime, end: datetime = datetime.now()) -> OhlcvHistory:
+    def fetch_ohlcv(self, symbol: str, frame: CnStockHistoryFrame, start: datetime, end: datetime = datetime.now()) -> OhlcvHistory[CnStockHistoryFrame]:
         """获取K线数据"""
         start = round_datetime_in_local_zone(start, frame)
         end = round_datetime_in_local_zone(end, frame)
@@ -69,10 +64,6 @@ class CnMarketExchange(ExchangeAPI):
                 end_date=end.strftime('%Y%m%d'),
                 adjust="qfq"
             )
-        elif symbol_type == 'index':
-            if frame != '1d':
-                raise ValueError(f"指数数据暂不支持 {frame} 周期，仅支持日线(1d)数据")
-            df = ak.stock_zh_index_daily(symbol=symbol)
         else:
             df = ak.stock_zh_a_hist(
                 symbol=symbol,

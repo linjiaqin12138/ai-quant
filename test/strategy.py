@@ -3,24 +3,23 @@ from dataclasses import dataclass
 from datetime import datetime
 import numpy as np 
 import mplfinance as mpf
-from lib.adapter.exchange.api import ExchangeAPI
-from lib.adapter.database.ohlcv_cache import CryptoOhlcvCacheFetcher
-from lib.adapter.database.session import SqlAlchemySession
-from lib.model import OrderFee, CryptoOhlcvHistory, CryptoOrder, OrderSide, TradeTicker
+
+from lib.model import OhlcvHistory
 from lib.modules.notification_logger import NotificationLogger
-from lib.modules.strategy import ContextBase, CryptoDependency, ParamsBase, StrategyFunc
-from lib.modules.crypto import crypto, CryptoOperationModule, ModuleDependency
+from lib.modules.strategy import BasicContext, BasicDependency, ParamsBase, StrategyFunc
+from lib.modules.exchange_proxy import  crypto
 from lib.utils.ohlcv import boll_info, macd_info, sar_info, to_df
-from lib.utils.string import random_id
 
 from fake_modules.fake_db import fake_session
 from fake_modules.fake_notification import FakeNotification
+from fake_modules.fake_exchange_proxy import fake_exchange
 
 IndicatorOptions = TypedDict('IndicatorOptions', {
     'macd': bool,
     'sar': bool,
     'boll': bool
 })
+
 DrawOptions = TypedDict('DrawOptions', {
     'enabled': bool,
     'indicators': Optional[IndicatorOptions]
@@ -33,60 +32,8 @@ class StrategyTestOptions:
     end_time: datetime
     draw: DrawOptions
 
-class FakeExchange(ExchangeAPI):
-    curr_time: datetime
-    curr_price: float
-    is_buy: bool
-    is_sell: bool
-
-    def __init__(self, session: SqlAlchemySession):
-        self.fake_session = session
-
-    def set_curr_time(self, datetime: datetime):
-        self.curr_time = datetime
-
-    def set_curr_price(self, price: float):
-        self.curr_price = price
-
-    def clear(self):
-        self.is_buy = False
-        self.is_sell = False
-
-    def fetch_ticker(self, symbol: str) -> TradeTicker:
-        return TradeTicker(last = self.curr_price)
-    
-    def fetch_ohlcv(self, symbol, frame, start, end) -> CryptoOhlcvHistory:
-        cache = CryptoOhlcvCacheFetcher(self.fake_session)
-        with self.fake_session:
-            return cache.range_query(symbol, frame, start, end)
-    
-    def create_order(self, symbol, type, side: OrderSide, amount, _price = None) -> CryptoOrder:
-        if side == 'buy':
-            self.is_buy = True
-        if side == 'sell':
-            self.is_sell = True
-        return CryptoOrder(
-            # clientOrderId 
-            context = {},
-            exchange = 'binance',
-            id = random_id(10),
-            timestamp = self.curr_time,
-            symbol = symbol,
-            type = type,
-            side = side,
-            _amount = amount,
-            price = self.curr_price,
-            _cost = self.curr_price * amount,
-            fees = [OrderFee(symbol, 0.001 * amount, 0.001) if side == 'buy' else OrderFee(symbol, 0.01 * amount * self.curr_price, 0.001)]
-        )
-
-def strategy_test(strategy_func: StrategyFunc, test_options: StrategyTestOptions, params: ParamsBase, contextClass: Type[ContextBase]):
-    fake_exchange = FakeExchange(fake_session)
-    stub_deps = CryptoDependency(
-        crypto=CryptoOperationModule(ModuleDependency(exchange=fake_exchange, session=fake_session)),
-        session=fake_session,
-        notification= NotificationLogger('Test-Strategy', FakeNotification())
-    )
+def strategy_test(strategy_func: StrategyFunc, test_options: StrategyTestOptions, params: ParamsBase, contextClass: Type[BasicContext]):
+    stub_deps = BasicDependency(exchange=fake_exchange, session = fake_session, notification=NotificationLogger('Fake Notification', notification=FakeNotification()))
 
     ohlcv_datas = crypto.get_ohlcv_history(params.symbol, params.data_frame, test_options.from_time, test_options.end_time)
     df = to_df(ohlcv_datas.data)
@@ -97,11 +44,8 @@ def strategy_test(strategy_func: StrategyFunc, test_options: StrategyTestOptions
     df['buy_point'] = np.nan
     df['sell_point'] = np.nan
 
-    with fake_session:
-        cache = CryptoOhlcvCacheFetcher(fake_session)
-        cache.add(ohlcv_datas)
-        fake_session.commit()
-    
+    total_money = params.money
+    total_stake = 0
     with contextClass(params, stub_deps) as context:
         for idx in range(0, len(ohlcv_datas.data)):
             if idx < test_options.batch_count:
@@ -111,18 +55,27 @@ def strategy_test(strategy_func: StrategyFunc, test_options: StrategyTestOptions
             fake_exchange.clear()
             fake_exchange.set_curr_time(ohlcv_datas.data[idx].timestamp)
             fake_exchange.set_curr_price(float(ohlcv_datas.data[idx].open))
+            fake_exchange.set_curr_data(
+                OhlcvHistory(
+                    symbol=ohlcv_datas.symbol,
+                    frame=ohlcv_datas.frame,
+                    data=ohlcv_datas.data[idx - test_options.batch_count: idx]
+                )
+            )
 
-            result = strategy_func(context, ohlcv_datas.data[idx - test_options.batch_count: idx])
-
-            # df['strategy_gain'].iloc[idx] = result.total_assets
-            df.loc[ohlcv_datas.data[idx].timestamp, 'strategy_gain'] = result.total_assets
+            strategy_func(context)
+    
             if fake_exchange.is_buy:
-                # df['buy_point'].iloc[idx] = ohlcv_datas.data[idx].open
                 df.loc[ohlcv_datas.data[idx].timestamp, 'buy_point'] = ohlcv_datas.data[idx].open
+                total_money -= fake_exchange.get_buy_cost()
+                total_stake += (fake_exchange.get_buy_cost() / float(ohlcv_datas.data[idx].open))
             if fake_exchange.is_sell:
-                # df['sell_point'].iloc[idx] = ohlcv_datas.data[idx].open
                 df.loc[ohlcv_datas.data[idx].timestamp, 'sell_point'] = ohlcv_datas.data[idx].open
-    #stub_deps.notification_logger.send()
+                total_money += fake_exchange.get_sell_amount() * float(ohlcv_datas.data[idx].open)
+                total_stake -= fake_exchange.get_sell_amount()
+
+            df.loc[ohlcv_datas.data[idx].timestamp, 'strategy_gain'] = total_money + total_stake * float(ohlcv_datas.data[idx].open)
+
     if test_options.draw['enabled']:
         add_plot = [
             mpf.make_addplot(df['compaired_gain'], color='gray', panel=1, secondary_y=False),

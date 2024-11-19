@@ -3,7 +3,7 @@ from typing import TypedDict, List, Callable, TypeVar, Any, Dict
 from datetime import datetime
 from ....config import get_binance_config
 from ....logger import logger
-from ....model import CryptoOhlcvHistory, TradeTicker, CryptoHistoryFrame, Ohlcv, OrderType, OrderSide, CryptoOrder
+from ....model import CryptoOhlcvHistory, TradeTicker, CryptoHistoryFrame, Ohlcv, OrderType, OrderSide, CryptoOrder, OrderFee
 from ....utils.time import dt_to_ts, timeframe_to_second, time_length_in_frame, ts_to_dt
 from ....utils.list import map_by 
 from ..api import ExchangeAPI
@@ -121,7 +121,10 @@ class BinanceExchange(ExchangeAPI):
             price = res['price'],
             _amount= res['amount'],
             _cost = res['cost'],
-            fees = list(map(lambda fee: Fee(fee['currency'], fee['cost'], fee.get('rate')), res['fees']))
+            fees = map_by(
+                res['fees'], 
+                lambda fee: OrderFee(fee['currency'], fee['cost'], fee.get('rate'))
+            )
         )
     
     def fetch_ohlcv(self, symbol: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> CryptoOhlcvHistory:

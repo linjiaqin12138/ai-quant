@@ -1,4 +1,4 @@
-from .crypto import crypto
+from .exchange_proxy import crypto
 from .hot_news import news
 
 __all__ = [

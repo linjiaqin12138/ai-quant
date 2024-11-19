@@ -6,7 +6,7 @@ from lib.adapter.exchange.api import ExchangeAPI
 from lib.adapter.exchange.crypto_exchange.binance import BinanceExchange
 from lib.adapter.database.session import SqlAlchemySession
 from lib.model import CryptoOhlcvHistory, Ohlcv, TradeTicker
-from lib.modules.crypto import CryptoOperationModule, ModuleDependency
+from lib.modules.exchange_proxy import CryptoProxy, ModuleDependency
 from lib.adapter.database.sqlalchemy import metadata_obj
 from lib.utils.time import timeframe_to_second
 from lib.logger import logger
@@ -80,7 +80,7 @@ def test_can_query_range_from_remote_and_second_time_hit_cache():
         session = session,
         exchange = fake_excahnge,
     )
-    crypto_module = CryptoOperationModule(dependency)
+    crypto_module = CryptoProxy(dependency)
     june_30th_11_clock = datetime(2024, 6, 30, 11, 56, 40, 290935)
     # 第一次查询会命中缓存不会去后端
     result = crypto_module.get_ohlcv_history(

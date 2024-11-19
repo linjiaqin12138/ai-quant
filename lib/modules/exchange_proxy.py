@@ -3,12 +3,15 @@ from datetime import datetime, timedelta
 from dataclasses import dataclass
 from typing import List
 
+from lib.model.common import OhlcvHistory, Order
+
 from ..adapter.exchange.api import ExchangeAPI
 from ..adapter.exchange.crypto_exchange import BinanceExchange
+from ..adapter.exchange.cn_market_exchange import cn_market
 from ..adapter.database.ohlcv_cache import CryptoOhlcvCacheFetcher
 from ..adapter.database.cryto_trade import CryptoTradeHistory
 from ..adapter.database.session import SessionAbstract, SqlAlchemySession
-from ..model import CryptoHistoryFrame, CryptoOhlcvHistory, CryptoOrder, OrderSide, OrderType
+from ..model import CryptoHistoryFrame, CryptoOhlcvHistory, CryptoOrder, OrderSide, OrderType, CnStockHistoryFrame
 from ..logger import logger
 from ..utils.time import time_length_in_frame, round_datetime_in_period, timeframe_to_second
 
@@ -41,16 +44,17 @@ def get_missed_time_ranges(timerange: List[datetime], start: datetime, end: date
     
     return result
 
-class CryptoOperationAbstract(abc.ABC):
+# 主要负责编排一些事务性的操作
+class ExchangeOperationProxy(abc.ABC):
     @abc.abstractmethod
-    def create_order(self, symbol: str, type: OrderType, side: OrderSide, reason: str, amount: float = None, price: float = None, spent: float = None, comment: str = None) -> CryptoOrder:
+    def create_order(self, symbol: str, type: OrderType, side: OrderSide, reason: str, amount: float = None, price: float = None, spent: float = None, comment: str = None) -> Order:
         pass
 
     @abc.abstractmethod
-    def get_ohlcv_history(self, symbol: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> CryptoOhlcvHistory:
+    def get_ohlcv_history(self, symbol: str, frame: CryptoHistoryFrame | CnStockHistoryFrame, start: datetime, end: datetime = datetime.now()) -> OhlcvHistory:
         pass
 
-class CryptoOperationModule(CryptoOperationAbstract):
+class CryptoProxy(ExchangeOperationProxy):
     def __init__(self, dependency: ModuleDependency = ModuleDependency()):
         self.dependency = dependency
         self.cache_store = CryptoOhlcvCacheFetcher(dependency.session)
@@ -113,11 +117,20 @@ class CryptoOperationModule(CryptoOperationAbstract):
                 data = sorted(result_data, key=lambda item: item.timestamp)
             )
 
-crypto = CryptoOperationModule()
+class CnExchangeProxy(ExchangeOperationProxy):
+    def get_ohlcv_history(self, symbol: str, frame: CnStockHistoryFrame, start: datetime, end: datetime = datetime.now()) -> OhlcvHistory[CnStockHistoryFrame]:
+        return cn_market.fetch_ohlcv(symbol, frame, start, end)
+    
+    def create_order(self, symbol: str, type: OrderType, side: OrderSide, reason: str, amount: float = None, price: float = None, spent: float = None, comment: str = None) -> Order:
+        return None
+    
+crypto = CryptoProxy()
+cn_market = CnExchangeProxy()
 
 __all__ = [
     'crypto', 
-    'CryptoOperationModule',
-    'CryptoOperationAbstract'
+    'CryptoProxy',
+    'CryptoOperationAbstract',
+    'cn_market',
     'ModuleDependency'
 ]

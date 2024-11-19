@@ -4,8 +4,8 @@ import math
 def change_rate(before: float, after: float) -> float:
     return (after - before) / before
 
-def get_total_assets(price: float, coin: float, usdt: float) -> float:
-    return coin * price + usdt
+def get_total_assets(price: float, symbol: float, money: float) -> float:
+    return symbol * price + money
 
 def is_nan(num: float) -> bool:
     return math.isnan(num)

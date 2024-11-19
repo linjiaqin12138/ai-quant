@@ -1,7 +1,7 @@
 from datetime import datetime
 import numpy as np
 from lib.utils.ohlcv import macd_info, boll_info, sar_info
-from lib.modules.crypto import crypto
+from lib.modules.exchange_proxy import crypto
 
 
 def test_indicators():

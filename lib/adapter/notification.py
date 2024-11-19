@@ -27,7 +27,7 @@ class PushPlus(NotificationAbstract):
             res = requests.post(
                 "http://www.pushplus.plus/send",
                 {
-                    "token": os.environ.get("PUSH_PLUS_TOKEN"),
+                    "token": self.token,
                     "content": content,
                     "title": title
                 },

@@ -1,14 +1,14 @@
 from dataclasses import dataclass
-from typing import Any, List, TypedDict, Optional
+from typing import Any, TypedDict, Optional
 from datetime import datetime, timedelta
 
 from ..utils.number import change_rate, get_total_assets
-
-from ..model import CryptoHistoryFrame, Ohlcv
+from ..model import CryptoHistoryFrame
 from ..utils.time import dt_to_ts, timeframe_to_second, ts_to_dt
 from ..utils.ohlcv import to_df
 from ..modules.notification_logger import NotificationLogger
-from ..modules.strategy import DependencyAbstract, CryptoDependency, ParamsBase, ResultBase, ContextBase
+from ..modules.strategy import BasicDependency, ParamsBase, BasicContext
+from .common import get_recent_data_with_at_least_count
 
 ContextDict = TypedDict('Context', {
     'account_usdt_amount': float,
@@ -27,23 +27,20 @@ class Params(ParamsBase):
     max_retrieval: Optional[float] = None
     max_buy_round: int = 1
 
-class Context(ContextBase):
+class Context(BasicContext[ContextDict]):
+    def __init__(self, params: Params, deps: BasicDependency):
+        super().__init__(f'{params.symbol}_{params.data_frame}_{params.money}_TURTLE_PLAN', deps)
+        self.params = params
 
-    def __init__(self, params: Params, deps: DependencyAbstract):
-        super().__init__(params, deps)
-
-    def init_id(self, params: Params) -> str:
-        return f'{super().init_id(params)}_TURTLE_PLAN'
-    
-    def init_context(self, params: Params) -> ContextDict:
+    def _initial_context(self) -> ContextDict:
         return {
-            'account_usdt_amount': params.money,
+            'account_usdt_amount': self.params.money,
             'account_coin_amount': 0,
             'buyable': True,
             'sellable': False,
             'buy_round': 0,
         }
-    
+
     def set(self, key: str, value: Any) -> None:
         if key == 'last_time_buy':
             assert type(value) == datetime
@@ -62,19 +59,11 @@ class Context(ContextBase):
 def time_pass(last_time: datetime, now: datetime, frame: CryptoHistoryFrame) -> int:
     return int((now - last_time) / timedelta(seconds=timeframe_to_second(frame)))
 
-def simple_turtle(context: Context, data: List[Ohlcv] = []) -> ResultBase:
-    params: Params = context._params
-    deps = context._deps
+def simple_turtle(context: Context):
+    params: Params = context.params
+    deps = context.deps
 
-    expected_data_length = max(params.max_window, params.min_window) + 1
-    if len(data) == 0:
-        data = deps.crypto.get_ohlcv_history(params.symbol, params.data_frame, 
-           datetime.now() - (expected_data_length) * timedelta(seconds = timeframe_to_second(params.data_frame)),
-           datetime.now()           
-        ).data
-    assert len(data) >= expected_data_length
-   
-
+    data = get_recent_data_with_at_least_count(max(params.max_window, params.min_window) + 1, params.symbol, params.data_frame, deps.exchange)
     # 为了防止单元测试中datetime.now()返回当前时间，所以实际通过这种方式来作为当前时间，效果差不多
     curr_time = data[-1].timestamp + timedelta(seconds=timeframe_to_second(params.data_frame))
 
@@ -98,7 +87,7 @@ def simple_turtle(context: Context, data: List[Ohlcv] = []) -> ResultBase:
 
         if is_next_round and is_max_window:
             spent = context.get('account_usdt_amount') * 0.5 if context.get('buy_round') + 1 < params.max_buy_round else context.get('account_usdt_amount') 
-            order = deps.crypto.create_order(params.symbol, 'market', 'buy', f'TURTLE_PLAN_{params.symbol}', spent = spent)
+            order = deps.exchange.create_order(params.symbol, 'market', 'buy', f'TURTLE_PLAN_{params.symbol}', spent = spent)
 
             context.set('sellable', True)
             context.set('account_usdt_amount', context.get('account_usdt_amount') - order.get_cost(True))
@@ -122,7 +111,7 @@ def simple_turtle(context: Context, data: List[Ohlcv] = []) -> ResultBase:
             deps.notification_logger.msg(f'{params.symbol} 价格跌破{params.min_window}周期最小值，卖出')
     
         if is_min_window or is_max_retrieval:
-            order = deps.crypto.create_order(params.symbol, 'market', 'sell', f'TURTLE_PLAN_{params.symbol}', amount = context.get('account_coin_amount') )
+            order = deps.exchange.create_order(params.symbol, 'market', 'sell', f'TURTLE_PLAN_{params.symbol}', amount = context.get('account_coin_amount') )
             context.set('buyable', True)
             context.set('sellable', False)
             context.set('account_usdt_amount', context.get('account_usdt_amount') + order.get_cost(True))
@@ -133,12 +122,10 @@ def simple_turtle(context: Context, data: List[Ohlcv] = []) -> ResultBase:
 
             deps.notification_logger.msg(f'{order.timestamp} 卖出 ', order.get_amount(True), ' ', params.symbol, ', 总共', order.get_cost(True), ' USDT 剩余: ', context.get("account_usdt_amount"), 'USDT')
 
-    return ResultBase(
-        total_assets=get_total_assets(close_price, context.get('account_coin_amount') , context.get('account_usdt_amount') )
-    )
+    return 
 
 def run(params: dict, notification: NotificationLogger):
-    with Context(params = Params(**params), deps=CryptoDependency(notification=notification)) as context:
+    with Context(params = Params(**params), deps=BasicDependency(notification=notification)) as context:
         simple_turtle(context)
 
 

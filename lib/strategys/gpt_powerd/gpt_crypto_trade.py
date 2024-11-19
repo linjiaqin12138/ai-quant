@@ -1,25 +1,25 @@
 from dataclasses import dataclass
 import json
 import abc
-from typing import List, Optional, TypedDict, Literal, Union, Dict
+from typing import List, Optional, TypedDict, Literal, Dict
 from datetime import datetime, timedelta
 
 import g4f
 
 from ...model import CryptoOrder, NewsInfo, Ohlcv
 from ...utils.retry import with_retry
-from ...utils.list import filter_by, map_by
-from ...utils.ohlcv import atr_info, boll_info, macd_info, sam20_info, sam5_info,rsi_info, stochastic_oscillator_info
-from ...utils.number import get_total_assets, is_nan, mean
-from ...utils.time import dt_to_ts, timeframe_to_second, to_utc_isoformat, minutes_ago, ts_to_dt
+from ...utils.list import map_by
+from ...utils.number import get_total_assets, mean
+from ...utils.time import dt_to_ts, to_utc_isoformat, minutes_ago, ts_to_dt
 from ...adapter.database.session import SessionAbstract
 from ...adapter.exchange.crypto_exchange import BinanceExchange
 from ...adapter.gpt import GptAgentAbstract, get_agent_by_model
 from ...adapter.news import news, NewsAbstract
 from ...modules.notification_logger import NotificationLogger
-from ...modules.strategy import CryptoDependency, ParamsBase, ResultBase, ContextBase
-from ...modules.crypto import CryptoOperationAbstract
-from .common import GptAdviceDict, round_to_5, map_by_round_to_5, GptReplyNotValid, validate_gpt_advice
+from ...modules.strategy import BasicDependency, ParamsBase, BasicContext
+from ...modules.exchange_proxy import ExchangeOperationProxy
+from ..common import get_recent_data_with_at_least_count
+from .common import GptAdviceDict, round_to_5, GptReplyNotValid, validate_gpt_advice, calculate_technical_indicators
 
 ContextDict = TypedDict('Context', {
     'account_usdt_amount': float,
@@ -82,9 +82,17 @@ class OtherDataFetcher(OtherDataFetcherAbstract):
     def get_u_base_top_long_short_ratio(self, symbol: str) -> float:
         return self.binance_exchange.get_u_base_top_long_short_ratio(symbol, '15m', start=minutes_ago(30))[-1]['longShortRatio']
 
-class GptStrategyDependency(CryptoDependency):
-    def __init__(self, notification: NotificationLogger, news_summary_agent: GptAgentAbstract, voter_agents: List[GptAgentAbstract], crypto: CryptoOperationAbstract = None, session: SessionAbstract = None, news_adapter: NewsAbstract = news, future_data: OtherDataFetcherAbstract = None):
-        super().__init__(notification = notification, crypto=crypto, session=session)
+class GptStrategyDependency(BasicDependency):
+    def __init__(self, 
+                 notification: NotificationLogger, 
+                 news_summary_agent: GptAgentAbstract, 
+                 voter_agents: List[GptAgentAbstract], 
+                 exchange: ExchangeOperationProxy = None, 
+                 session: SessionAbstract = None, 
+                 news_adapter: NewsAbstract = news, 
+                 future_data: OtherDataFetcherAbstract = None
+                 ):
+        super().__init__(notification = notification, exchange=exchange, session=session)
         self.news_summary_agent = news_summary_agent
         self._curr_voter_idx = -1
         self.voter_agents = voter_agents
@@ -125,22 +133,22 @@ class GptStrategyDependency(CryptoDependency):
         self.news_summary_agent.set_system_prompt(sys_prompt)
         return self.news_summary_agent.ask(json.dumps([{'title': news.title, 'description': news.description} for news in latest_news], ensure_ascii=False))
         
-class Context(ContextBase[GptStrategyDependency, GptStrategyParams]):
+class Context(BasicContext[ContextDict]):
+    deps: GptStrategyDependency
     def __init__(self, params: GptStrategyParams, deps: GptStrategyDependency):
-        super().__init__(params, deps)
-        
-    def init_id(self, params: ParamsBase) -> str:
-        return f'{super().init_id(params)}_GPT'
-
-    def init_context(self, params: ParamsBase) -> ContextDict:
+        super().__init__(f'{params.symbol}_{params.data_frame}_{params.money}_GPT', deps)
+        self.params = params
+    
+    def _initial_context(self) -> ContextDict:
         return {
-            'account_usdt_amount': params.money,
+            'account_usdt_amount': self.params.money,
             'account_coin_amount': 0,
             'operation_history': []
         }
 
 def gpt_analysis(context: Context, data: List[Ohlcv]) -> GptAdviceDict:
     # 将数据转换为适合GPT分析的格式
+    params = context.params
     data_for_gpt = [
         {
             "timestamp": to_utc_isoformat(ohlcv.timestamp),
@@ -152,31 +160,18 @@ def gpt_analysis(context: Context, data: List[Ohlcv]) -> GptAdviceDict:
         } for ohlcv in data[-30:]  # 使用最近的30个数据点
     ]
 
-    coin_name = context._params.symbol.split('/')[0]
+    coin_name = params.symbol.split('/')[0]
     # 计算一些技术指标
-    data_length = 20
-    sma_5 = map_by_round_to_5(sam5_info(data)['sma5'][-data_length:])
-    sma_20 = map_by_round_to_5(sam20_info(data)['sma20'][-data_length:])
-    rsi = map_by_round_to_5(rsi_info(data)['rsi'][-data_length:])
-    boll = boll_info(data)
-    bb_upper = map_by_round_to_5(boll['upperband'][-data_length:])
-    bb_middle = map_by_round_to_5(boll['middleband'][-data_length:])
-    bb_lower = map_by_round_to_5(boll['lowerband'][-data_length:])
-    macd = macd_info(data)
-    macd_histogram = map_by_round_to_5(filter_by(macd['macd_hist'][-data_length:], lambda x: not is_nan(x)))
-    stochastic_oscillator = stochastic_oscillator_info(data)
-    stoch_k = map_by_round_to_5(stochastic_oscillator['stoch_k'][-data_length:])
-    stoch_d = map_by_round_to_5(stochastic_oscillator['stoch_d'][-data_length:])
-    atr = map_by_round_to_5(atr_info(data)['atr'][-data_length:])
+    indicator = calculate_technical_indicators(data, 20)
     # 获取最新的加密货币新闻
-    latest_news = context._deps.gpt_summary_news(coin_name)
+    latest_news = context.deps.gpt_summary_news(coin_name)
    
-    global_long_short_account = context._deps.future_data.get_u_base_global_long_short_account_ratio(symbol=context._params.symbol)
-    top_long_short_account = context._deps.future_data.get_u_base_top_long_short_account_ratio(symbol=context._params.symbol)
-    top_long_short_amount = context._deps.future_data.get_u_base_top_long_short_ratio(symbol=context._params.symbol)
-    future_rate = round_to_5(context._deps.future_data.get_latest_futures_price_info(context._params.symbol))
+    global_long_short_account = context.deps.future_data.get_u_base_global_long_short_account_ratio(symbol=context.params.symbol)
+    top_long_short_account = context.deps.future_data.get_u_base_top_long_short_account_ratio(symbol=context.params.symbol)
+    top_long_short_amount = context.deps.future_data.get_u_base_top_long_short_ratio(symbol=context.params.symbol)
+    future_rate = round_to_5(context.deps.future_data.get_latest_futures_price_info(context.params.symbol))
     trade_history_arr = context.get('operation_history')[-10:] if len(context.get('operation_history')) > 10 else context.get('operation_history')
-    trade_history_text = "\n".join(map_by(trade_history_arr, lambda x: '- ' + format_operation_record(x, coin_name)) if len(trade_history_arr) > 0 else "暂无交易历史")
+    trade_history_text = "\n".join(map_by(trade_history_arr, lambda x: '- ' + format_operation_record(x, coin_name))) if len(trade_history_arr) > 0 else "暂无交易历史"
 
     ohlcv_text = '\n'.join([
         '[', 
@@ -225,8 +220,8 @@ Example 3:
 注意：
 1. 交易数量应该是合理的，不要超过仓位信息中给出的可用的USDT余额或{coin_name}持仓量。
 2. 买入消耗不得低于5USDT，卖出的币总价值不得低于5USDT，避免资金量过低引起的交易失败
-3. 交易偏好：我是一名{context._params.risk_prefer or "风险厌恶型"}投资者
-4. 交易策略：我倾向于{context._params.strategy_prefer or "中长期投资"}策略
+3. 交易偏好：我是一名{context.params.risk_prefer or "风险厌恶型"}投资者
+4. 交易策略：我倾向于{context.params.strategy_prefer or "中长期投资"}策略
 """
     # 交易偏好等级：风险厌恶型/风险中性型/风险喜好型
     # 交易策略分级：短期投资策略(3d-3m)/中期投资策略(3m-1y)/中长期投资策略(/长期投资策略(1-10y)/超长期投资策略(10-100y)
@@ -238,23 +233,23 @@ Example 3:
 {ohlcv_text}
 
 2. 过去一段时间的技术指标:
-- 过去{len(sma_5)}天5日简单移动平均线 (SMA5): {sma_5}
-- 过去{len(sma_20)}天20日简单移动平均线 (SMA20): {sma_20}
-- 过去{len(rsi)}天相对强弱指标 (RSI): {rsi}
+- 过去{len(indicator.sma5)}天5日简单移动平均线 (SMA5): {indicator.sma5}
+- 过去{len(indicator.sma20)}天20日简单移动平均线 (SMA20): {indicator.sma20}
+- 过去{len(indicator.rsi)}天相对强弱指标 (RSI): {indicator.rsi}
 - 布林带 (Bollinger Bands):
-    - 过去{len(bb_upper)}天上轨: {bb_upper}
-    - 过去{len(bb_middle)}天中轨: {bb_middle}
-    - 过去{len(bb_lower)}天下轨: {bb_lower}
+    - 过去{len(indicator.bollinger_upper)}天上轨: {indicator.bollinger_upper}
+    - 过去{len(indicator.bollinger_middle)}天中轨: {indicator.bollinger_middle}
+    - 过去{len(indicator.bollinger_lower)}天下轨: {indicator.bollinger_lower}
 - MACD:
-    - 金叉: {'是' if macd['is_gold_cross'] else '否'}
-    - 死叉: {'是' if macd['is_dead_cross'] else '否'}
-    - 趋势转好: {'是' if macd['is_turn_good'] else '否'}
-    - 趋势转坏: {'是' if macd['is_turn_bad'] else '否'}
-    - 过去{len(macd_histogram)}天的MACD柱状图: {macd_histogram}
-- 过去{len(stoch_k)}天随机指标 (Stochastic Oscillator):
-    - %K: {stoch_k}
-    - %D: {stoch_d}
-- 过去{len(atr)}天平均真实范围 (ATR): {atr}
+    - 金叉: {'是' if indicator.is_macd_gold_cross else '否'}
+    - 死叉: {'是' if indicator.is_macd_dead_cross else '否'}
+    - 趋势转好: {'是' if indicator.is_macd_turn_good else '否'}
+    - 趋势转坏: {'是' if indicator.is_macd_turn_bad else '否'}
+    - 过去{len(indicator.macd_histogram)}天的MACD柱状图: {indicator.macd_histogram}
+- 过去{len(indicator.stoch_d)}天随机指标 (Stochastic Oscillator):
+    - %K: {indicator.stoch_k}
+    - %D: {indicator.stoch_d}
+- 过去{len(indicator.atr)}天平均真实范围 (ATR): {indicator.atr}
 
 3. 过去24h内最新相关新闻:
 ```
@@ -277,18 +272,18 @@ Example 3:
 请根据这些信息分析市场趋势，并给出具体的交易建议。
 """
     #TODO: 添加历史交易情况
-    context._deps.notification_logger.msg(voter_asking_prompt)
+    context.deps.notification_logger.msg(voter_asking_prompt)
 
     vote_result: Dict[str, List[GptAdviceDict]] = { 'buy': [], 'sell':[], 'hold': [] }
 
     @with_retry((GptReplyNotValid, g4f.errors.RetryProviderError, g4f.errors.RateLimitError, g4f.errors.ResponseError, g4f.errors.ResponseStatusError), 3)
     def retryable_part() -> GptAdviceDict:
-        agent = context._deps.get_a_voter_agent()
+        agent = context.deps.get_a_voter_agent()
         agent.clear()
         agent.set_system_prompt(voter_system_prompt)
         advice_rsp = agent.ask(voter_asking_prompt)
         advice_json = validate_gpt_advice(advice_rsp, context.get('account_usdt_amount'), context.get('account_coin_amount'))
-        context._deps.notification_logger.msg(f"{agent.model}: {advice_json}")
+        context.deps.notification_logger.msg(f"{agent.model}: {advice_json}")
         return advice_json
     
     def combine_reason(votes: List[GptAdviceDict]) -> str:
@@ -323,18 +318,12 @@ Example 3:
         'reason': combine_reason(vote_result['hold'])
     }
 
-def gpt(context: Context) -> ResultBase:
-    params: ParamsBase = context._params
-    deps = context._deps
-    
-    expected_data_length = 65
-    data = deps.crypto.get_ohlcv_history(
-        params.symbol, 
-        params.data_frame, 
-        datetime.now() - (expected_data_length) * timedelta(seconds = timeframe_to_second(params.data_frame)),
-        datetime.now()
-    ).data
-    coin_name = context._params.symbol.split('/')[0]
+def gpt(context: Context):
+    params = context.params
+    deps = context.deps
+    data = get_recent_data_with_at_least_count(65, params.symbol, params.data_frame, deps.exchange)
+
+    coin_name = context.params.symbol.split('/')[0]
     advice_json = gpt_analysis(context, data)
     deps.notification_logger.msg(str(advice_json))
 
@@ -361,18 +350,15 @@ def gpt(context: Context) -> ResultBase:
         context.set('operation_history', context.get('operation_history') + [operation_record])
 
     if advice_json['action'] == 'buy':
-        order = deps.crypto.create_order(params.symbol, 'market', 'buy', f'GPT_PLAN_{params.symbol}', spent = advice_json['cost'], comment=advice_json['reason'])
+        order = deps.exchange.create_order(params.symbol, 'market', 'buy', f'GPT_PLAN_{params.symbol}', spent = advice_json['cost'], comment=advice_json['reason'])
         update_context_after_trade(order, 'buy', advice_json)
 
     elif advice_json['action'] == 'sell':
-        order = deps.crypto.create_order(params.symbol, 'market', 'sell', f'GPT_PLAN_{params.symbol}', amount = advice_json['amount'], comment=advice_json['reason'])
+        order = deps.exchange.create_order(params.symbol, 'market', 'sell', f'GPT_PLAN_{params.symbol}', amount = advice_json['amount'], comment=advice_json['reason'])
         update_context_after_trade(order, 'sell', advice_json)
 
     deps.notification_logger.msg('\n'.join(map_by(context.get('operation_history'), lambda x : '- ' + format_operation_record(x, coin_name))))
 
-    return ResultBase(
-        total_assets = get_total_assets(data[-1].close, context.get('account_coin_amount'), context.get('account_usdt_amount'))
-    )
 
 def run(cmd_params: dict, notification: NotificationLogger):
     params = GptStrategyParams(

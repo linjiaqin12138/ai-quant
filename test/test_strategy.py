@@ -14,12 +14,12 @@ from lib.utils.time import dt_to_ts
 from strategy import strategy_test, StrategyTestOptions
 from fake_modules.fake_notification import FakeNotification
 from fake_modules.fake_db import get_fake_session, fake_kv_store_auto_commit
-from fake_modules.fake_crypto import fake_crypto
+from fake_modules.fake_exchange_proxy import fake_exchange
 from fake_modules.fake_news import fakenews
 from fake_modules.fake_gpt import fake_gpt
 
-@pytest.mark.skip(reason="Temporarily disabled for development")
-def test_simple_turtle_stategy():
+@pytest.mark.skip(reason="Temporarily disabled for devselopment")
+def test_simple_turtle_strategy():
     strategy_test(
         simple_turtle, 
         test_options=StrategyTestOptions(
@@ -71,7 +71,7 @@ def test_boll_strategy():
         boll, 
         test_options=StrategyTestOptions(
             batch_count = 21,
-            from_time =datetime.now() - timedelta(hours=1000),
+            from_time =datetime.now() - timedelta(hours=300),
             end_time = datetime.now() - timedelta(hours=0),
             draw = {
                 'enabled': True,
@@ -100,7 +100,7 @@ def test_gpt_strategy():
         strategy_prefer="中长期投资",
         risk_prefer="风险喜好型"
     )
-    fake_crypto.set_history(
+    fake_exchange.set_curr_data(
         CryptoOhlcvHistory(
             data=[
                 Ohlcv(timestamp=datetime(2024, 8, 29, 8, 0), open=0.09965, high=0.10259, low=0.09827, close=0.10037, volume=415351459.0), 
@@ -175,7 +175,8 @@ def test_gpt_strategy():
             exchange='binance'
         )
     )
-    fake_crypto.set_price(0.15546)
+    fake_exchange.set_curr_price(0.15546)
+    fake_exchange.set_curr_time(datetime(2024, 11, 3, 8, 1))
     fake_gpt.set_reply("""
 以下是加密货币新闻的总结，特别关注对DOGE有影响的内容：
 
@@ -298,8 +299,8 @@ def test_gpt_strategy():
     deps = GptStrategyDependency(
         notification=NotificationLogger('Test-Strategy', FakeNotification()),
         news_summary_agent=fake_gpt,
-        voter_agents=map_by(['Baichuan3-Turbo', 'dolphin-2.9.1-llama-3-70b', 'qwen-2-72b', 'gemma-2b-27b', 'wizardlm-2-8x22b', 'lzlv-70b', 'llama-3.1-405b'], lambda m: get_agent_by_model(m)),
-        crypto=fake_crypto,
+        voter_agents=map_by(['qwen-2-72b', 'wizardlm-2-8x22b', 'lzlv-70b', 'llama-3.1-405b'], lambda m: get_agent_by_model(m)),
+        exchange=fake_exchange,
         session=get_fake_session(),
         news_adapter = fakenews,
         future_data=FutureDataFetcher()

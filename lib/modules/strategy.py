@@ -1,50 +1,57 @@
 import abc, traceback
-from typing import Any, Optional, Callable, List, Generic, TypeVar
+from typing import Any, Dict, Optional, Callable, Generic, TypeVar
 from dataclasses import dataclass
 
 from ..adapter.database.kv_store import KeyValueStore
 from ..adapter.database.session import SessionAbstract, SqlAlchemySession
 
-from ..model import CryptoHistoryFrame, Ohlcv
-from ..modules.crypto import CryptoOperationAbstract, crypto as default_crypto
+from ..model import CryptoHistoryFrame, CnStockHistoryFrame
+from .exchange_proxy import ExchangeOperationProxy, crypto as default_crypto
 from ..modules.notification_logger import NotificationLogger
 
 
 @dataclass
 class ParamsBase:
     money: float
-    data_frame: CryptoHistoryFrame
+    data_frame: CryptoHistoryFrame | CnStockHistoryFrame
     symbol: str
 
-@dataclass
-class ResultBase:
-    total_assets: float
-
-class DependencyAbstract(abc.ABC):
-    notification_logger: Optional[NotificationLogger] # 出错时通知
-    kv_store: KeyValueStore # 存储上下文信息
+class ContextApi(abc.ABC):
 
     @abc.abstractmethod
+    def get(self, key: str) -> Optional[Dict[str, Any]]:
+        return None
+    
+    @abc.abstractmethod
+    def delete(self, key: str) -> None:
+        return None
+    
+    @abc.abstractmethod
+    def set(self, key: str, val: Any) -> None:
+        return
+    
+    @abc.abstractmethod
+    def increate(self, key: str, value: float | int) -> None:
+        return
+
+    @abc.abstractmethod
+    def decreate(self, key: str, value: float | int) -> None:
+        return
+    
+    @abc.abstractmethod
     def __enter__(self):
-        return self
+        return 
 
     @abc.abstractmethod
     def __exit__(self, exc_type, exc_value, traceback_obj):
-        pass
-
-    @abc.abstractmethod
-    def __init__(self):
-        pass
+        return
 
 @dataclass
-class CryptoDependency(DependencyAbstract):
-    # 这里我纠结了好久究竟crypto注入还是注入session然后里面build一个crypto
-    # 最后决定注入crypto，因为这样就不用关心session的开启关闭，同时crypto模块相对独立，方便测试
-    # crypto模块内部自己会开启关闭session，而且不能依赖外部是否失败成功都要在做了交易所操作之后根据交易所操作来commit
-    def __init__(self, session: SessionAbstract = None, crypto: CryptoOperationAbstract = None, notification: Optional[NotificationLogger] = None):
+class BasicDependency:
+    def __init__(self, session: SessionAbstract = None, exchange: ExchangeOperationProxy = None, notification: Optional[NotificationLogger] = None):
         self.session = session or SqlAlchemySession()
         self.kv_store = KeyValueStore(session = self.session)
-        self.crypto = crypto or default_crypto
+        self.exchange = exchange or default_crypto
         self.notification_logger = notification
 
     def __enter__(self):
@@ -57,30 +64,32 @@ class CryptoDependency(DependencyAbstract):
         else:
             self.session.commit()
 
-T = TypeVar('T', bound=DependencyAbstract)
-U = TypeVar('U', bound=ParamsBase)
-class ContextBase(abc.ABC, Generic[T, U]):
-    def __init__(self, params: ParamsBase, deps: DependencyAbstract = CryptoDependency()):
-        self.id = self.init_id(params)
+CT = TypeVar('ContextTypeDict', bound=dict)
+class BasicContext(ContextApi, Generic[CT]):
+    def __init__(self, id: str, deps: BasicDependency):
+        self.id = id
+        self.deps = deps
         self.is_dirt = False
-
-        self._deps: T = deps
-        self._params: U = params
-        self._context = None
-    
+        self._context: CT = None
+        
     @abc.abstractmethod
-    def init_context(self, params: ParamsBase) -> dict:
-        raise NotImplementedError
+    def _initial_context(self) -> CT:
+        return {}
 
-    def init_id(self, params: ParamsBase) -> str:
-        return f'{params.symbol}_{params.data_frame}_{params.money}'
-    
     def get(self, key: str) -> Any | None:
         return self._context.get(key)
     
     def set(self, key: str, value: Any) -> None:
         self.is_dirt = True
         self._context[key] = value
+
+    def increate(self, key: str, value: float | int) -> None:
+        assert self._context.get(key) is not None, f'{key} is not exist in context'
+        assert isinstance(self._context[key], (int, float)), f'{key} is not a value of number'
+        self.set(key, self._context[key] + value)
+
+    def decreate(self, key: str, value: float | int) -> None:
+        return self.increate(key, -value)
 
     def delete(self, key) -> None:
         if self._context.get(key):
@@ -89,26 +98,26 @@ class ContextBase(abc.ABC, Generic[T, U]):
 
     def __enter__(self):
         if not self._context:
-            with self._deps:
-                self._context = self._deps.kv_store.get(self.id)
+            with self.deps:
+                self._context = self.deps.kv_store.get(self.id)
                 if self._context is None: 
-                    self._context = self.init_context(self._params)
+                    self._context = self._initial_context()
                     self.is_dirt = True
         return self
     
     def __exit__(self, exc_type, exc_value, traceback_obj):
         
         if self.is_dirt and exc_value is None:
-            with self._deps:
-                self._deps.kv_store.set(self.id, self._context)
+            with self.deps:
+                self.deps.kv_store.set(self.id, self._context)
                 self.is_dirt = False
         
         if exc_type and exc_value and traceback_obj:
-            if self._deps.notification_logger:
-                self._deps.notification_logger.msg('Script error happened:\n', *traceback.format_tb(traceback_obj), '\n', exc_value)
+            if self.deps.notification_logger:
+                self.deps.notification_logger.msg('Script error happened:\n', *traceback.format_tb(traceback_obj), '\n', exc_value)
         
         # 不在这里发通知，是为了多交易对交易的时候统一发
         # if self._deps.notification_logger:
         #     self._deps.notification_logger.send()
 
-StrategyFunc = Callable[[ContextBase, Optional[List[Ohlcv]]], ResultBase]
+StrategyFunc = Callable[[ContextApi], None]
