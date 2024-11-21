@@ -9,10 +9,13 @@ class FakeNews(NewsFetcherApi):
     def __init__(self):
         self.news_map: Dict[str, List[NewsInfo]] = {}
 
+    def get_news_from(self, platform: str, start: datetime) -> List[NewsInfo]:
+        return filter_by(self.news_map[platform], lambda n: n.timestamp >= start)
+
     def get_current_hot_news(self, platform: str) -> List[NewsInfo]:
-        return sorted(self.news_map[platform], lambda n: n.timestamp)
+        return self.news_map[platform]
     
-    def get_news(self, platform: str, start: datetime, end: datetime) -> List[NewsInfo]:
+    def get_news_during(self, platform: str, start: datetime, end: datetime) -> List[NewsInfo]:
         return filter_by(self.news_map[platform], lambda n: n.timestamp < end and n.timestamp >= start)
     
     def set_news(self, platform: str, news: List[NewsInfo]):

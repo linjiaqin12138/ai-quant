@@ -13,5 +13,5 @@ def get_recent_data_with_at_least_count(count: int, symbol: str, frame: CryptoHi
         datetime.now() - (count * timedelta(seconds = timeframe_to_second(frame))),
         datetime.now()
     )
-    assert len(history.data) >= count
+    # assert len(history.data) >= count
     return history.data

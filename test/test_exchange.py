@@ -17,11 +17,14 @@ def test_can_query_range_from_remote():
     assert res.data[0].timestamp == datetime(2024, 6, 29, 12, 0, 0, 0)
     assert res.data[-1].timestamp == datetime(2024, 6, 30, 11, 0, 0, 0)
 
-def test_cn_market_exchange():
+def test_cn_market_exchange_fetch_history():
     cn_market = CnMarketExchange()
     stock_symbol = '515060'
-    res = cn_market.fetch_ohlcv(symbol=stock_symbol, frame='1d', start=datetime(2024, 11, 1), end=datetime(2024, 11, 18, 1))
+    res = cn_market.fetch_ohlcv(symbol=stock_symbol, frame='1d', start=datetime(2024, 11, 1), end=datetime(2024, 11, 18, 1, 0, 0))
     assert len(res.data) == 11
+
+    res = cn_market.fetch_ohlcv(symbol=stock_symbol, frame='1d', start=datetime(2024, 11, 1), end=datetime(2024, 11, 18, 15, 30))
+    assert len(res.data) == 12 # 超过了收盘时间点，返回最后一根K线
 
     try:
         res = cn_market.fetch_ohlcv(symbol=stock_symbol, frame='1d', start=datetime(2024, 11, 1), end = datetime(2024, 11, 1))

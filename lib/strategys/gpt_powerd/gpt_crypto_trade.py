@@ -10,8 +10,9 @@ from ...model import CryptoOrder, Ohlcv
 from ...utils.retry import with_retry
 from ...utils.list import map_by
 from ...utils.number import mean
-from ...utils.time import dt_to_ts, to_utc_isoformat, minutes_ago, ts_to_dt
+from ...utils.time import dt_to_ts, minutes_ago, ts_to_dt
 from ...utils.news import render_news_in_markdown_group_by_time_for_each_platform
+from ...utils.ohlcv import detect_candle_patterns
 from ...adapter.database.session import SessionAbstract
 from ...adapter.exchange.crypto_exchange import BinanceExchange
 from ...adapter.gpt import GptAgentAbstract, get_agent_by_model
@@ -20,7 +21,7 @@ from ...modules.notification_logger import NotificationLogger
 from ...modules.strategy import BasicDependency, ParamsBase, BasicContext
 from ...modules.exchange_proxy import ExchangeOperationProxy
 from ..common import get_recent_data_with_at_least_count
-from .common import GptAdviceDict, round_to_5, GptReplyNotValid, validate_gpt_advice, calculate_technical_indicators
+from .common import GptAdviceDict, round_to_5, GptReplyNotValid, validate_gpt_advice, calculate_technical_indicators, format_ohlcv_list
 
 ContextDict = TypedDict('Context', {
     'account_usdt_amount': float,
@@ -112,7 +113,7 @@ class GptStrategyDependency(BasicDependency):
         2. 使用中文总结分点叙述上述新闻内容
         """
         # 获取最新的加密货币新闻
-        latest_news = self.news_modules.get_news('cointime', start=start_time, end=end_time)
+        latest_news = self.news_modules.get_news_during('cointime', start=start_time, end=end_time)
         # 使用GPT代理生成总结
         sys_prompt = f"""
 你是一位资深的加密货币新闻分析师，擅长总结和分析加密货币新闻。
@@ -148,17 +149,6 @@ class Context(BasicContext[ContextDict]):
 def gpt_analysis(context: Context, data: List[Ohlcv]) -> GptAdviceDict:
     # 将数据转换为适合GPT分析的格式
     params = context.params
-    data_for_gpt = [
-        {
-            "timestamp": to_utc_isoformat(ohlcv.timestamp),
-            "open": ohlcv.open,
-            "high": ohlcv.high,
-            "low": ohlcv.low,
-            "close": ohlcv.close,
-            "volume": ohlcv.volume
-        } for ohlcv in data[-30:]  # 使用最近的30个数据点
-    ]
-
     coin_name = params.symbol.split('/')[0]
     # 计算一些技术指标
     indicator = calculate_technical_indicators(data, 20)
@@ -171,17 +161,14 @@ def gpt_analysis(context: Context, data: List[Ohlcv]) -> GptAdviceDict:
     future_rate = round_to_5(context.deps.future_data.get_latest_futures_price_info(context.params.symbol))
     trade_history_arr = context.get('operation_history')[-10:] if len(context.get('operation_history')) > 10 else context.get('operation_history')
     trade_history_text = "\n".join(map_by(trade_history_arr, lambda x: '- ' + format_operation_record(x, coin_name))) if len(trade_history_arr) > 0 else "暂无交易历史"
+    detected_patterns_text = "\n".join(map_by(detect_candle_patterns(data[-30:])['last_candle_patterns'], lambda p: f"{p['name']}: {p['description']}"))
+    if detected_patterns_text:
+        detected_patterns_text = "检测到以下K线形态：\n" + detected_patterns_text + "\n"
 
-    ohlcv_text = '\n'.join([
-        '[', 
-            ',\n'.join(
-                map_by(data_for_gpt, lambda x : '    ' + json.dumps(x))
-            ), 
-        ']'
-    ])
+    ohlcv_text = format_ohlcv_list(data)
     voter_system_prompt = f"""
 你是一位经验丰富的加密货币交易专家，擅长分析市场数据、技术指标和新闻信息，现在是一个新的交易日，并按照以下过程对{coin_name}进行技术分析
-1. 请分析过去30天OHLCV日线级别数据, 判断短期和长期趋势
+1. 请分析过去30天OHLCV日线级别数据, 结合检测到的K线形态, 判断短期和长期趋势
 2. 结合技术指标(如SMA、RSI、MACD、布林带等)，确认趋势强度和潜在反转信号
 3. 综合考虑新闻事件和市场情绪，评估外部因素对价格的影响；
 4. 回顾交易历史，结合当前仓位和风险偏好，给出具体的交易建议。
@@ -228,9 +215,9 @@ Example 3:
     voter_asking_prompt = f"""
 分析以下加密货币的信息，并给出交易建议：
 
-1. 最近{len(data_for_gpt)}天的OHLCV数据:
+1. 最近30天的OHLCV数据:
 {ohlcv_text}
-
+{detected_patterns_text}
 2. 过去一段时间的技术指标:
 - 过去{len(indicator.sma5)}天5日简单移动平均线 (SMA5): {indicator.sma5}
 - 过去{len(indicator.sma20)}天20日简单移动平均线 (SMA20): {indicator.sma20}
@@ -270,7 +257,6 @@ Example 3:
 
 请根据这些信息分析市场趋势，并给出具体的交易建议。
 """
-    #TODO: 添加历史交易情况
     context.deps.notification_logger.msg(voter_asking_prompt)
 
     vote_result: Dict[str, List[GptAdviceDict]] = { 'buy': [], 'sell':[], 'hold': [] }

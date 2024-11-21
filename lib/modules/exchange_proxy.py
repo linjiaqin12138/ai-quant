@@ -3,11 +3,12 @@ from datetime import datetime, timedelta
 from dataclasses import dataclass
 from typing import List
 
-from lib.model.common import OhlcvHistory, Order
+from lib.model import OhlcvHistory, Order, AShareOrder
+from lib.utils.string import random_id
 
 from ..adapter.exchange.api import ExchangeAPI
 from ..adapter.exchange.crypto_exchange import BinanceExchange
-from ..adapter.exchange.cn_market_exchange import cn_market
+from ..adapter.exchange.cn_market_exchange import cn_market as cn_market_adapter
 from ..adapter.database.ohlcv_cache import CryptoOhlcvCacheFetcher
 from ..adapter.database.cryto_trade import CryptoTradeHistory
 from ..adapter.database.session import SessionAbstract, SqlAlchemySession
@@ -119,10 +120,20 @@ class CryptoProxy(ExchangeOperationProxy):
 
 class CnExchangeProxy(ExchangeOperationProxy):
     def get_ohlcv_history(self, symbol: str, frame: CnStockHistoryFrame, start: datetime, end: datetime = datetime.now()) -> OhlcvHistory[CnStockHistoryFrame]:
-        return cn_market.fetch_ohlcv(symbol, frame, start, end)
+        return cn_market_adapter.fetch_ohlcv(symbol, frame, start, end)
     
     def create_order(self, symbol: str, type: OrderType, side: OrderSide, reason: str, amount: float = None, price: float = None, spent: float = None, comment: str = None) -> Order:
-        return None
+        return AShareOrder(
+            id=random_id(10),
+            timestamp=datetime.now(),
+            symbol=symbol,
+            type=type,
+            side=side,
+            price=price,
+            _amount=amount,
+            _cost = price * amount,
+            fees=[]
+        )
     
 crypto = CryptoProxy()
 cn_market = CnExchangeProxy()

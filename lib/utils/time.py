@@ -76,7 +76,7 @@ def get_utc_now_isoformat() -> str:
 def to_utc_isoformat(dt: datetime) -> str:
     utc_dt = dt.astimezone(timezone.utc)
     return utc_dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-    
+
 def utc_isoformat_to_dt(s: str) -> datetime:
     return datetime.fromisoformat(s)
 

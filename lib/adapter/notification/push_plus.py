@@ -14,7 +14,7 @@ class PushPlus(NotificationAbstract):
     def send(self, content: str, title: str = ''):
         logger.debug(f'Send Push Plus Notification: title: {title}, content: {content}')
     
-        @with_retry((requests.exceptions.Timeout),  API_MAX_RETRY_TIMES)
+        @with_retry((requests.exceptions.ConnectionError),  API_MAX_RETRY_TIMES)
         def retryable_part():
             res = requests.post(
                 "https://www.pushplus.plus/send",

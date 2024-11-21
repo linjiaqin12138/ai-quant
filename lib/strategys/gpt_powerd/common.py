@@ -1,13 +1,12 @@
 from dataclasses import dataclass
 from typing import Literal, TypedDict, Union, List
+import json
 
+from ...model import Ohlcv, OrderSide
+from ...utils.time import to_utc_isoformat
 from ...utils.string import extract_json_string
-
 from ...utils.list import map_by, filter_by
-
 from ...utils.number import remain_significant_digits, is_nan
-
-from ...model import Ohlcv
 from ...utils.ohlcv import (
     atr_info, boll_info, macd_info, sam20_info, 
     sam5_info, rsi_info, stochastic_oscillator_info
@@ -80,6 +79,25 @@ class TechnicalIndicators:
     stoch_d: List[float]         # KDJ指标中的D值
     atr: List[float]             # 平均真实波幅
 
+def format_ohlcv_list(ohlcv: List[Ohlcv], max_len: int = 30) -> str:
+    data_for_gpt = [
+        {
+            "timestamp": to_utc_isoformat(ohlcv.timestamp),
+            "open": ohlcv.open,
+            "high": ohlcv.high,
+            "low": ohlcv.low,
+            "close": ohlcv.close,
+            "volume": ohlcv.volume
+        } for ohlcv in ohlcv[-max_len:]  # 使用最近的30个数据点
+    ]
+    return '\n'.join([
+        '[', 
+            ',\n'.join(
+                map_by(data_for_gpt, lambda x : '    ' + json.dumps(x))
+            ), 
+        ']'
+    ])
+
 def calculate_technical_indicators(data: List[Ohlcv], data_length: int = 20) -> TechnicalIndicators:
     """
     计算常用技术指标
@@ -126,3 +144,15 @@ def calculate_technical_indicators(data: List[Ohlcv], data_length: int = 20) -> 
         'stoch_d': stoch_d,
         'atr': atr
     })
+
+class OperationRecord(TypedDict):
+    timestamp: int
+    price: float
+    action: OrderSide
+    amount: float
+    cost: float
+    position_ratio: float
+    summary: str
+
+    remaining_money: float
+    remaining_symbol: float

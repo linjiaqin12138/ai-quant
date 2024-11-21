@@ -1,9 +1,7 @@
 import json
 import logging
-import os
 
 from .config import get_log_level
-
 
 class JSONFormatter(logging.Formatter):
     def format(self, record):

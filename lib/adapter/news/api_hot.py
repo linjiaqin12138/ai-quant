@@ -66,7 +66,7 @@ def get_hot_news_of_platform(platform: HotNewsPlatform) -> List[NewsInfo]:
         return []
     
     logger.info(f"Getting trend of platform {platform}")
-    @with_retry((requests.exceptions.Timeout, requests.exceptions.SSLError), API_MAX_RETRY_TIMES)
+    @with_retry((requests.exceptions.Timeout, requests.exceptions.ConnectionError), API_MAX_RETRY_TIMES)
     def retryable_part():
         return requests.get(endpoint_of(platform))
     

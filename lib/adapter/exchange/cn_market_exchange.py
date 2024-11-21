@@ -1,8 +1,12 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import akshare as ak
+import requests
+import urllib3
 
+from ...utils.retry import with_retry
+from ...config import API_MAX_RETRY_TIMES
 from ...model import CnStockHistoryFrame
-from ...utils.time import round_datetime_in_local_zone
+from ...utils.time import dt_to_ts, round_datetime_in_local_zone
 from ...model.common import OhlcvHistory, Order, OrderSide, OrderType, TradeTicker, Ohlcv
 from .api import ExchangeAPI
 
@@ -16,7 +20,6 @@ class CnMarketExchange(ExchangeAPI):
         Returns:
             str: 'stock' - A股股票
                  'etf' - ETF基金
-                 'index' - 指数
         """
         if symbol.startswith(('51', '15', '16')):  # ETF场内基金
             return 'etf'
@@ -38,13 +41,14 @@ class CnMarketExchange(ExchangeAPI):
             last=float(stock_data['最新价']),
         )
 
+    @with_retry((requests.exceptions.ConnectionError, requests.exceptions.Timeout), API_MAX_RETRY_TIMES)
     def fetch_ohlcv(self, symbol: str, frame: CnStockHistoryFrame, start: datetime, end: datetime = datetime.now()) -> OhlcvHistory[CnStockHistoryFrame]:
         """获取K线数据"""
-        start = round_datetime_in_local_zone(start, frame)
-        end = round_datetime_in_local_zone(end, frame)
+        rounded_start = round_datetime_in_local_zone(start, frame)
+        rounded_end = round_datetime_in_local_zone(end, frame)
         
-        if end <= start:
-            raise ValueError(f"结束时间({end})必须大于开始时间({start})")
+        if rounded_end <= rounded_start:
+            raise ValueError(f"结束时间({rounded_end})必须大于开始时间({rounded_start})")
             
         period_map = {
             '1d': 'daily',
@@ -60,18 +64,22 @@ class CnMarketExchange(ExchangeAPI):
             df = ak.fund_etf_hist_em(
                 symbol=symbol,
                 period=period,
-                start_date=start.strftime('%Y%m%d'),
-                end_date=end.strftime('%Y%m%d'),
+                start_date=rounded_start.strftime('%Y%m%d'),
+                end_date=rounded_end.strftime('%Y%m%d'),
                 adjust="qfq"
             )
         else:
             df = ak.stock_zh_a_hist(
                 symbol=symbol,
                 period=period,
-                start_date=start.strftime('%Y%m%d'),
-                end_date=end.strftime('%Y%m%d'),
+                start_date=rounded_start.strftime('%Y%m%d'),
+                end_date=rounded_end.strftime('%Y%m%d'),
                 adjust="qfq"
             )
+        
+        # 判断end是否超过UTC时间的早上7点半
+        end_in_utc = datetime.fromtimestamp(dt_to_ts(end) / 1000, tz=timezone.utc)
+        is_after_utc_730_in_a_day = frame == '1d' and end_in_utc.strftime('%Y-%m-%d') == end.strftime('%Y-%m-%d') and (end_in_utc.hour > 7 or (end_in_utc.hour ==7 and  end_in_utc.minute > 29))
         
         # 转换数据格式
         ohlcv_data = []
@@ -82,17 +90,18 @@ class CnMarketExchange(ExchangeAPI):
             else:
                 timestamp = datetime.combine(row['日期'], datetime.min.time())
             
-            if timestamp < end:
-                ohlcv_data.append(
-                    Ohlcv(
-                        round_datetime_in_local_zone(timestamp, tframe=frame),
-                        float(row['开盘']),
-                        float(row['最高']),
-                        float(row['最低']),
-                        float(row['收盘']),
-                        float(row['成交量'])
-                    )
-                )
+            ohlcv_obj = Ohlcv(
+                round_datetime_in_local_zone(timestamp, tframe=frame),
+                float(row['开盘']),
+                float(row['最高']),
+                float(row['最低']),
+                float(row['收盘']),
+                float(row['成交量'])
+            )
+            
+            # 如果end超过UTC时间的早上7点半，直接添加最后一根K线
+            if is_after_utc_730_in_a_day or timestamp < rounded_end:
+                ohlcv_data.append(ohlcv_obj)
             
         return OhlcvHistory(symbol=symbol, frame=frame, data=ohlcv_data)
 

@@ -4,20 +4,52 @@ from typing import List, Literal
 
 from ...model.news import NewsInfo
 from .cointime import get_news_of_cointime
+from .caixin import get_latest_news_of_caixin
 from .api_hot import HotNewsPlatform, get_hot_news_of_platform, ALL_HOT_NEWS_PLATFORMS
 
 class NewsFetcherApi(abc.ABC):
+    # @abc.abstractmethod
+    # def get_news_of_symbol_from(self, symbol: str, platform: str, start: datetime, end: datetime) -> List[NewsInfo]:
+    #     """获取指定时间开始关于某个个股/加密货币的新闻信息
+
+    #     Args:
+    #         platform (str): 新闻平台名称
+    #         symbol (str): 股票代码/加密货币名称
+    #         start (datetime): 开始时间
+
+    #     Returns:
+    #         List[NewsInfo]: 新闻信息列表，按照对应平台新闻发布时间戳从小到大进行排序
+
+    #     Raises:
+    #         可能的异常说明（如有）
+    #     """
+
     @abc.abstractmethod
-    def get_news(self, platform: str, start: datetime, end: datetime) -> List[NewsInfo]:
+    def get_news_from(self, platform: str, start: datetime) -> List[NewsInfo]:
+        """获取指定时间开始到现在的新闻
+
+        Args:
+            platform (str): 新闻平台名称
+            start (datetime): 开始时间
+
+        Returns:
+            List[NewsInfo]: 新闻信息列表，按照对应平台新闻发布时间戳从小到大进行排序
+
+        Raises:
+            可能的异常说明（如有）
+        """
+        pass
+    @abc.abstractmethod
+    def get_news_during(self, platform: str, start: datetime, end: datetime) -> List[NewsInfo]:
         """获取指定时间范围内的新闻信息
 
         Args:
             platform (str): 新闻平台名称
             start (datetime): 开始时间
             end (datetime): 结束时间
-abc
+
         Returns:
-            List[NewsInfo]: 新闻信息列表，按照新闻发布时间戳从小到大进行排序
+            List[NewsInfo]: 新闻信息列表，按照对应平台新闻发布时间戳从小到大进行排序
 
         Raises:
             可能的异常说明（如有）
@@ -42,7 +74,13 @@ abc
 
 # 具体实现类
 class NewsFetcher(NewsFetcherApi):
-    def get_news(self, platform: Literal['cointime'], start: datetime, end: datetime = datetime.now()) -> List[NewsInfo]:
+    def get_news_from(self, platform: Literal['caixin', 'cointime'], start: datetime) -> List[NewsInfo]:
+        if platform == 'caixin':
+            return get_latest_news_of_caixin(start)
+        else:
+            return get_news_of_cointime(start, datetime.now())
+    
+    def get_news_during(self, platform: Literal['cointime'], start: datetime, end: datetime = datetime.now()) -> List[NewsInfo]:
         return get_news_of_cointime(start, end)
 
     def get_current_hot_news(self, platform: HotNewsPlatform) -> List[NewsInfo]:

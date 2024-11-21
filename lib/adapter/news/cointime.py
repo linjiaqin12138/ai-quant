@@ -5,10 +5,15 @@ from curl_cffi import requests as curl_requests
 import curl_cffi
 
 from ...config import API_MAX_RETRY_TIMES, get_http_proxy
-from ...utils.retry import with_retry
+from ...logger import logger
 from ...model.news import NewsInfo
+from ...utils.retry import with_retry
+from ...utils.list import reverse
 from ...utils.time import days_ago, dt_to_ts, to_utc_isoformat, ts_to_dt, utc_isoformat_to_dt
 from ...utils.string import url_encode
+
+class ReplyIsNotJson(Exception):
+    pass 
 
 def get_news_of_cointime(start: datetime = days_ago(1), end: datetime = datetime.now()) -> List[NewsInfo]:
     """
@@ -27,7 +32,7 @@ def get_news_of_cointime(start: datetime = days_ago(1), end: datetime = datetime
     result = []
     last_timestamp = to_utc_isoformat(end)
 
-    @with_retry((curl_cffi.requests.exceptions.Timeout, curl_cffi.requests.exceptions.ConnectionError), API_MAX_RETRY_TIMES)
+    @with_retry((ReplyIsNotJson, curl_cffi.requests.exceptions.Timeout, curl_cffi.requests.exceptions.ConnectionError), API_MAX_RETRY_TIMES)
     def retryable_part():
         """
         可重试的API请求部分。
@@ -61,23 +66,34 @@ def get_news_of_cointime(start: datetime = days_ago(1), end: datetime = datetime
             'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36 Edg/129.0.0.0'
         }
         res = curl_requests.get(url, headers=headers, proxies={ 'http': get_http_proxy(), 'https': get_http_proxy() })
+        if res.status_code == 404:
+            logger.warning('Coin time news return 404')
+            return []
         res.raise_for_status()
-        rsp_body = res.json()
+        try:
+            rsp_body = res.json()
+        except:
+            raise ReplyIsNotJson(res.content[:100])
         assert rsp_body["code"] == 0, str(rsp_body)
         return rsp_body["data"]
     
     while True:
+        logger.debug(f'Query news from {last_timestamp}')
         news = retryable_part()
         # print(len(news))
         # map_by(news, lambda x: print(x['publishedAt'], ts_to_dt(dt_to_ts(utc_isoformat_to_dt(x["publishedAt"]))).strftime("%Y-%m-%dT%H:%M:%S.%f")))
         if not news:
-            break
+            logger.warning("No news found, returned")
+            return reverse(result)
 
         for n in news:
             news_timestamp = utc_isoformat_to_dt(n["publishedAt"])
+            is_outof_range = dt_to_ts(news_timestamp) < dt_to_ts(start)
+            logger.debug(f"{news_timestamp.isoformat()} {n['title']}, is in range: {not is_outof_range}")
             # 如果新闻早于指定时间则停止获取，转化为时间戳比较来避免时区问题（输入的start没时区但是news_timestamp有而且是utc)
-            if dt_to_ts(news_timestamp) < dt_to_ts(start):
-                return sorted(result, key=lambda x: x.timestamp)
+            if is_outof_range:
+                logger.warning("Query reached start, returned")
+                return reverse(result)
 
             result.append(NewsInfo(
                 news_id=n['itemId'],

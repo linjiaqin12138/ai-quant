@@ -31,6 +31,10 @@ class ContextApi(abc.ABC):
         return
     
     @abc.abstractmethod
+    def append(self, key: str, val: Any) -> None:
+        return 
+    
+    @abc.abstractmethod
     def increate(self, key: str, value: float | int) -> None:
         return
 
@@ -54,16 +58,6 @@ class BasicDependency:
         self.exchange = exchange or default_crypto
         self.notification_logger = notification
 
-    def __enter__(self):
-        self.session.begin()
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback_obj):
-        if exc_type and exc_value and traceback_obj:
-            self.session.rollback()
-        else:
-            self.session.commit()
-
 CT = TypeVar('ContextTypeDict', bound=dict)
 class BasicContext(ContextApi, Generic[CT]):
     def __init__(self, id: str, deps: BasicDependency):
@@ -83,6 +77,11 @@ class BasicContext(ContextApi, Generic[CT]):
         self.is_dirt = True
         self._context[key] = value
 
+    def append(self, key: str, val: Any) -> None:
+        assert self._context.get(key) is not None, f'{key} is not exist in context'
+        assert isinstance(self._context[key], list), f'{key} is not a value of list'
+        self.set(key, self._context[key] + [val])
+    
     def increate(self, key: str, value: float | int) -> None:
         assert self._context.get(key) is not None, f'{key} is not exist in context'
         assert isinstance(self._context[key], (int, float)), f'{key} is not a value of number'
@@ -98,7 +97,7 @@ class BasicContext(ContextApi, Generic[CT]):
 
     def __enter__(self):
         if not self._context:
-            with self.deps:
+            with self.deps.session:
                 self._context = self.deps.kv_store.get(self.id)
                 if self._context is None: 
                     self._context = self._initial_context()
@@ -108,8 +107,9 @@ class BasicContext(ContextApi, Generic[CT]):
     def __exit__(self, exc_type, exc_value, traceback_obj):
         
         if self.is_dirt and exc_value is None:
-            with self.deps:
+            with self.deps.session:
                 self.deps.kv_store.set(self.id, self._context)
+                self.deps.session.commit()
                 self.is_dirt = False
         
         if exc_type and exc_value and traceback_obj:

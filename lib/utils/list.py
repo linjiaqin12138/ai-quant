@@ -17,5 +17,8 @@ def group_by(arr: List[T], grouper: Callable[[T], str]) -> Dict[str, List[T]]:
         result[key].append(item)
     return result
     
+def reverse(arr: List[T]) -> List[T]:
+    return list(reversed(arr))
+
 def random_pick(arr: List[T]) -> T:
     pass 

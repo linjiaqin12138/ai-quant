@@ -13,11 +13,27 @@ platform_name_map = {
     'sina': '新浪',
     'sina-news': '新浪新闻',
     '36kr': '36氪',
-    'cointime': 'Cointime'
+    'caixin': '财新数据',
+    'cointime': 'Cointime',
+    'eastmoney': '东方财富'
 }
 
 def get_platform_display_name(platform: str) -> str:
     return platform_name_map.get(platform, platform)
+
+def render_news_list(news_list: List[NewsInfo]) -> str:
+    """
+    Mainly for debug use
+    """
+    def news_item_text(news: NewsInfo) -> str:
+        res = f"[{news.timestamp.isoformat()}] [{news.title}] "
+        if news.description:
+            res += (news.description[:32] + '...') if len(news.description) > 35 else news.description
+        
+        return res
+
+    news_in_text = map_by(news_list, news_item_text)
+    return '\n'.join(news_in_text)
 
 def render_news_in_markdown_group_by_platform(news_list_per_platform: Dict[str, List[NewsInfo]]) -> str:
     def news_to_section(news: NewsInfo) -> str:
