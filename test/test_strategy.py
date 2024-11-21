@@ -1,16 +1,16 @@
 import pytest
 from datetime import timedelta, datetime
 
-from lib.adapter.gpt import get_agent_by_model
 from lib.model import CryptoOhlcvHistory, Ohlcv
+from lib.utils.list import map_by
+from lib.utils.time import dt_to_ts
+from lib.adapter.gpt import get_agent_by_model
 from lib.modules.notification_logger import NotificationLogger
 from lib.strategys.simple_turtle import simple_turtle, Params, Context
 from lib.strategys.macd_sar import macd_sar, ParamsBase, Context as MacdSarContext
 from lib.strategys.boll import boll, Params as BollParams, Context as BollContext
 from lib.strategys.gpt_powerd.gpt_crypto_trade import GptStrategyDependency, gpt as gpt_strategy, Context as GptContext, OtherDataFetcherAbstract, GptStrategyParams
 
-from lib.utils.list import map_by
-from lib.utils.time import dt_to_ts
 from strategy import strategy_test, StrategyTestOptions
 from fake_modules.fake_notification import FakeNotification
 from fake_modules.fake_db import get_fake_session, fake_kv_store_auto_commit

@@ -8,7 +8,7 @@ from ...utils.time import dt_to_ts
 from ...model import CryptoOhlcvHistory, CryptoHistoryFrame, Ohlcv, OhlcvHistory
 from ...logger import logger
 from .sqlalchemy import crypto_ohlcv_cache_tables
-from .session import ExecuteResult, SqlAlchemySession
+from .session import ExecuteResult, SessionAbstract
 
 F = TypeVar('F', bound=str)
 class OhlcvCacheFetcherAbstract(abc.ABC, Generic[F]):
@@ -19,7 +19,7 @@ class OhlcvCacheFetcherAbstract(abc.ABC, Generic[F]):
     def add(self, history: CryptoOhlcvHistory):
         raise NotImplementedError
 
-def range_query(table: Any, session: SqlAlchemySession, start: datetime, end: datetime, symbol: str) -> ExecuteResult:
+def range_query(table: Any, session: SessionAbstract, start: datetime, end: datetime, symbol: str) -> ExecuteResult:
     stmt = select(table).filter(
         and_(
             table.c.timestamp.between(dt_to_ts(start), dt_to_ts(end - timedelta(seconds=1))), 
@@ -31,7 +31,7 @@ def range_query(table: Any, session: SqlAlchemySession, start: datetime, end: da
     compiled = stmt.compile()
     return session.execute(compiled.string, compiled.params)
 
-def add_ohlcv(table: Any, session: SqlAlchemySession, history: OhlcvHistory):
+def add_ohlcv(table: Any, session: SessionAbstract, history: OhlcvHistory):
     for ohlcv in history.data:
         stmt = insert(table).values(
             symbol = history.symbol,
@@ -61,7 +61,7 @@ def map_to_ohlcv(rows: List[Any]) -> List[Ohlcv]:
     )
 
 class CryptoOhlcvCacheFetcher(OhlcvCacheFetcherAbstract[CryptoHistoryFrame]):
-    def __init__(self, session: SqlAlchemySession):
+    def __init__(self, session: SessionAbstract):
         self.session = session
 
     def range_query(self, symbol: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> CryptoOhlcvHistory:

@@ -3,8 +3,8 @@ import akshare as ak
 
 from ...model import CnStockHistoryFrame
 from ...utils.time import round_datetime_in_local_zone
-from .api import ExchangeAPI
 from ...model.common import OhlcvHistory, Order, OrderSide, OrderType, TradeTicker, Ohlcv
+from .api import ExchangeAPI
 
 class CnMarketExchange(ExchangeAPI):
     """A股交易所API实现"""

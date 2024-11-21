@@ -4,7 +4,7 @@ import json
 
 from sqlalchemy import select, update, delete
 
-from .session import SqlAlchemySession
+from .session import SessionAbstract
 from .sqlalchemy import events
 
 Value = Union[str | Dict | List]
@@ -20,9 +20,8 @@ class KeyValueStoreAbstract(abc.ABC):
     def delete(self, key: str):
         raise NotImplementedError
     
-
 class KeyValueStore(KeyValueStoreAbstract):
-    def __init__(self, session: SqlAlchemySession):
+    def __init__(self, session: SessionAbstract):
         self.session = session
 
     def _val_to_str(self, v: Value):

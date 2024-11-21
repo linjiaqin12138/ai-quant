@@ -129,8 +129,8 @@ cn_market = CnExchangeProxy()
 
 __all__ = [
     'crypto', 
-    'CryptoProxy',
-    'CryptoOperationAbstract',
     'cn_market',
+    'CryptoProxy',
+    'ExchangeOperationProxy',
     'ModuleDependency'
 ]

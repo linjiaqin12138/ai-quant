@@ -43,12 +43,12 @@ class BaiChuanAgent(GptAgentAbstract):
             logger.info(f"Baichuan API calling statusCode: {response.status_code}")
             logger.debug(f"Baichuan API response header {response.headers}")
             logger.debug(f"Baichuan API response body {response.text}")
-            return response
-        
-        rsp = retryable_part()
-        if rsp.status_code == 200:
-            rsp_body = rsp.json()
-            rsp_message = rsp_body["choices"][0]["message"]["content"]
-            self.chat_context.append({"role": "assistant", "content": rsp_message})
-            return rsp_message
-        raise self.BaiChuanApiFailed(f"API failed with error: {rsp.text}")
+
+            if response.status_code == 200:
+                rsp_body = response.json()
+                rsp_message = rsp_body["choices"][0]["message"]["content"]
+                self.chat_context.append({"role": "assistant", "content": rsp_message})
+                return rsp_message
+
+            raise self.BaiChuanApiFailed(f"API failed with error: {response.text}")
+        return retryable_part()

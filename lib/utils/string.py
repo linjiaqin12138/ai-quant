@@ -8,7 +8,7 @@ from urllib.parse import quote
 def random_id(length: int = 10) -> str:
     return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
 
-def hash(input_string: str) -> str:
+def hash_str(input_string: str) -> str:
     hash_object = sha256(input_string.encode())
     hash_hex = hash_object.hexdigest()
     return hash_hex

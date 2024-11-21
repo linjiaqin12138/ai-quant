@@ -5,7 +5,7 @@ from sqlalchemy import insert, select
 
 from ...utils.object import omit_keys
 
-from ...adapter.database.session import SqlAlchemySession
+from ...adapter.database.session import SessionAbstract
 from ...model import CryptoOrder
 from .sqlalchemy import trade_action_info
 
@@ -24,7 +24,7 @@ class CryptoTradeHistoryAbstract(abc.ABC):
         raise NotImplementedError
     
 class CryptoTradeHistory(CryptoTradeHistoryAbstract):
-    def __init__(self, session: SqlAlchemySession):
+    def __init__(self, session: SessionAbstract):
         self.session = session
     
     def get_trade_history_by_reason(self, reason: str) -> List[TradeHistoryWithComment]:

@@ -1,20 +1,21 @@
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 import json
 import abc
 from typing import List, Optional, TypedDict, Literal, Dict
-from datetime import datetime, timedelta
 
 import g4f
 
-from ...model import CryptoOrder, NewsInfo, Ohlcv
+from ...model import CryptoOrder, Ohlcv
 from ...utils.retry import with_retry
 from ...utils.list import map_by
-from ...utils.number import get_total_assets, mean
+from ...utils.number import mean
 from ...utils.time import dt_to_ts, to_utc_isoformat, minutes_ago, ts_to_dt
+from ...utils.news import render_news_in_markdown_group_by_time_for_each_platform
 from ...adapter.database.session import SessionAbstract
 from ...adapter.exchange.crypto_exchange import BinanceExchange
 from ...adapter.gpt import GptAgentAbstract, get_agent_by_model
-from ...adapter.news import news, NewsAbstract
+from ...adapter.news import news, NewsFetcherApi
 from ...modules.notification_logger import NotificationLogger
 from ...modules.strategy import BasicDependency, ParamsBase, BasicContext
 from ...modules.exchange_proxy import ExchangeOperationProxy
@@ -89,7 +90,7 @@ class GptStrategyDependency(BasicDependency):
                  voter_agents: List[GptAgentAbstract], 
                  exchange: ExchangeOperationProxy = None, 
                  session: SessionAbstract = None, 
-                 news_adapter: NewsAbstract = news, 
+                 news_adapter: NewsFetcherApi = news, 
                  future_data: OtherDataFetcherAbstract = None
                  ):
         super().__init__(notification = notification, exchange=exchange, session=session)
@@ -103,10 +104,7 @@ class GptStrategyDependency(BasicDependency):
         self._curr_voter_idx = (self._curr_voter_idx + 1) % len(self.voter_agents)
         return self.voter_agents[self._curr_voter_idx]
 
-    def _get_latest_crypto_news(self) -> List[NewsInfo]:
-        return self.news_modules.get_latest_news_of_platform('cointime')
-    
-    def gpt_summary_news(self, coin_name: str) -> str:
+    def gpt_summary_news(self, coin_name: str, start_time: datetime, end_time: datetime) -> str:
         """
         使用GPT总结最新的加密货币新闻，返回总结后的文本
 
@@ -114,7 +112,7 @@ class GptStrategyDependency(BasicDependency):
         2. 使用中文总结分点叙述上述新闻内容
         """
         # 获取最新的加密货币新闻
-        latest_news = self._get_latest_crypto_news()
+        latest_news = self.news_modules.get_news('cointime', start=start_time, end=end_time)
         # 使用GPT代理生成总结
         sys_prompt = f"""
 你是一位资深的加密货币新闻分析师，擅长总结和分析加密货币新闻。
@@ -128,10 +126,11 @@ class GptStrategyDependency(BasicDependency):
     - {coin_name}币的相关新闻
     - {coin_name}项目的最新进展
 
-2. 发给你的新闻内容是json格式，请使用中文对上述内容进行总结，并以分点形式呈现。
+2. 请使用中文对上述内容进行总结，并以分点形式呈现。
         """
         self.news_summary_agent.set_system_prompt(sys_prompt)
-        return self.news_summary_agent.ask(json.dumps([{'title': news.title, 'description': news.description} for news in latest_news], ensure_ascii=False))
+        news_in_md = render_news_in_markdown_group_by_time_for_each_platform({ 'cointime': latest_news })
+        return self.news_summary_agent.ask(news_in_md)
         
 class Context(BasicContext[ContextDict]):
     deps: GptStrategyDependency
@@ -163,8 +162,8 @@ def gpt_analysis(context: Context, data: List[Ohlcv]) -> GptAdviceDict:
     coin_name = params.symbol.split('/')[0]
     # 计算一些技术指标
     indicator = calculate_technical_indicators(data, 20)
-    # 获取最新的加密货币新闻
-    latest_news = context.deps.gpt_summary_news(coin_name)
+    # 获取过去一天的加密货币新闻
+    latest_news = context.deps.gpt_summary_news(coin_name, data[-1].timestamp, data[-1].timestamp + timedelta(days=1))
    
     global_long_short_account = context.deps.future_data.get_u_base_global_long_short_account_ratio(symbol=context.params.symbol)
     top_long_short_account = context.deps.future_data.get_u_base_top_long_short_account_ratio(symbol=context.params.symbol)

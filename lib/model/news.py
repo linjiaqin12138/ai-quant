@@ -7,10 +7,10 @@ from typing import Optional
 class NewsInfo:
     news_id: str
     title: str
-    description: Optional[str]
     timestamp: datetime
     url: str
     platform: str
 
-    reason: Optional[str]
-    mood: Optional[float]
+    description: Optional[str] = None
+    reason: Optional[str] = None
+    mood: Optional[float] = None

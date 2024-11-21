@@ -10,7 +10,7 @@ from lib.modules.strategy import BasicContext, BasicDependency, ParamsBase, Stra
 from lib.modules.exchange_proxy import  crypto
 from lib.utils.ohlcv import boll_info, macd_info, sar_info, to_df
 
-from fake_modules.fake_db import fake_session
+from fake_modules.fake_db import get_fake_session
 from fake_modules.fake_notification import FakeNotification
 from fake_modules.fake_exchange_proxy import fake_exchange
 
@@ -33,7 +33,7 @@ class StrategyTestOptions:
     draw: DrawOptions
 
 def strategy_test(strategy_func: StrategyFunc, test_options: StrategyTestOptions, params: ParamsBase, contextClass: Type[BasicContext]):
-    stub_deps = BasicDependency(exchange=fake_exchange, session = fake_session, notification=NotificationLogger('Fake Notification', notification=FakeNotification()))
+    stub_deps = BasicDependency(exchange=fake_exchange, session = get_fake_session(), notification=NotificationLogger('Fake Notification', notification=FakeNotification()))
 
     ohlcv_datas = crypto.get_ohlcv_history(params.symbol, params.data_frame, test_options.from_time, test_options.end_time)
     df = to_df(ohlcv_datas.data)

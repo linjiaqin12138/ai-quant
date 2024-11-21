@@ -1,18 +1,10 @@
-import os
-import abc
-
 import requests
 
-from ..config import get_push_token, API_MAX_RETRY_TIMES
-from ..logger import logger
-from ..utils.retry import with_retry
+from ...config import get_push_token, API_MAX_RETRY_TIMES
+from ...logger import logger
+from ...utils.retry import with_retry
 
-class NotificationAbstract(abc.ABC):
-
-    @abc.abstractmethod
-    def send(self, content: str, title: str = ''):
-        raise NotImplementedError
-
+from .api import NotificationAbstract
 
 class PushPlus(NotificationAbstract):
     def __init__(self):
@@ -22,10 +14,10 @@ class PushPlus(NotificationAbstract):
     def send(self, content: str, title: str = ''):
         logger.debug(f'Send Push Plus Notification: title: {title}, content: {content}')
     
-        @with_retry((requests.exceptions.Timeout), API_MAX_RETRY_TIMES)
+        @with_retry((requests.exceptions.Timeout),  API_MAX_RETRY_TIMES)
         def retryable_part():
             res = requests.post(
-                "http://www.pushplus.plus/send",
+                "https://www.pushplus.plus/send",
                 {
                     "token": self.token,
                     "content": content,
@@ -41,4 +33,3 @@ class PushPlus(NotificationAbstract):
             #TODO identify retryable error by document and network failure and add retry 
         
         return retryable_part()
-    
