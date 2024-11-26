@@ -128,7 +128,7 @@ class OtherDataFetcher(OhterDataFetcherApi):
         this_year = datetime.now().strftime('%Y')
         today = datetime.now().strftime('%Y-%m-%d')
         with self.session:
-            cache_key = self.kv_store.get(f"{this_year}_china_holiday")
+            cache_key = f"{this_year}_china_holiday"
             holiday_list: List[str] | None= self.kv_store.get(cache_key)
             if holiday_list is None:
                 holiday_list = list(requests.get("https://api.jiejiariapi.com/v1/holidays/2024").json().keys())
@@ -162,10 +162,10 @@ class OtherDataFetcher(OhterDataFetcherApi):
         news_info_list = []
         for _, row in filtered_df.iterrows():
             news_info = NewsInfo(
-                title=row['标题'], 
+                title=row['新闻标题'], 
                 timestamp=row['发布时间'],
-                description=row['内容'], 
-                news_id = hash_str(row['标题']),
+                description=row['新闻内容'], 
+                news_id = hash_str(row['新闻标题']),
                 url = row['新闻链接'],
                 platform = 'eastmoney'
             )
@@ -186,7 +186,7 @@ class Dependency(BasicDependency):
         ):
         super().__init__(notification = notification, exchange=exchange or cn_market, session=session)
         self.news = news_api
-        self.other_data_api = other_data_api or OtherDataFetcher()
+        self.other_data_api = other_data_api or OtherDataFetcher(self.session)
         self.voter_gpt_agents = decision_voters_gpt_agents
         self._curr_voter_idx = 0
 

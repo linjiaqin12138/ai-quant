@@ -2,11 +2,14 @@ import pytest
 
 from lib.adapter.gpt import get_agent_by_model
 from lib.utils.list import map_by
-from lib.strategys.gpt_powerd.gpt_ashare_trade import Params, Dependency, Context, strategy
+from lib.utils.time import hours_ago
+from lib.strategys.gpt_powerd.gpt_ashare_trade import Params, Dependency, Context, strategy, OtherDataFetcher
 
 from fake_modules.fake_db import get_fake_session
 from fake_modules.fake_notification import fake_notification_logger
 
+def test_get_symbol_news():
+    OtherDataFetcher(get_fake_session()).get_symbol_news("159768", hours_ago(24))
 
 @pytest.mark.skip(reason="Temporarily disabled for development")
 def test_ashare_gpt_strategy():
