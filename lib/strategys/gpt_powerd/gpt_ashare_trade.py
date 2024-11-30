@@ -79,7 +79,7 @@ GptAdviceDict = Union[
     }),
 ]
 
-def validate_gpt_advice(advice: str, max_lots: float, max_sell_amount: float) -> GptAdviceDict:
+def validate_gpt_advice(advice: str, max_buy_lots: float, max_sell_lots: float) -> GptAdviceDict:
     try:
         advice_json = extract_json_string(advice)
         assert isinstance(advice_json, dict), "GPT回复必须是一个字典格式"
@@ -89,16 +89,16 @@ def validate_gpt_advice(advice: str, max_lots: float, max_sell_amount: float) ->
         assert isinstance(advice_json['reason'], str), "'reason'字段必须是字符串类型"
         if advice_json['action'] != 'hold':
             assert 'summary' in advice_json, f"{advice_json['action']}操作必须包含'summary'字段"
-        if advice_json['action'] == 'buy':
-            assert 'lots' in advice_json, "买入操作缺少'lots'字段"
-            assert isinstance(advice_json['lots'], int), "'cost'字段必须是整数类型"
+        if advice_json['action'] in ['buy', 'sell']:
+            assert 'lots' in advice_json, "缺少'lots'字段"
+            assert isinstance(advice_json['lots'], int), "'lots'字段必须是整数类型"
             assert advice_json['lots'] > 0, "'lots'必须大于0"
-            assert advice_json['lots'] <= max_lots, f"买入手数超过最大可买手数"
-        elif advice_json['action'] == 'sell':   
-            assert 'amount' in advice_json, "卖出操作缺少'amount'字段"
-            assert isinstance(advice_json['amount'], float), "'amount'字段必须是浮点数类型"
-            assert advice_json['amount'] > 0, "'amount'必须大于0"
-            assert advice_json['amount'] <= max_sell_amount, f"卖出数量{advice_json['amount']}超过持仓数量{max_sell_amount}"
+
+            if advice_json['action'] == 'buy':
+                assert advice_json['lots'] <= max_buy_lots, f"买入手数超过最大可买手数"
+            if advice_json['action'] == 'sell':
+                assert advice_json['lots'] <= max_sell_lots, f"卖出手数超过最大可买手数"
+
         return advice_json
     except Exception as err:
         raise GptReplyNotValid(err)
@@ -131,7 +131,7 @@ class OtherDataFetcher(OhterDataFetcherApi):
             cache_key = f"{this_year}_china_holiday"
             holiday_list: List[str] | None= self.kv_store.get(cache_key)
             if holiday_list is None:
-                holiday_list = list(requests.get("https://api.jiejiariapi.com/v1/holidays/2024").json().keys())
+                holiday_list = list(requests.get(f"https://api.jiejiariapi.com/v1/holidays/{this_year}").json().keys())
                 self.kv_store.set(cache_key, holiday_list)
                 self.session.commit()
             return today not in holiday_list
@@ -290,7 +290,7 @@ def construct_gpt_question(
 
 5. 当前仓位信息:
 - 余额: {available_money}RMB (最多可买{max_lots}手)
-- 持仓量: {available_stock} (价值约{cur_price * available_stock}RMB)
+- 持仓量: {available_stock} (价值约{cur_price * available_stock}RMB，可卖{available_stock / 100}手)
 
 6. 最近10次以内交易历史
 {history_text} 
@@ -309,8 +309,7 @@ def construct_system_prompt(risk_prefer: str, strategy_prefer: str) -> str:
 
 请基于提供的数据和信息，给出一个JSON格式的响应，包含下一步的行动建议（"buy"、"sell"或"hold"），具体的交易数量，以及相应的理由，JSON字段如下：
 - action: 取值只有三种情况："buy"（买入）, "sell"（卖出）或 "hold"（不动）
-- lots: (Required when action is buy) 买入手数，必须是整数，1手=100股
-- shares: (Required when action is sell) 卖出股数，必须是整数，可以不是100的整数倍
+- lots: (Required when action is buy/sell) 交易手数，必须是整数，1手=100股
 - reason: 做出此决定的详细分析报告，必须是字符串，必须包括：
     1. OHLCV数据分析（包括成交量、换手率分析）
     2. 技术指标分析（必须对所有指标进行评价：SMA,RSI,BOLL,MACD,KDJ,ATR）
@@ -331,25 +330,21 @@ Example 1:
 Example 2:
 {{
     "action": "sell",
-    "shares": 15000,
+    "lots": 150,
     "summary": "大盘调整，板块走弱，降低仓位规避风险",
-    "reason": "OHLCV分析：股价突破前期高点3.85元后量能不足，5日成交量持续萎缩，换手率降至1%以下；技术指标分析：SMA5(3.82)下穿SMA20(3.75)，RSI(72)处于超买区域，布林带(上轨3.88/中轨3.75/下轨3.62)显示价格触及上轨，MACD形成死叉，KDJ指标%K(85)高于%D(78)且开始向下，ATR(0.12)显示波动加大；市场环境：上证指数连续3日下跌，两市成交量萎缩，北向资金转为净流出，行业板块普跌；消息面：监管层表态防范市场风险，央行货币政策边际收紧；交易历史回顾：前期高位未能及时减仓导致回撤，本次应及时止盈；仓位分析：当前持仓占比70%，建议降至30%，卖出15000股。"
+    "reason": "OHLCV分析：股价突破前期高点3.85元后量能不足，5日成交量持续萎缩，换手率降至1%以下；技术指标分析：SMA5(3.82)下穿SMA20(3.75)，RSI(72)处于超买区域，布林带(上轨3.88/中轨3.75/下轨3.62)显示价格触及上轨，MACD形成死叉，KDJ指标%K(85)高于%D(78)且开始向下，ATR(0.12)显示波动加大；市场环境：上证指数连续3日下跌，两市成交量萎缩，北向资金转为净流出，行业板块普跌；消息面：监管层表态防范市场风险，央行货币政策边际收紧；交易历史回顾：前期高位未能及时减仓导致回撤，本次应及时止盈；仓位分析：当前持仓占比70%，建议降至30%，卖出150手。"
 }}
 Example 3:
 {{
     "action": "hold",
     "reason": "OHLCV分析：价格在20日均线附近震荡整理，成交量温和，换手率保持稳定；技术指标分析：SMA5(3.45)与SMA20(3.42)基本平行，RSI(52)处于中性位置，布林带(上轨3.58/中轨3.42/下轨3.26)呈现横向收敛，MACD无明显金叉死叉，KDJ指标在50轴附近交织，ATR(0.06)显示波动率较低；市场环境：上证指数横盘整理，市场成交量平稳，北向资金小幅波动，行业景气度稳定；消息面：无重大利空利好消息；交易历史回顾：震荡市保持仓位稳定收益最佳；仓位分析：当前仓位50%，风险收益平衡，维持现有仓位。"
 }}
-```
-
 注意：
-1. 交易规则：
-   - 买入必须以"手"为单位（1手=100股），lots字段必须是整数
-   - 卖出可以不以"手"为单位，shares字段可以是任意整数
-   - 交易数量不得超过账户可用资金或持仓量
-2. 交易偏好：我是一名{risk_prefer or "风险厌恶型"}投资者
-3. 交易策略：我倾向于{strategy_prefer or "中长期投资"}策略
-4. 务必输出JSON格式的回复
+    1. 买入和卖出都必须以"手"为单位（1手=100股），lots字段必须是整数
+    2. 交易手数数量不得超过可买手数或可卖手数
+    3. 交易偏好：我是一名{risk_prefer or "风险厌恶型"}投资者
+    4. 交易策略：我倾向于{strategy_prefer or "中长期投资"}策略
+    5. 务必输出JSON格式的回复
 """
 
 gpt_retry_decorator = with_retry((GptReplyNotValid, g4f.errors.RetryProviderError, g4f.errors.RateLimitError, g4f.errors.ResponseError, g4f.errors.ResponseStatusError, aiohttp.ClientResponseError), 3)
@@ -360,7 +355,7 @@ def gpt_analysis(context: Context, sys_prompt: str, req_prompt: str, max_lots: i
     agent.set_system_prompt(sys_prompt)
     gpt_reply = agent.ask(req_prompt)
     context.deps.notification_logger.msg("\n" + f"=========={agent.model}=============" + "\n" + f"{gpt_reply}")
-    return validate_gpt_advice(gpt_reply, max_lots, context.get('account_symbol_amount'))
+    return validate_gpt_advice(gpt_reply, max_lots, context.get('account_symbol_amount') / 100)
 
 @gpt_retry_decorator
 def gpt_news_summary(context: Context, news_text: str, symbol_info: SymbolInfo, symbol: str):

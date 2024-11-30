@@ -44,7 +44,7 @@ class G4fAgent(GptAgentAbstract):
                 frequency_penalty=self.params.get('frequency_penalty'),
                 presence_penalty=self.params.get('presence_penalty')
             )
-            logger.debug(f"GPT response detailes {rsp.to_json()}")
+            logger.debug(f"GPT response detailes {rsp}")
             rsp_message = rsp.choices[0].message.content or ''
             # G4F 有时候response会是一个JSON，{"code": 200, "status": true, "model": "gpt-3.5-turbo", "gpt": "......."}
             try_extracted_json = extract_json_string(rsp_message)

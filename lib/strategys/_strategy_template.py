@@ -9,9 +9,10 @@ from .common import get_recent_data_with_at_least_count
 
 ContextDict = TypedDict('Context', {
     'account_money_amount': float,
-    'account_symbol_amount': float
+    'account_symbol_amount': float,
 })
 
+# 1. 看下这里需不需要补充额外的参数
 @dataclass
 class Params(ParamsBase):
     pass
@@ -26,12 +27,15 @@ class Context(BasicContext[ContextDict]):
         self.params = params
 
     def _initial_context(self) -> ContextDict:
+        # 2. 看下初始化的运行上下文是否需要额外的参数，同时修改ContextDict定义
         return {
             'account_money_amount': self.params.money,
             'account_symbol_amount': 0
         }
     
+    # 3. 看下买入卖出函数的参数是否需要根据策略调整参数列表，必须增加买入卖出的理由等
     def buy(self, cost: float):
+        # 4. 修改一下Strategy的Slogan，sell函数也是
         order = self.deps.exchange.create_order(self.params.symbol, 'market', 'buy', '<Strategy Slogan>', spent=cost, comment='')
         self.increate('account_symbol_amount', order.get_amount(True))
         self.decreate('account_money_amount', order.get_cost(True))
@@ -47,10 +51,10 @@ class Context(BasicContext[ContextDict]):
 
 def strategy(context: Context):
     params: Params = context.params
-    deps = context.deps
-
+    deps = context.deps 
     data = get_recent_data_with_at_least_count(32, params.symbol, params.data_frame, deps.exchange)
    
+    # 5. 补充你的策略决策代码，并根据决策结果调用buy/sell函数进行交易
     # 分析决策
     result = {  }
 

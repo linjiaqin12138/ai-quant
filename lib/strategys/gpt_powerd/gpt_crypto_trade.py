@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-import json
 import abc
 from typing import List, Optional, TypedDict, Literal, Dict
 
@@ -16,7 +15,7 @@ from ...utils.ohlcv import detect_candle_patterns
 from ...adapter.database.session import SessionAbstract
 from ...adapter.exchange.crypto_exchange import BinanceExchange
 from ...adapter.gpt import GptAgentAbstract, get_agent_by_model
-from ...adapter.news import news, NewsFetcherApi
+from ...modules.news_proxy import news_proxy, NewsFetcherApi
 from ...modules.notification_logger import NotificationLogger
 from ...modules.strategy import BasicDependency, ParamsBase, BasicContext
 from ...modules.exchange_proxy import ExchangeOperationProxy
@@ -91,7 +90,7 @@ class GptStrategyDependency(BasicDependency):
                  voter_agents: List[GptAgentAbstract], 
                  exchange: ExchangeOperationProxy = None, 
                  session: SessionAbstract = None, 
-                 news_adapter: NewsFetcherApi = news, 
+                 news_adapter: NewsFetcherApi = news_proxy, 
                  future_data: OtherDataFetcherAbstract = None
                  ):
         super().__init__(notification = notification, exchange=exchange, session=session)
