@@ -1,6 +1,7 @@
 
 from typing import TypeVar, Callable, Tuple, Any
 import time
+
 from ..logger import logger
 
 G = TypeVar("G")

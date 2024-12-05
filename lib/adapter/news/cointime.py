@@ -7,7 +7,7 @@ import curl_cffi
 from ...config import API_MAX_RETRY_TIMES, get_http_proxy
 from ...logger import logger
 from ...model.news import NewsInfo
-from ...utils.retry import with_retry
+from ...utils.decorators import with_retry
 from ...utils.list import reverse
 from ...utils.time import days_ago, dt_to_ts, to_utc_isoformat, ts_to_dt, utc_isoformat_to_dt
 from ...utils.string import url_encode

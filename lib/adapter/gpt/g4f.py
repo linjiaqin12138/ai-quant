@@ -9,7 +9,7 @@ from g4f.errors import *
 
 from ...config import API_MAX_RETRY_TIMES, get_http_proxy, get_log_level
 from ...logger import logger
-from ...utils.retry import with_retry
+from ...utils.decorators import with_retry
 from ...utils.string import extract_json_string
 from .interface import GptAgentAbstract, GptSystemParams
 

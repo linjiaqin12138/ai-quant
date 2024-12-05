@@ -1,10 +1,13 @@
 from datetime import datetime, timedelta
+from typing import List
 
 from lib.utils.time import dt_to_ts, ts_to_dt
+from lib.adapter.database.kv_store import KeyValueStore
 from lib.adapter.database.news_cache import NewsInfo
 from lib.modules.news_proxy import NewsFetchProxy
 from fake_modules.fake_db import get_fake_session, fake_kv_store_auto_commit
 from fake_modules.fake_news import fakenews
+from fake_modules.fake_lock import create_lock_factory
 
 fake_news_list_of_cointime = [
     NewsInfo(
@@ -137,16 +140,17 @@ def test_get_news_during_with_cache():
     # Case1: 初始化本地cointime新闻缓存
     fakenews.set_news('cointime', fake_news_list)
     fake_session = get_fake_session()
-    fake_fetch_proxy = NewsFetchProxy(session=fake_session, news_fetcher=fakenews)
+    kv_store = KeyValueStore(fake_session)
+    fake_fetch_proxy = NewsFetchProxy(session=fake_session, news_fetcher=fakenews, api_lock_factory=create_lock_factory)
     cointime_news = fake_fetch_proxy.get_news_during('cointime', start=datetime(2024, 11, 20, 19, 43, 28), end= datetime(2024, 11, 20, 19, 57, 2))
     assert len(cointime_news) == 1 # 位于end的566116不会被查到
     assert cointime_news[0].news_id == '566108'
 
     with fake_session:
         assert len(fake_session.execute("select * from hot_news_cache").rows) == 1
-        local_time_range_context = fake_kv_store_auto_commit.get('cointime_news_cache_time_range')
+        local_time_range_context =kv_store.get('cointime_news_cache_time_range')
         # 只有一条新闻，时间范围头尾相同
-        assert local_time_range_context['start'] == local_time_range_context['end_close'] == dt_to_ts(datetime(2024, 11, 20, 19, 43, 28))
+        assert local_time_range_context['start'] == (local_time_range_context['end'] - 1) == dt_to_ts(datetime(2024, 11, 20, 19, 43, 28))
 
     # Case2: 本地cointime新闻缓存覆盖前一部分范围
     fakenews.set_news('cointime', fake_news_list[2:4]) # remove the cache news and will not be returned
@@ -155,11 +159,12 @@ def test_get_news_during_with_cache():
     assert cointime_news[0].news_id == '566108'
 
     with fake_session:
+        local_time_range_context =kv_store.get('cointime_news_cache_time_range')
         assert len(fake_session.execute("select * from hot_news_cache").rows) == 3
-        local_time_range_context = fake_kv_store_auto_commit.get('cointime_news_cache_time_range')
+        
         # 只有一条新闻，时间范围头尾相同
         assert local_time_range_context['start'] == dt_to_ts(fake_news_list[1].timestamp)
-        assert local_time_range_context['end_close'] == dt_to_ts(fake_news_list[3].timestamp)
+        assert local_time_range_context['end'] == dt_to_ts(fake_news_list[3].timestamp) + 1
 
     # Case3: 本地cointime新闻缓存覆盖整个范围
     fakenews.set_news('cointime', []) # 不需要API返回
@@ -172,10 +177,10 @@ def test_get_news_during_with_cache():
     assert len(cointime_news) == 3
     with fake_session:
         assert len(fake_session.execute("select * from hot_news_cache").rows) == 4
-        local_time_range_context = fake_kv_store_auto_commit.get('cointime_news_cache_time_range')
+        local_time_range_context =kv_store.get('cointime_news_cache_time_range')
         # 只有一条新闻，时间范围头尾相同
         assert local_time_range_context['start'] == dt_to_ts(fake_news_list[0].timestamp)
-        assert local_time_range_context['end_close'] == dt_to_ts(fake_news_list[3].timestamp)
+        assert local_time_range_context['end'] == dt_to_ts(fake_news_list[3].timestamp) + 1
 
     # Case5: 本地cointime新闻缓存覆盖中间一部分范围
     earlier_news = NewsInfo(
@@ -188,15 +193,32 @@ def test_get_news_during_with_cache():
     )
     fakenews.set_news('cointime', [earlier_news] + fake_news_list)
     cointime_news = fake_fetch_proxy.get_news_during('cointime', start=datetime(2024, 11, 20, 9, 1, 1), end=datetime(2024, 11, 20, 21, 0, 0))
-    # from lib.utils.news import render_news_list
-    # print(render_news_list(cointime_news))
     assert len(cointime_news) == 6
     with fake_session:
         assert len(fake_session.execute("select * from hot_news_cache").rows) == 6
-        local_time_range_context = fake_kv_store_auto_commit.get('cointime_news_cache_time_range')
+        local_time_range_context =kv_store.get('cointime_news_cache_time_range')
         # 只有一条新闻，时间范围头尾相同
         assert local_time_range_context['start'] == dt_to_ts(earlier_news.timestamp)
-        assert local_time_range_context['end_close'] == dt_to_ts(fake_news_list[-1].timestamp)
+        assert local_time_range_context['end'] == dt_to_ts(fake_news_list[-1].timestamp) + 1
+
+    # Case6: 本地cointime新闻缓存没有覆盖
+    latest_news = NewsInfo(
+        news_id='xxxxxx', 
+        title='USDT的日交易量几乎是比特币的两倍，且是以太坊的四倍', 
+        timestamp=datetime(2024, 11, 21, 20, 24, 5), 
+        url='https://cn.cointime.ai/flash-news/usdt-de-ri-jiao-yi-liang-ji-hu-shi-bi-te-bi-de-liang-bei-qie-shi-yi-tai-fang-de-si-bei-17850', 
+        platform='cointime', 
+        description='据X用户Rocelo Lopes分享的数据，USDT的日交易量几乎是比特币的两倍，且是以太坊的四倍。Tether首席执行官Paolo Ardoino转发了该推文。'
+    )
+    fakenews.set_news('cointime', fake_news_list + [latest_news])
+    cointime_news = fake_fetch_proxy.get_news_during('cointime', start=datetime(2024, 12, 1, 0, 0, 0), end=datetime(2024, 12, 2, 0, 0, 0))
+    assert len(cointime_news) == 0
+    with fake_session:
+        assert len(fake_session.execute("select * from hot_news_cache").rows) == 7
+        local_time_range_context =kv_store.get('cointime_news_cache_time_range')
+        # 只有一条新闻，时间范围头尾相同
+        assert local_time_range_context['start'] == dt_to_ts(earlier_news.timestamp)
+        assert local_time_range_context['end'] == dt_to_ts(latest_news.timestamp) + 1
 
     # Clean up
     with fake_session:
@@ -204,20 +226,50 @@ def test_get_news_during_with_cache():
         fake_session.execute("delete from events where `key`='cointime_news_cache_time_range'")
         fake_session.commit()
 
-def test_get_news_from_with_cache():
+def test_get_news_parallelly_with_only_one_api_call():
+    fakenews.set_news('cointime', fake_news_list_of_cointime)
     
-    fake_session = get_fake_session()
-    fake_fetch_proxy = NewsFetchProxy(session=fake_session, news_fetcher=fakenews)
+    def query_func(session):
+        try:
+            fake_fetch_proxy = NewsFetchProxy(session=session, news_fetcher=fakenews, api_lock_factory=create_lock_factory)
+            cointime_news = fake_fetch_proxy.get_news_during('cointime', fake_news_list_of_cointime[0].timestamp, fake_news_list_of_cointime[-1].timestamp + timedelta(seconds=1))
+            if len(cointime_news) == len(fake_news_list_of_cointime):
+                return
+        except Exception as err:
+            print(err)
 
+    import threading
+    threads: List[threading.Thread] = []
+    for _ in range(4):
+        session = get_fake_session()
+        threads.append(threading.Thread(target=query_func, args=(session,)))
+    
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert fakenews.get_call_times('get_news_during') == 1
+
+    # Clean up
+    with get_fake_session() as fake_session:
+        fake_session.execute('delete from hot_news_cache')
+        fake_session.execute("delete from events where `key`='cointime_news_cache_time_range'")
+        fake_session.commit()
+
+def test_get_news_from_with_cache():
+    fake_session = get_fake_session()
+    kv_store = KeyValueStore(fake_session)
+    fake_fetch_proxy = NewsFetchProxy(session=fake_session, news_fetcher=fakenews, api_lock_factory=create_lock_factory)
     # Case 1: init cointime cache
     fakenews.set_news('cointime', [fake_news_list_of_cointime[2]])
     cointime_news = fake_fetch_proxy.get_news_from('cointime', fake_news_list_of_cointime[2].timestamp)
     assert len(cointime_news) == 1
     with fake_session:
         assert len(fake_session.execute("select * from hot_news_cache").rows) == 1
-        local_time_range_context = fake_kv_store_auto_commit.get('cointime_news_cache_time_range')
+        local_time_range_context = kv_store.get('cointime_news_cache_time_range')
         # 只有一条新闻，时间范围头尾相同
-        assert local_time_range_context['start'] == local_time_range_context['end_close'] == dt_to_ts(fake_news_list_of_cointime[2].timestamp)
+        assert local_time_range_context['start'] == (local_time_range_context['end'] - 1) == dt_to_ts(fake_news_list_of_cointime[2].timestamp)
 
     # Case 2: 缓存覆盖前面一部分
     fakenews.set_news('cointime', fake_news_list_of_cointime[3:4])
@@ -225,21 +277,33 @@ def test_get_news_from_with_cache():
     assert len(cointime_news) == 2
     with fake_session:
         assert len(fake_session.execute("select * from hot_news_cache").rows) == 2
-        local_time_range_context = fake_kv_store_auto_commit.get('cointime_news_cache_time_range')
+        local_time_range_context = kv_store.get('cointime_news_cache_time_range')
         # 只有一条新闻，时间范围头尾相同
         assert local_time_range_context['start'] == dt_to_ts(fake_news_list_of_cointime[2].timestamp)
-        assert local_time_range_context['end_close'] == dt_to_ts(fake_news_list_of_cointime[3].timestamp)
+        assert local_time_range_context['end'] == dt_to_ts(fake_news_list_of_cointime[3].timestamp) + 1
 
     # Case 3: 缓存没有覆盖到查询范围，从缓存缺失的地方开始查
     fakenews.set_news('cointime', fake_news_list_of_cointime[4:])
+    with fake_session:
+        kv_store.set(
+            'cointime_news_cache_time_range', 
+            {
+                'query_start': 1732103822000, 
+                'query_end': 1732105445010, 
+                'start': 1732103822000, 
+                'end': 1732105445000
+            }
+        )
+        fake_session.commit()
+
     cointime_news = fake_fetch_proxy.get_news_from('cointime', fake_news_list_of_cointime[4].timestamp + timedelta(seconds=1))
     assert len(cointime_news) == 0
     with fake_session:
         assert len(fake_session.execute("select * from hot_news_cache").rows) == 3
-        local_time_range_context = fake_kv_store_auto_commit.get('cointime_news_cache_time_range')
+        local_time_range_context = KeyValueStore(fake_session).get('cointime_news_cache_time_range')
         # 只有一条新闻，时间范围头尾相同
         assert local_time_range_context['start'] == dt_to_ts(fake_news_list_of_cointime[2].timestamp)
-        assert local_time_range_context['end_close'] == dt_to_ts(fake_news_list_of_cointime[4].timestamp)
+        assert local_time_range_context['end'] == dt_to_ts(fake_news_list_of_cointime[4].timestamp) + 1
 
     # Case 4: 缓存没有覆盖一部分查询范围，缓存全部失效并全部用接口查询更新缓存
     fakenews.set_news('cointime', fake_news_list_of_cointime)
@@ -247,10 +311,10 @@ def test_get_news_from_with_cache():
     assert len(cointime_news) == 5
     with fake_session:
         assert len(fake_session.execute("select * from hot_news_cache").rows) == 5
-        local_time_range_context = fake_kv_store_auto_commit.get('cointime_news_cache_time_range')
+        local_time_range_context =kv_store.get('cointime_news_cache_time_range')
         # 只有一条新闻，时间范围头尾相同
         assert local_time_range_context['start'] == dt_to_ts(fake_news_list_of_cointime[0].timestamp)
-        assert local_time_range_context['end_close'] == dt_to_ts(fake_news_list_of_cointime[-1].timestamp)
+        assert local_time_range_context['end'] == dt_to_ts(fake_news_list_of_cointime[-1].timestamp) + 1
 
     with fake_session:
         fake_session.execute('delete from hot_news_cache')

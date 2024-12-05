@@ -3,13 +3,16 @@ import abc
 import json
 
 from sqlalchemy import select, update, delete
-
-from .session import SessionAbstract
+from ...logger import logger
+from .session import SessionAbstract, SqlAlchemySession
 from .sqlalchemy import events
 
 Value = Union[str | Dict | List]
 
 class KeyValueStoreAbstract(abc.ABC):
+    @abc.abstractmethod
+    def setnx(self, key: str, val: Value) -> bool:
+        raise NotImplementedError
     @abc.abstractmethod
     def set(self, key: str, val: Value):
         raise NotImplementedError
@@ -24,11 +27,31 @@ class KeyValueStore(KeyValueStoreAbstract):
     def __init__(self, session: SessionAbstract):
         self.session = session
 
+    def is_sqlite(self) -> bool:
+        return isinstance(self.session, SqlAlchemySession) and self.session.engine.url.drivername.find('sqlite') >= 0
+    
     def _val_to_str(self, v: Value):
         if type(v) == str:
             return v
         return json.dumps(v)
     
+    def setnx(self, key: str, val: Value) -> bool:
+        if self.is_sqlite():
+            compiled = select(events).where(events.c.key == key).compile()
+        else:
+            compiled = select(events).where(events.c.key == key).with_for_update().compile()
+        res = self.session.execute(compiled.string, compiled.params)
+        if len(res.rows) > 0:
+            return False
+        return self.session.execute(
+            "INSERT INTO events (`key`, `context`, `type`) VALUES (:key, :context, :type)", 
+            {
+                'key': key, 
+                'context': self._val_to_str(val), 
+                'type': 'string' if type(val) == str else 'json'
+            }
+        ).row_count > 0
+
     def delete(self, key: str):
         compiled = delete(events).where(events.c.key == key).compile()
         self.session.execute(compiled.string, compiled.params)
@@ -44,27 +67,13 @@ class KeyValueStore(KeyValueStoreAbstract):
         return None
 
     def set(self, key: str, val: Value):
-        compiled = select(events).where(events.c.key == key).compile()
-        res = self.session.execute(compiled.string, compiled.params)
-        val_in_str = self._val_to_str(val)
-        if len(res.rows) > 0:
-            if res.rows[0].context == val_in_str:
-                return
+        if not self.setnx(key, val):
             compiled = update(events).where(events.c.key == key).values(
-                context = val_in_str,
+                context = self._val_to_str(val),
                 type = 'string' if type(val) == str else 'json'
             ).compile()
-            self.session.execute(compiled.string, compiled.params)
-            return
-        else:
-            # compiled = insert(events).values(key = key, context = val_in_str, type = 'string' if type(val) == str else 'json').compile()
-            self.session.execute(
-                "INSERT INTO events (`key`, `context`, `type`) VALUES (:key, :context, :type)", 
-                {
-                    'key': key, 
-                    'context': val_in_str, 
-                    'type': 'string' if type(val) == str else 'json'
-                }
-            )
-            return
+            if self.session.execute(compiled.string, compiled.params).row_count > 0:
+                return
+            else:
+                logger.error(f'Failed to set update {key} with value {val}')
 

@@ -5,7 +5,7 @@ import requests
 
 from ...logger import logger
 from ...config import API_MAX_RETRY_TIMES, get_baichuan_token
-from ...utils.retry import with_retry
+from ...utils.decorators import with_retry
 from .interface import GptAgentAbstract, GptSystemParams
 
 class BaiChuanAgent(GptAgentAbstract):

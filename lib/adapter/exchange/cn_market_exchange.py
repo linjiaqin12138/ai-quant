@@ -3,7 +3,7 @@ import akshare as ak
 import requests
 import urllib3
 
-from ...utils.retry import with_retry
+from ...utils.decorators import with_retry
 from ...config import API_MAX_RETRY_TIMES
 from ...model import CnStockHistoryFrame
 from ...utils.time import dt_to_ts, round_datetime_in_local_zone

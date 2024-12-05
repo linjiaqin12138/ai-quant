@@ -9,7 +9,7 @@ from lib.model.news import NewsInfo
 from lib.modules.news_proxy import news_proxy
 from lib.logger import logger
 from lib.utils.list import map_by
-from lib.utils.retry import with_retry
+from lib.utils.decorators import with_retry
 from lib.utils.news import render_news_in_markdown_group_by_platform
 
 GPT_SYSTEM_PROMPT_FOR_SUMMARY = """

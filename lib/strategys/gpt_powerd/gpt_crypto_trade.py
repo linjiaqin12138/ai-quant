@@ -6,7 +6,7 @@ from typing import List, Optional, TypedDict, Literal, Dict
 import g4f
 
 from ...model import CryptoOrder, Ohlcv
-from ...utils.retry import with_retry
+from ...utils.decorators import with_retry
 from ...utils.list import map_by
 from ...utils.number import mean
 from ...utils.time import dt_to_ts, minutes_ago, ts_to_dt

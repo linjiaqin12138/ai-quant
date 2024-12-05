@@ -3,7 +3,7 @@ from typing import TypeVar
 import ccxt
 import requests
 
-from ....utils.retry import with_retry
+from ....utils.decorators import with_retry
 from ....config import API_MAX_RETRY_TIMES
 
 retry_decorator = with_retry((ccxt.errors.NetworkError, ccxt.errors.RequestTimeout, requests.ConnectionError), API_MAX_RETRY_TIMES)

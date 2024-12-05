@@ -2,7 +2,7 @@ import requests
 
 from ...config import get_push_token, API_MAX_RETRY_TIMES
 from ...logger import logger
-from ...utils.retry import with_retry
+from ...utils.decorators import with_retry
 
 from .api import NotificationAbstract
 

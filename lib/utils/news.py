@@ -43,7 +43,10 @@ def render_news_in_markdown_group_by_platform(news_list_per_platform: Dict[str, 
         return temp
     
     def platform_to_section(platform: str) -> str:
-        return f"\n## {get_platform_display_name(platform)}\n" + '\n'.join(map_by(news_list_per_platform[platform], news_to_section))
+        if len(news_list_per_platform[platform]) > 0:
+            return f"\n## {get_platform_display_name(platform)}\n" + '\n'.join(map_by(news_list_per_platform[platform], news_to_section))
+        return ''
+
     return "# 各大平台新闻\n" + '\n'.join(map_by(news_list_per_platform.keys(), platform_to_section))
 
 def render_news_in_markdown_group_by_time_for_each_platform(news_list_per_platform: Dict[str, List[NewsInfo]]) -> str:

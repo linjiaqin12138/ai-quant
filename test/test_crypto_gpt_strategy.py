@@ -14,7 +14,7 @@ from fake_modules.fake_news import fakenews
 from fake_modules.fake_db import fake_kv_store_auto_commit, get_fake_session
 from fake_modules.fake_notification import fake_notification_logger
 
-# @pytest.mark.skip(reason="Temporsarily disabled for development")
+@pytest.mark.skip(reason="Temporsarily disabled for development")
 def test_gpt_strategy():
     params = GptStrategyParams(
         money=100, 

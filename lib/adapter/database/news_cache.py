@@ -1,8 +1,8 @@
 from datetime import datetime
-from typing import Any, List, Union
+from typing import Any, List, Optional, Union
 import abc
 
-from sqlalchemy import select, insert
+from sqlalchemy import select, insert, delete
 
 from ...model import NewsInfo
 from ...utils.time import dt_to_ts, ts_to_dt
@@ -20,8 +20,13 @@ class HotNewsCacheAbstract(abc.ABC):
     @abc.abstractmethod
     def get_news_by_id(self, id: str) -> Union[NewsInfo, None]:
         raise NotImplementedError
+
     @abc.abstractmethod
-    def get_news_by_time_range(self, platform: str, start_time: datetime, end_time: datetime) -> list[NewsInfo]:
+    def delete_news_by_time_range(self, platform: str, start_time: Optional[datetime] = None, end_time: Optional[datetime] = None) -> int:
+        pass
+
+    @abc.abstractmethod
+    def get_news_by_time_range(self, platform: str, start_time: Optional[datetime] = None, end_time: Optional[datetime] = None) -> list[NewsInfo]:
         """根据时间范围和平台获取新闻列表
         
         Args:
@@ -74,12 +79,27 @@ class HotNewsCache(HotNewsCacheAbstract):
         self.add(news)
         return 1
     
-    def get_news_by_time_range(self, platform: str, start_time: datetime, end_time: datetime) -> List[NewsInfo]:
-        compiled = select(hot_news_cache).where(
-            hot_news_cache.c.timestamp >= dt_to_ts(start_time),
-            hot_news_cache.c.timestamp < dt_to_ts(end_time),
-            hot_news_cache.c.platform == platform
-        ).order_by(hot_news_cache.c.timestamp.asc()).compile()
+    def delete_news_by_time_range(self, platform: str, start_time: Optional[datetime] = None, end_time: Optional[datetime] = None) -> int:
+        conditions = [hot_news_cache.c.platform == platform]
         
+        if start_time is not None:
+            conditions.append(hot_news_cache.c.timestamp >= dt_to_ts(start_time))
+        
+        if end_time is not None:
+            conditions.append(hot_news_cache.c.timestamp < dt_to_ts(end_time))
+        
+        compiled = delete(hot_news_cache).where(*conditions).compile()
+        return self.session.execute(compiled.string, compiled.params).row_count
+
+    def get_news_by_time_range(self, platform: str, start_time: Optional[datetime] = None, end_time: Optional[datetime] = None) -> List[NewsInfo]:
+        conditions = [hot_news_cache.c.platform == platform]
+        
+        if start_time is not None:
+            conditions.append(hot_news_cache.c.timestamp >= dt_to_ts(start_time))
+        
+        if end_time is not None:
+            conditions.append(hot_news_cache.c.timestamp < dt_to_ts(end_time))
+
+        compiled = select(hot_news_cache).where(*conditions).order_by(hot_news_cache.c.timestamp.asc()).compile()
         res = self.session.execute(compiled.string, compiled.params)
         return map_by(res.rows, self._rows_to_news_info)

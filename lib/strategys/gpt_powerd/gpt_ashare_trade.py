@@ -13,7 +13,7 @@ from ...model import Ohlcv, Order
 from ...logger import logger
 from ...config import API_MAX_RETRY_TIMES
 from ...utils.list import map_by
-from ...utils.retry import with_retry
+from ...utils.decorators import with_retry
 from ...utils.string import extract_json_string, hash_str
 from ...utils.time import dt_to_ts, ts_to_dt
 from ...utils.ohlcv import detect_candle_patterns, PatternCalulationResults
@@ -217,8 +217,8 @@ class Context(BasicContext[ContextDict]):
         self.deps.notification_logger.msg(f'{order.timestamp} 花费', order.get_cost(True), '元买入', order.get_amount(True), '份')
         return
 
-    def sell(self, amount: float, price: int, summary: str):
-        order = self.deps.exchange.create_order(self.params.symbol, 'market', 'buy', f'CN_GPT_PLAN_{self.params.symbol}', price=price, amount=amount, comment=summary)
+    def sell(self, lots: float, price: int, summary: str):
+        order = self.deps.exchange.create_order(self.params.symbol, 'market', 'sell', f'CN_GPT_PLAN_{self.params.symbol}', price=price, amount=lots * 100, comment=summary)
         self.increate('account_money_amount', order.get_cost(True))
         self.decreate('account_symbol_amount', order.get_amount(True))
         self.append('operation_history', construct_operation(self, order, summary))
@@ -426,8 +426,8 @@ def strategy(context: Context):
         context.buy(buy_lots, data[-1].close, voter_result['buy'][0]['summary'])
 
     if len(voter_result['sell']) == 2:
-        sell_amount = int(mean(voter_result['sell'][0]['amount'], voter_result['sell'][1]['amount']))
-        context.sell(sell_amount, data[-1].close, voter_result['buy'][0]['summary'])
+        sell_lots = int(mean(voter_result['sell'][0]['lots'], voter_result['sell'][1]['lots']))
+        context.sell(sell_lots, data[-1].close, voter_result['sell'][0]['summary'])
 
 def run(cmd_params: dict, notification: NotificationLogger):
     params = Params(

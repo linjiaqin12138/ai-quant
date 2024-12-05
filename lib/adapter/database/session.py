@@ -46,6 +46,8 @@ class SqlAlchemySession(SessionAbstract):
 
     def begin(self):
         self.conn = self.engine.connect()
+        if self.engine.url.drivername.find('sqlite') >= 0:
+            self.execute("BEGIN IMMEDIATE TRANSACTION")
 
     def commit(self):
         self.conn.commit()
