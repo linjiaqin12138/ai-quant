@@ -1,4 +1,4 @@
-from typing import TypeVar
+from typing import TypeVar, Any
 from ...logger import logger
 from .api import *
 from .database import DbBasedDistributedLock, create_lock as create_db_lock

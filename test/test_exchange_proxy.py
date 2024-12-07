@@ -1,6 +1,6 @@
 from typing import List, Any
 from datetime import datetime, timedelta
-from sqlalchemy import create_engine
+import threading
 
 from lib.adapter.exchange.api import ExchangeAPI
 from lib.adapter.exchange.crypto_exchange.binance import BinanceExchange
@@ -10,6 +10,8 @@ from lib.modules.exchange_proxy import CryptoProxy, ModuleDependency
 from lib.adapter.database.sqlalchemy import metadata_obj
 from lib.utils.time import timeframe_to_second
 from lib.logger import logger
+from fake_modules.fake_lock import create_lock_factory
+from fake_modules.fake_db import get_fake_session
 
 class FakeExchange(ExchangeAPI):
     called_log = { 
@@ -70,15 +72,48 @@ class FakeExchange(ExchangeAPI):
             data = data
         )
 
+
+def test_only_call_once_when_parallel_call():
+    fake_exchange = FakeExchange()
+    
+    def fetch_data():
+        dependency = ModuleDependency(
+            session=get_fake_session(),
+            exchange=fake_exchange,
+            lock_factory=create_lock_factory
+        )
+        crypto_module = CryptoProxy(dependency)
+        crypto_module.get_ohlcv_history(
+            'BTC/USDT', '1h', 
+            datetime.now() - timedelta(days=1), datetime.now()
+        )
+
+    # Create two threads
+    thread1 = threading.Thread(target=fetch_data)
+    thread2 = threading.Thread(target=fetch_data)
+
+    # Start both threads
+    thread2.start()
+    thread1.start()
+    
+    # Wait for both threads to finish
+    thread1.join()
+    thread2.join()
+
+    # Assertions to check that fetch_ohlcv was called only once
+    assert fake_exchange.called_times('fetch_ohlcv') == 1
+    with get_fake_session() as session:
+        session.execute('DELETE FROM crypto_ohlcv_cache_1h')
+        session.commit()
+
+
 def test_can_query_range_from_remote_and_second_time_hit_cache():
-    # fetcher = OhlcvHistory('BTC/USDT', '1h')
-    engine = create_engine("sqlite+pysqlite:///:memory:", echo=False)
-    metadata_obj.create_all(engine)
     fake_excahnge = FakeExchange()
-    session = SqlAlchemySession(engine)
+    fake_excahnge.clear_log()
     dependency = ModuleDependency(
-        session = session,
+        session = get_fake_session(),
         exchange = fake_excahnge,
+        lock_factory = create_lock_factory
     )
     crypto_module = CryptoProxy(dependency)
     june_30th_11_clock = datetime(2024, 6, 30, 11, 56, 40, 290935)
@@ -185,7 +220,7 @@ def test_can_query_range_from_remote_and_second_time_hit_cache():
         ]
     ])
     
-    with session:
+    with get_fake_session() as session:
         result = session.execute('DELETE FROM crypto_ohlcv_cache_1h')
         assert result.row_count == 6 * 24 + 4
         fake_excahnge.clear_log()

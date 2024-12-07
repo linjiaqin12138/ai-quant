@@ -28,7 +28,6 @@ class NewsFetchProxy(NewsFetcherApi):
             with self.session:
                 info_key = f'{platform}_news_cache_time_range'
                 cache_time_range = self.kv_store.get(info_key)
-                print(cache_time_range)
                 if cache_time_range is None or start_ts < cache_time_range['query_start']:
                     if cache_time_range is not None:
                         logger.warning('尽量不要发生这种查询, 将会重新刷新数据库')
