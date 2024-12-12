@@ -6,13 +6,13 @@ from sqlalchemy.orm import sessionmaker
 
 from ...adapter.database.sqlalchemy import events
 from ...logger import logger
-from ...config import get_mysql_uri
+from ...config import get_database_uri
 from .api import DistributedLock, Options, AcquireLockFailed
 import json
 import uuid
 
 class DbBasedDistributedLock(DistributedLock):
-    def __init__(self, name: str, max_concurrent_access: int, expiration_time: int, db_url: str = get_mysql_uri()):
+    def __init__(self, name: str, max_concurrent_access: int, expiration_time: int, db_url: str = get_database_uri()):
         super().__init__(name = name, max_concurrent_access = max_concurrent_access, expiration_time = expiration_time)
         self.engine = create_engine(echo=False, url=db_url)
         self.Session = sessionmaker(bind=self.engine)

@@ -3,9 +3,9 @@ from sqlalchemy import MetaData, create_engine
 from sqlalchemy import Table, Text, Column, Enum, String, DateTime, DECIMAL, BigInteger
 
 from ...model import CryptoHistoryFrame
-from ...config import get_mysql_uri, get_create_table
+from ...config import get_database_uri, get_create_table
 
-engine = create_engine(get_mysql_uri())
+engine = create_engine(get_database_uri())
 
 metadata_obj = MetaData()
 
