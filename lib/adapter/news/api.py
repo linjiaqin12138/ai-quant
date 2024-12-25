@@ -5,6 +5,7 @@ from typing import List, Literal
 from ...model.news import NewsInfo
 from .cointime import get_news_of_cointime
 from .caixin import get_latest_news_of_caixin
+from .jin10 import get_news_of_jin10
 from .api_hot import HotNewsPlatform, get_hot_news_of_platform, ALL_HOT_NEWS_PLATFORMS
 
 class NewsFetcherApi(abc.ABC):
@@ -74,13 +75,17 @@ class NewsFetcherApi(abc.ABC):
 
 # 具体实现类
 class NewsFetcher(NewsFetcherApi):
-    def get_news_from(self, platform: Literal['caixin', 'cointime'], start: datetime) -> List[NewsInfo]:
+    def get_news_from(self, platform: Literal['caixin', 'cointime', 'jin10'], start: datetime) -> List[NewsInfo]:
         if platform == 'caixin':
             return get_latest_news_of_caixin(start)
+        elif platform == 'jin10':
+            return get_news_of_jin10(start, datetime.now())
         else:
             return get_news_of_cointime(start, datetime.now())
     
-    def get_news_during(self, platform: Literal['cointime'], start: datetime, end: datetime = datetime.now()) -> List[NewsInfo]:
+    def get_news_during(self, platform: Literal['cointime', 'jin10'], start: datetime, end: datetime = datetime.now()) -> List[NewsInfo]:
+        if platform == 'jin10':
+            return get_news_of_jin10(start, end)
         return get_news_of_cointime(start, end)
 
     def get_current_hot_news(self, platform: HotNewsPlatform) -> List[NewsInfo]:

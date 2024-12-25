@@ -41,10 +41,25 @@ def test_news_adapter_get_news_from_time():
 
 @pytest.mark.skip(reason="Temporarily disabled for devselopment")
 def test_group_by_news_by_time():
-    cointime_news = news.get_news_during('cointime', hours_ago(8), hours_ago(0))
-    print(len(cointime_news), cointime_news[0].timestamp, cointime_news[-1].timestamp, cointime_news[-1].timestamp - cointime_news[0].timestamp)
+    cases = {
+        'jin10': {
+            'from_h': 5,
+            'to_h': 0
+        },
+        'cointime': {
+            'from_h': 8,
+            'to_h': 0
+        }
+    }
+    for platform in cases:
+        context = cases[platform]
+        context['news_list'] = news.get_news_during(platform, hours_ago(context['from_h']),hours_ago(context['to_h']))
+        print(len(context['news_list']), context['news_list'][0].timestamp, context['news_list'][-1].timestamp, context['news_list'][-1].timestamp - context['news_list'][0].timestamp)
+    
+    # jin10的文本当中有特殊字符，直接print看不到后面的东西，其实没问题
     print(render_news_in_markdown_group_by_time_for_each_platform({
-        'cointime': cointime_news
+        'jin10': cases['jin10']['news_list'],
+        'cointime': cases['cointime']['news_list']
     }))
 
 @pytest.mark.skip(reason="Temporarily disabled for devselopment")

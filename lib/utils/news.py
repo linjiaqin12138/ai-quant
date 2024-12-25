@@ -1,7 +1,7 @@
 from typing import Dict, List
 
 from ..model.news import NewsInfo
-from .list import group_by, map_by
+from .list import filter_by, group_by, map_by
 
 platform_name_map = {
     'baidu': '百度',
@@ -15,7 +15,8 @@ platform_name_map = {
     '36kr': '36氪',
     'caixin': '财新数据',
     'cointime': 'Cointime',
-    'eastmoney': '东方财富'
+    'eastmoney': '东方财富',
+    'jin10': "金十数据",
 }
 
 def get_platform_display_name(platform: str) -> str:
@@ -69,24 +70,32 @@ def render_news_in_markdown_group_by_time_for_each_platform(news_list_per_platfo
         
         # 按小时分组新闻
         news_by_hour = group_by(news_list, get_hour_key)
-        
         # 对时间进行排序（从小到大）
         sorted_hours = sorted(news_by_hour.keys(), reverse=False)
-        
+        title_level = '###' if len(platforms) > 1 else '##'
         for hour in sorted_hours:
             hour_news = news_by_hour[hour]
-            result.append(f"{'###' if len(platforms) > 1 else '##'} {hour}\n")
-            
+            result.append(f"{title_level} {hour}\n")
+            news_have_title = filter_by(hour_news, lambda x: x.title)
+            news_have_no_title = filter_by(hour_news, lambda x: not x.title)
             # 添加该小时的所有新闻
-            for news in hour_news:
-                title_line = f"{'####' if len(platforms) > 1 else '###'} [{news.title}]({news.url})\n"
+            for news in news_have_title:
+                title_line = f"{'####' if len(platforms) > 1 else '###'}"
+                if news.url:
+                    title_line += f" [{news.title}]({news.url})\n"
+                else:
+                    title_line += f" {news.title}\n"
+                
                 result.append(title_line)
                 # 如果有描述，添加描述
                 if news.description:
                     result.append(f"{news.description}\n")
                 
                 result.append("\n")
-            
+            # 添加没有标题的新闻
+            if news_have_no_title:
+                result.append(f"{title_level} 其它新闻\n")
+                for news in news_have_no_title:
+                    result.append(f"- {news.description}\n")
         result.append("\n")
-    
     return "".join(result)
