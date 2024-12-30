@@ -1,6 +1,6 @@
 import os
 from typing import Dict
-
+from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv(verbose=True)
@@ -14,7 +14,7 @@ def get_create_table() -> bool:
 def get_database_uri() -> str:
     db_engine = os.environ.get("DB_ENGINE") or "sqlite"
     if db_engine == 'sqlite':
-        return f'sqlite:///./quant.sqlite'
+        return f'sqlite:///{Path.home() / "quant.sqlite"}'
     username = os.environ.get("MYSQL_USER") or "py"
     password = os.environ.get("MYSQL_PASS") or "wapwap12"
     hostname = os.environ.get("MYSQL_HOST") or "127.0.0.1"

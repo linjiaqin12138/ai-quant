@@ -1,6 +1,7 @@
 import pytest
 
 from lib.adapter.gpt import get_agent_by_model
+from lib.adapter.news import news
 from lib.utils.list import map_by
 from lib.utils.time import hours_ago
 from lib.strategys.gpt_powerd.gpt_ashare_trade import Params, Dependency, Context, strategy, OtherDataFetcher
@@ -18,7 +19,8 @@ def test_ashare_gpt_strategy():
         data_frame='1d', 
         symbol = '515060',
         strategy_prefer="中长期投资",
-        risk_prefer="风险喜好型"
+        risk_prefer="风险喜好型",
+        news_platforms=['caixin', 'eastmoney']
     )
     # fake_exchange.set_curr_data(
     #     OhlcvHistory(
@@ -33,8 +35,9 @@ def test_ashare_gpt_strategy():
 
     deps = Dependency(
         notification = fake_notification_logger,
-        decision_voters_gpt_agents=map_by(['qwen-2-72b', 'wizardlm-2-8x22b', 'llama-3.1-405b'], lambda m: get_agent_by_model(m)),
-        session=get_fake_session()
+        news_summary_gpt_agent=get_agent_by_model('paoluz-gpt-4o-mini'),
+        decision_voters_gpt_agents=map_by(['paoluz-gpt-4o-mini', 'paoluz-grok-beta', 'wizardlm-2-8x22b', 'llama-3.1-405b'], lambda m: get_agent_by_model(m)),
+        session=get_fake_session(),
     )
     with Context(params = params, deps=deps) as context:
         strategy(context)

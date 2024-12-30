@@ -38,14 +38,28 @@ def render_news_list(news_list: List[NewsInfo]) -> str:
 
 def render_news_in_markdown_group_by_platform(news_list_per_platform: Dict[str, List[NewsInfo]]) -> str:
     def news_to_section(news: NewsInfo) -> str:
-        temp = f"### [{news.title}]({news.url})\n"
+        temp = ''
+        if news.title and news.url:
+            temp = f"### [{news.title}]({news.url})\n"
+        elif news.title:
+            temp = f"### {news.title}\n"
         if news.description:
             temp += f"{news.description}\n"
         return temp
     
     def platform_to_section(platform: str) -> str:
         if len(news_list_per_platform[platform]) > 0:
-            return f"\n## {get_platform_display_name(platform)}\n" + '\n'.join(map_by(news_list_per_platform[platform], news_to_section))
+            news_with_title = filter_by(news_list_per_platform[platform], lambda n: n.title)
+            news_without_title = filter_by(news_list_per_platform[platform], lambda n: not n.title)
+            news_with_title = '\n'.join(map_by(news_with_title, news_to_section))
+            news_without_title = '\n'.join(map_by(news_without_title, news_to_section))
+            if news_without_title:
+                news_without_title = f'### 其它新闻 \n{news_without_title}'
+            return f"""
+## {get_platform_display_name(platform)}
+{news_with_title}
+{news_without_title}
+"""
         return ''
 
     return "# 各大平台新闻\n" + '\n'.join(map_by(news_list_per_platform.keys(), platform_to_section))

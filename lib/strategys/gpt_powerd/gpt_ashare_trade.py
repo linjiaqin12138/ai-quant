@@ -50,6 +50,7 @@ def format_operation_record(record: OperationRecord) -> str:
 class Params(ParamsBase):
     risk_prefer: str
     strategy_prefer: str
+    news_platforms: List[str]
 
 def is_etf(symbol: str):
     return symbol.startswith(('51', '15', '16'))
@@ -178,6 +179,7 @@ class Dependency(BasicDependency):
     def __init__(
             self,
             news_api: NewsFetcherApi = news_proxy,
+            news_summary_gpt_agent: GptAgentAbstract = get_agent_by_model('Baichuan3-Turbo'),
             decision_voters_gpt_agents: List[GptAgentAbstract] = [get_agent_by_model('Baichuan3-Turbo')],
             notification: NotificationLogger = None, 
             exchange: ExchangeOperationProxy = None, 
@@ -188,6 +190,7 @@ class Dependency(BasicDependency):
         self.news = news_api
         self.other_data_api = other_data_api or OtherDataFetcher(self.session)
         self.voter_gpt_agents = decision_voters_gpt_agents
+        self.news_summary_agent = news_summary_gpt_agent
         self._curr_voter_idx = 0
 
     def get_a_voter_gpt(self) -> GptAgentAbstract:
@@ -359,7 +362,7 @@ def gpt_analysis(context: Context, sys_prompt: str, req_prompt: str, max_lots: i
 
 @gpt_retry_decorator
 def gpt_news_summary(context: Context, news_text: str, symbol_info: SymbolInfo, symbol: str):
-    agent = context.deps.get_a_voter_gpt()
+    agent = context.deps.news_summary_agent
     agent.set_system_prompt(f"""
 你是一位资深的投资新闻分析师，擅长总结和分析A股市场新闻。
 请总结不同平台获取到的新闻，特别关注对"{symbol_info['name']}({symbol})"这只{symbol_info.get('business', '')}{'ETF' if is_etf(symbol) else '股票'}有影响的内容：
@@ -385,10 +388,14 @@ def strategy(context: Context):
     latest_price = data[-1].close
     indicators_info = calculate_technical_indicators(data, 20)
     pattern_info = detect_candle_patterns(data[-20:])
-    caixin_news = deps.news.get_news_from('caixin', data[-1].timestamp)
-    east_news = deps.other_data_api.get_symbol_news(params.symbol, data[-1].timestamp)
+    news_info = {}
+    for news_platform in params.news_platforms:
+        if news_platform == 'eastmoney':
+            news_info[news_platform] = deps.other_data_api.get_symbol_news(params.symbol, data[-1].timestamp)
+        else:
+            news_info[news_platform] = deps.news.get_news_from(news_platform, data[-1].timestamp)
     symbol_info = deps.other_data_api.get_symbol_information(params.symbol)
-    news_text = render_news_in_markdown_group_by_platform({ 'caixin': caixin_news, 'eastmoney': east_news })
+    news_text = render_news_in_markdown_group_by_platform(news_info)
     history_list = context.get('operation_history')
     gpt_setting = construct_system_prompt(context.params.risk_prefer, context.params.strategy_prefer)
     news_summary = gpt_news_summary(context, news_text, symbol_info, params.symbol)
@@ -435,10 +442,12 @@ def run(cmd_params: dict, notification: NotificationLogger):
         data_frame='1d',
         symbol = cmd_params.get('symbol'),
         strategy_prefer=cmd_params.get('strategy_prefer'),
-        risk_prefer=cmd_params.get('risk_prefer')
+        risk_prefer=cmd_params.get('risk_prefer'),
+        news_platforms=cmd_params.get('news_platforms', ['jin10', 'caixin', 'eastmoney'])
     )
     deps = Dependency(
         notification=notification,
+        news_summary_gpt_agent=get_agent_by_model(cmd_params.get('news_summary_agent')),
         decision_voters_gpt_agents=map_by(cmd_params.get('voter_agents'), lambda m: get_agent_by_model(m, { "temperature": 0.2 }))
     )
     with Context(params = params, deps=deps) as context:

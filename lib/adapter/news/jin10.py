@@ -1,5 +1,5 @@
 from typing import Dict, List
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from curl_cffi import requests as curl_requests
 import curl_cffi
@@ -43,11 +43,11 @@ def get_news_of_jin10(start: datetime = days_ago(1), end: datetime = datetime.no
         rsp_data_list = retryable_part(end)
         news_info_list = map_by(rsp_data_list, map_to_news_info)
         news_info_list.sort(key=lambda x: x.timestamp)
-        filtered_news_info_list = filter_by(news_info_list, lambda x: x.timestamp >= start and x.title or x.description)
+        filtered_news_info_list = filter_by(news_info_list, lambda x: x.timestamp >= start and x.timestamp < end and (x.title or x.description))
         map_by(filtered_news_info_list, lambda x: logger.debug(f'{x.timestamp}: {x.title or x.description}'))
         result.extend(filtered_news_info_list)
         if news_info_list[0].timestamp < start:
             break
-        end = news_info_list[0].timestamp
+        end = news_info_list[0].timestamp - timedelta(seconds=1) # prevent news duplicate
     result.sort(key=lambda x: x.timestamp)
     return result
