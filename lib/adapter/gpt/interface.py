@@ -1,7 +1,6 @@
 import abc
 from typing import Optional, TypedDict
 
-
 GptSystemParams = TypedDict('GptSystemParams', {
     "temperature": float,      
     "top_p": float,   

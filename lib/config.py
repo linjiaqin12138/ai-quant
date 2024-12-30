@@ -39,6 +39,9 @@ def get_push_token() -> str:
 def get_baichuan_token() -> str:
     return os.environ.get("BAI_CHUAN_TOKEN")
 
+def get_paoluz_token() -> str:
+    return os.environ.get("PAOLUZ_AI_TOKEN")
+
 def get_http_proxy() -> str:
     return os.environ.get("PROXY")
 
