@@ -3,9 +3,8 @@ from datetime import datetime, timedelta
 from dataclasses import dataclass
 from typing import List
 
-from lib.model import OhlcvHistory, Order, AShareOrder
-from lib.utils.string import random_id
-
+from ..model import OhlcvHistory, Order, AShareOrder
+from ..utils.string import random_id
 from ..adapter.exchange.api import ExchangeAPI
 from ..adapter.exchange.crypto_exchange import BinanceExchange
 from ..adapter.exchange.cn_market_exchange import cn_market as cn_market_adapter
