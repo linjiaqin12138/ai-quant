@@ -4,7 +4,8 @@ from typing import List
 
 from ..utils.time import timeframe_to_second
 from ..model import CryptoHistoryFrame, CnStockHistoryFrame, Ohlcv
-from ..modules.exchange_proxy import ExchangeOperationProxy
+from ..modules.exchange_proxy import ExchangeOperationProxy, crypto
+from ..modules.strategy import BasicDependency
 
 def get_recent_data_with_at_least_count(count: int, symbol: str, frame: CryptoHistoryFrame | CnStockHistoryFrame, exchange: ExchangeOperationProxy) -> List[Ohlcv]:
     history = exchange.get_ohlcv_history(
@@ -15,3 +16,7 @@ def get_recent_data_with_at_least_count(count: int, symbol: str, frame: CryptoHi
     )
     # assert len(history.data) >= count
     return history.data
+
+class WithExchangeProxy(BasicDependency):
+    def __init__(self, exchange: ExchangeOperationProxy):
+        self.exchange = exchange or crypto

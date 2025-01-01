@@ -186,12 +186,13 @@ class Dependency(BasicDependency):
             session: SessionAbstract = None,
             other_data_api: OhterDataFetcherApi = None
         ):
-        super().__init__(notification = notification, exchange=exchange or cn_market, session=session)
+        super().__init__(notification = notification, session=session)
         self.news = news_api
         self.other_data_api = other_data_api or OtherDataFetcher(self.session)
         self.voter_gpt_agents = decision_voters_gpt_agents
         self.news_summary_agent = news_summary_gpt_agent
         self._curr_voter_idx = 0
+        self.exchange = exchange or cn_market
 
     def get_a_voter_gpt(self) -> GptAgentAbstract:
         res = self.voter_gpt_agents[self._curr_voter_idx]

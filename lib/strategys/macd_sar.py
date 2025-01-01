@@ -1,8 +1,8 @@
 from typing import TypedDict
 from ..utils.ohlcv import macd_info, sar_info
 from ..modules.notification_logger import NotificationLogger
-from ..modules.strategy import BasicDependency, ParamsBase, BasicContext
-from ..strategys.common import get_recent_data_with_at_least_count
+from ..modules.strategy import ParamsBase, BasicContext
+from ..strategys.common import get_recent_data_with_at_least_count, WithExchangeProxy
 
 ContextDict = TypedDict('Context', {
     'account_usdt_amount': float,
@@ -12,7 +12,8 @@ ContextDict = TypedDict('Context', {
 })
 
 class Context(BasicContext[ContextDict]):
-    def __init__(self, params: ParamsBase, deps: BasicDependency):
+    deps: WithExchangeProxy
+    def __init__(self, params: ParamsBase, deps: WithExchangeProxy):
         super().__init__(f'{params.symbol}_{params.data_frame}_{params.money}_MACD_SAR', deps)
         self.params = params
 
@@ -53,7 +54,7 @@ def macd_sar(context: Context):
         deps.notification_logger.msg(f'{order.timestamp} 卖出 ', order.get_amount(True), ' ', params.symbol, ', 总共', order.get_cost(True), ' USDT 剩余: ', context.get("account_usdt_amount"), 'USDT')
 
 def run(params: dict, notification: NotificationLogger):
-    with Context(params = ParamsBase(**params), deps=BasicDependency(notification=notification)) as context:
+    with Context(params = ParamsBase(**params), deps=WithExchangeProxy(notification=notification)) as context:
         macd_sar(context)
 
 

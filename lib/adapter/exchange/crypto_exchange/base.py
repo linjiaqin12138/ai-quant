@@ -18,7 +18,8 @@ SUPPORT_RETRY_METHODS = [
     'fapidataGetGloballongshortaccountratio',
     'fapidataGetToplongshortaccountratio',
     'fapidataGetToplongshortpositionratio',
-    'fapipublicGetPremiumindex'
+    'fapipublicGetPremiumindex',
+    'fapiPrivatePostLeverage'
 ]
 
 def retry_patch(exchange: G) -> G:

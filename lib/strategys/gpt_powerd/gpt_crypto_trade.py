@@ -18,7 +18,7 @@ from ...adapter.gpt import GptAgentAbstract, get_agent_by_model
 from ...modules.news_proxy import news_proxy, NewsFetcherApi
 from ...modules.notification_logger import NotificationLogger
 from ...modules.strategy import BasicDependency, ParamsBase, BasicContext
-from ...modules.exchange_proxy import ExchangeOperationProxy
+from ...modules.exchange_proxy import ExchangeOperationProxy, crypto
 from ..common import get_recent_data_with_at_least_count
 from .common import GptAdviceDict, round_to_5, GptReplyNotValid, validate_gpt_advice, calculate_technical_indicators, format_ohlcv_list
 
@@ -93,12 +93,13 @@ class GptStrategyDependency(BasicDependency):
                  news_adapter: NewsFetcherApi = news_proxy, 
                  future_data: OtherDataFetcherAbstract = None
                  ):
-        super().__init__(notification = notification, exchange=exchange, session=session)
+        super().__init__(notification = notification, session=session)
         self.news_summary_agent = news_summary_agent
         self._curr_voter_idx = -1
         self.voter_agents = voter_agents
         self.news_modules = news_adapter
         self.future_data = future_data or OtherDataFetcher()
+        self.exchange = exchange or crypto
 
     def get_a_voter_agent(self) -> GptAgentAbstract:
         self._curr_voter_idx = (self._curr_voter_idx + 1) % len(self.voter_agents)

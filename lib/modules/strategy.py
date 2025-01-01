@@ -6,7 +6,6 @@ from ..adapter.database.kv_store import KeyValueStore
 from ..adapter.database.session import SessionAbstract, SqlAlchemySession
 
 from ..model import CryptoHistoryFrame, CnStockHistoryFrame
-from .exchange_proxy import ExchangeOperationProxy, crypto as default_crypto
 from ..modules.notification_logger import NotificationLogger
 
 
@@ -52,10 +51,9 @@ class ContextApi(abc.ABC):
 
 @dataclass
 class BasicDependency:
-    def __init__(self, session: SessionAbstract = None, exchange: ExchangeOperationProxy = None, notification: Optional[NotificationLogger] = None):
+    def __init__(self, session: SessionAbstract = None, notification: Optional[NotificationLogger] = None):
         self.session = session or SqlAlchemySession()
         self.kv_store = KeyValueStore(session = self.session)
-        self.exchange = exchange or default_crypto
         self.notification_logger = notification
 
 CT = TypeVar('ContextTypeDict', bound=dict)

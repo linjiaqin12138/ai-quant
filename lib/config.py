@@ -1,7 +1,7 @@
 import os
 from typing import Dict
 from pathlib import Path
-from dotenv import load_dotenv
+from dotenv import load_dotenv, dotenv_values
 
 load_dotenv(verbose=True)
 
@@ -26,7 +26,9 @@ def get_binance_config() -> Dict:
     proxy = get_http_proxy()
     config = {
         "apiKey": os.environ.get("BINANCE_API_KEY"),
-        "secret": os.environ.get("BINANCE_SECRET_KEY")
+        # "secret": os.environ.get("BINANCE_SECRET_KEY")
+        # https://github.com/theskumar/python-dotenv/issues/532
+        "secret": dotenv_values()['BINANCE_SECRET_KEY']
     }
     if proxy:
         config['httpsProxy'] = proxy

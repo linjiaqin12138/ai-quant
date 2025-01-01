@@ -8,7 +8,10 @@ from ...config import API_MAX_RETRY_TIMES, get_paoluz_token
 from ...utils.decorators import with_retry
 from .interface import GptAgentAbstract, GptSystemParams
 
-@with_retry((requests.exceptions.ConnectionError, requests.exceptions.Timeout), API_MAX_RETRY_TIMES)
+class ServerRateLimit(Exception):
+    ...
+
+@with_retry((ServerRateLimit, requests.exceptions.ConnectionError, requests.exceptions.Timeout), API_MAX_RETRY_TIMES)
 def retryable_query(method: str, endpoint: str, path: str, token: str, data: str = None):
     headers = {
         "Content-Type": "application/json",
@@ -60,6 +63,8 @@ class PaoluzAgent(GptAgentAbstract):
             if rsp.status_code == 429 or rsp.status_code >= 500:
                 logger.warning(f"Paoluz API calling failed with statusCode: {rsp.status_code}, retry another endpoint")
                 rsp = retryable_query(method, self.backup_endpoint, path, self.api_key, data)
+                if rsp.status_code == 429:
+                    raise ServerRateLimit(f"Paoluz API calling failed with statusCode: {rsp.status_code}, message {rsp.text}")
                 assert rsp.status_code == 200
             else:
                 raise Exception(f"Paoluz API calling failed with statusCode: {rsp.status_code}, response body: {rsp.text}")

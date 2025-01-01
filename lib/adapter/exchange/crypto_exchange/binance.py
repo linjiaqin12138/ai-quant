@@ -60,8 +60,15 @@ def with_slice(slice_count: int, frame: CryptoHistoryFrame) -> Callable[[G], G]:
 
 class BinanceExchange(ExchangeAPI):
 
-    def __init__(self, test_mode: bool = False):
-        binance = ccxt.binance(get_binance_config())
+    def __init__(self, test_mode: bool = False, future_mode: bool = False):
+        binance_config = get_binance_config()
+        if future_mode:
+            binance_config.update({
+                'options': {
+                    'defaultType': 'future'
+                }
+            })
+        binance = ccxt.binance(binance_config)
         self.binance = retry_patch(binance)
         self.test_mode = test_mode
 

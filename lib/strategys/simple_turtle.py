@@ -7,8 +7,8 @@ from ..model import CryptoHistoryFrame
 from ..utils.time import dt_to_ts, timeframe_to_second, ts_to_dt
 from ..utils.ohlcv import to_df
 from ..modules.notification_logger import NotificationLogger
-from ..modules.strategy import BasicDependency, ParamsBase, BasicContext
-from .common import get_recent_data_with_at_least_count
+from ..modules.strategy import ParamsBase, BasicContext
+from .common import get_recent_data_with_at_least_count, WithExchangeProxy
 
 ContextDict = TypedDict('Context', {
     'account_usdt_amount': float,
@@ -28,7 +28,8 @@ class Params(ParamsBase):
     max_buy_round: int = 1
 
 class Context(BasicContext[ContextDict]):
-    def __init__(self, params: Params, deps: BasicDependency):
+    deps: WithExchangeProxy
+    def __init__(self, params: Params, deps: WithExchangeProxy):
         super().__init__(f'{params.symbol}_{params.data_frame}_{params.money}_TURTLE_PLAN', deps)
         self.params = params
 
@@ -125,7 +126,7 @@ def simple_turtle(context: Context):
     return 
 
 def run(params: dict, notification: NotificationLogger):
-    with Context(params = Params(**params), deps=BasicDependency(notification=notification)) as context:
+    with Context(params = Params(**params), deps=WithExchangeProxy(notification=notification)) as context:
         simple_turtle(context)
 
 

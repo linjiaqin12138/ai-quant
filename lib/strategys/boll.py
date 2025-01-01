@@ -5,8 +5,8 @@ from lib.utils.number import change_rate
 
 from ..utils.ohlcv import boll_info
 from ..modules.notification_logger import NotificationLogger
-from ..modules.strategy import BasicDependency, ParamsBase, BasicContext
-from .common import get_recent_data_with_at_least_count
+from ..modules.strategy import ParamsBase, BasicContext
+from .common import get_recent_data_with_at_least_count, WithExchangeProxy
 
 ContextDict = TypedDict('Context', {
     'account_usdt_amount': float,
@@ -21,7 +21,8 @@ class Params(ParamsBase):
     max_retrieval: Optional[float] = None
 
 class Context(BasicContext[ContextDict]):
-    def __init__(self, params: Params, deps: BasicDependency):
+    deps: WithExchangeProxy
+    def __init__(self, params: Params, deps: WithExchangeProxy):
         super().__init__(f'{params.symbol}_{params.data_frame}_{params.money}_BOLL', deps)
         self.params = params
     
@@ -64,7 +65,7 @@ def boll(context: Context):
         deps.notification_logger.msg(f'{order.timestamp} 卖出 ', order.get_amount(True), ' ', params.symbol, ', 总共', order.get_cost(True), ' USDT 剩余: ', context.get("account_usdt_amount"), 'USDT')
 
 def run(params: dict, notification: NotificationLogger):
-    with Context(params = Params(**params), deps=BasicDependency(notification=notification)) as context:
+    with Context(params = Params(**params), deps=WithExchangeProxy(notification=notification)) as context:
         boll(context)
 
 
