@@ -6,6 +6,7 @@ import requests
 from ...logger import logger
 from ...config import API_MAX_RETRY_TIMES, get_baichuan_token
 from ...utils.decorators import with_retry
+from ...utils.object import pick_keys
 from .interface import GptAgentAbstract, GptSystemParams
 
 class BaiChuanAgent(GptAgentAbstract):
@@ -25,9 +26,14 @@ class BaiChuanAgent(GptAgentAbstract):
         data = {
             "model": self.model,
             "messages": self.chat_context,
-            "stream": False,
+            "stream": False
         }
-        data.update(self.params)
+        data.update(pick_keys(self.params, ['temperature', 'top_p', 'frequency_penalty', 'presence_penalty']))
+        if self.params.get('response_format') == 'json':
+            if self.model in ['Baichuan4-Turbo', 'Baichuan4-Air', 'Baichuan4', 'Baichuan3-Turbo', 'Baichuan3-Turbo-128k']:
+                data.update({ 'response_format': {"type":"json_object"} })
+            else:
+                logger.warning(f"{self.model} not support forcing json reply")
 
         json_data = json.dumps(data, ensure_ascii=False)
         headers = {

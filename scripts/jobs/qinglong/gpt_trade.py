@@ -3,7 +3,7 @@ import argparse
 from lib.adapter.notification import PushPlus
 
 from lib.modules.notification_logger import NotificationLogger
-from lib.strategys.gpt_powerd import gpt_crypto_trade, gpt_ashare_trade
+from lib.strategys.gpt_powerd import gpt_crypto_trade, gpt_ashare_trade, gpt_crypto_future_trade
 from lib.utils.file import read_json_file
 
 def parse_command_line() -> argparse.Namespace:
@@ -23,8 +23,10 @@ def main():
     cfg = read_json_file(args.config)
 
     with NotificationLogger(f'GPT交易法 {cfg.get("symbol")}', PushPlus()) as logger:
-        if cfg.get("symbol").endswith("USDT"):
+        if cfg.get("symbol").endswith("/USDT"):
             gpt_crypto_trade.run(cfg, logger)
+        elif cfg.get("symbol").endswith("USDT"):
+            gpt_crypto_future_trade.run(cfg, logger)
         else:
             gpt_ashare_trade.run(cfg, logger)
     

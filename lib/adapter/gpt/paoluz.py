@@ -6,6 +6,7 @@ import requests
 from ...logger import logger
 from ...config import API_MAX_RETRY_TIMES, get_paoluz_token
 from ...utils.decorators import with_retry
+from ...utils.object import pick_keys
 from .interface import GptAgentAbstract, GptSystemParams
 
 class ServerRateLimit(Exception):
@@ -77,7 +78,12 @@ class PaoluzAgent(GptAgentAbstract):
             "messages": self.chat_context,
             "stream": False,
         }
-        data.update(self.params)
+        data.update(pick_keys(self.params, ['temperature', 'top_p', 'frequency_penalty', 'presence_penalty']))
+        if self.params.get('response_format') == 'json':
+            if self.model.startswith(('gpt-3.5-turbo', 'gpt-4')):
+                data.update({ 'response_format': {"type":"json_object"} })
+            else:
+                logger.warning(f"{self.model} not support forcing json reply")
         json_data = json.dumps(data, ensure_ascii=False)
         rsp = self._query_with_endpoint_retry("post", "/v1/chat/completions", json_data)
         rsp_body = rsp.json()

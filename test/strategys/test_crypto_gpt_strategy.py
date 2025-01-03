@@ -230,4 +230,3 @@ def test_gpt_strategy():
     )
     with Context(params = params, deps=deps) as context:
         gpt(context)
-    

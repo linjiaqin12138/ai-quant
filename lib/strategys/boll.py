@@ -1,8 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional, TypedDict
 
-from lib.utils.number import change_rate
-
+from ..utils.number import change_rate
 from ..utils.ohlcv import boll_info
 from ..modules.notification_logger import NotificationLogger
 from ..modules.strategy import ParamsBase, BasicContext

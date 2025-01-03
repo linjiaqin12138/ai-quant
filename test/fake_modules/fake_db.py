@@ -10,12 +10,10 @@ from lib.adapter.database.news_cache import HotNewsCache, HotNewsCacheAbstract
 from lib.adapter.database.session import SqlAlchemySession
 from lib.model.news import NewsInfo
 from lib.logger import logger
-from lib.utils.string import random_id
-
-db_str = f"sqlite:///{os.path.join(tempfile.gettempdir(), random_id() + '.sqlite')}"
-logger.info(f"Sqlite for test: {db_str}")
 
 def new_engine() -> Engine:
+    db_str = f"sqlite:///{os.path.join(tempfile.gettempdir(), 'quant_test.sqlite')}"
+    logger.info(f"Sqlite for test: {db_str}")
     return create_engine(
         db_str,
         echo=False, 

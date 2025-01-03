@@ -1,11 +1,12 @@
 import abc
-from typing import Optional, TypedDict
+from typing import Optional, TypedDict, Literal
 
 GptSystemParams = TypedDict('GptSystemParams', {
     "temperature": float,      
     "top_p": float,   
     "frequency_penalty": float,
     "presence_penalty": float,
+    "response_format": Literal['json']
 })
 
 class GptAgentAbstract(abc.ABC):

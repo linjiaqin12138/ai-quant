@@ -1,7 +1,7 @@
 
 from typing import Dict, TypedDict, List, cast, Union
 
-from lib.logger import logger
+from ..logger import logger
 from ..model import Ohlcv
 
 import talib
