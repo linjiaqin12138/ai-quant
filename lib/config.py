@@ -28,7 +28,7 @@ def get_binance_config() -> Dict:
         "apiKey": os.environ.get("BINANCE_API_KEY"),
         # "secret": os.environ.get("BINANCE_SECRET_KEY")
         # https://github.com/theskumar/python-dotenv/issues/532
-        "secret": dotenv_values()['BINANCE_SECRET_KEY']
+        "secret": os.environ.get("BINANCE_SECRET_KEY") or dotenv_values().get('BINANCE_SECRET_KEY')
     }
     if proxy:
         config['httpsProxy'] = proxy
