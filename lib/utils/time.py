@@ -9,6 +9,8 @@ def timeframe_to_second(tframe: CryptoHistoryFrame | CnStockHistoryFrame) -> int
         return 60 * 60 * 24
     if tframe == '1h':
         return 60 * 60
+    if tframe == '1s':
+        return 1
     raise Exception(f'time range {tframe} not support')
 
 def timeframe_to_ms(tframe) -> int:

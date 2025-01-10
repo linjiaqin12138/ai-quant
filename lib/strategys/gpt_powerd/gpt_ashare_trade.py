@@ -349,6 +349,7 @@ Example 3:
     3. 交易偏好：我是一名{risk_prefer or "风险厌恶型"}投资者
     4. 交易策略：我倾向于{strategy_prefer or "中长期投资"}策略
     5. 务必输出JSON格式的回复
+    6. A股市场新闻通常"报喜不报忧"，注意甄别有价值的利好信息，关注利空消息的负面影响
 """
 
 gpt_retry_decorator = with_retry((GptReplyNotValid, g4f.errors.RetryProviderError, g4f.errors.RateLimitError, g4f.errors.ResponseError, g4f.errors.ResponseStatusError, aiohttp.ClientResponseError), 3)
@@ -376,6 +377,8 @@ def gpt_news_summary(context: Context, news_text: str, symbol_info: SymbolInfo, 
     - {symbol_info['name']}的相关新闻
 
 2. 请使用中文对上述内容进行总结，并以分点形式呈现。
+
+注意：A股市场新闻通常"报喜不报忧"，注意甄别有价值的利好信息，关注利空消息的负面影响
 """)
     return agent.ask(news_text)
 

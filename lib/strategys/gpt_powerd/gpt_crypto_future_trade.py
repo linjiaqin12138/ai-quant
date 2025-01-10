@@ -80,8 +80,8 @@ HISTORY_TIME_FORMAT = "%Y-%m-%dT%H:%M"
 @dataclass
 class Params(ParamsBase):
     # 杠杆倍率
+    news_platforms: List[str]
     risk_prefer: str = "风险喜好型"
-    news_platforms: List[str] = []
 
 FutureData = TypedDict('FutureData', {
     'last_funding_rate': float,
@@ -175,17 +175,20 @@ class OtherOperations(OtherOperationsApi):
     def __init__(self):
         self.binance = BinanceExchange(future_mode=True)
         self.exchange_proxy = CryptoProxy(ModuleDependency(exchange=self.binance))
+    
     def set_leverate(self, symbol: str, leverage: int):
+        logger.debug(f"set_leverate {symbol} {leverage}")
         self.binance.binance.fapiPrivatePostLeverage({ 'symbol': symbol, 'leverage': leverage })
 
     def get_latest_price(self, symbol: str) -> float:
+        logger.debug(f"get_latest_price {symbol}")
         return self.binance.binance.fetch_ticker(symbol=symbol)['last']
 
     def cancel_order(self, symbol: str, order_id: str):
+        logger.debug(f"cancel_order {symbol} {order_id}")
         self.binance.binance.cancel_order(order_id, symbol)
 
-    def get_order(self, symbol: str, order_id: str) -> OrderInfo:
-        raw_order = self.binance.binance.fetch_order({ 'symbol': symbol, 'id': order_id })['info']
+    def _transform_order(self, raw_order) -> OrderInfo:
         return {
             'orderId': raw_order['orderId'],
             'status': raw_order['status'],
@@ -197,9 +200,15 @@ class OtherOperations(OtherOperationsApi):
             'stopPrice': float(raw_order['stopPrice']),
             'updateTime': int(raw_order['updateTime'])
         }
+    def get_order(self, symbol: str, order_id: str) -> OrderInfo:
+        logger.debug(f"get_order {symbol} {order_id}")
+        raw_order = self.binance.binance.fetch_order(order_id, symbol)['info']
+        logger.debug(raw_order)
+        return self._transform_order(raw_order)
 
     def get_ohlcv_history(self, symbol: str, time_frame: CryptoHistoryFrame, limit: int) -> List[Ohlcv]:
         # 复用一下现货的接口，可以存缓存，这里假设现货价格和合约价格差别不大, 存进去缓存没问题。
+        logger.debug(f"get_ohlcv_history {symbol} {time_frame} {limit}")
         return self.exchange_proxy.get_ohlcv_history(
             symbol, 
             time_frame, 
@@ -208,6 +217,7 @@ class OtherOperations(OtherOperationsApi):
         ).data
 
     def get_position_info(self, symbol: str, side) -> Optional[PositionRisk]:
+        logger.debug(f"get_position_info {symbol} {side}")
         rsp = self.binance.binance.fapiPrivateV2GetPositionRisk(params={ 'symbol': symbol.replace('/', '') })
         assert isinstance(rsp, list)
         position_info: dict = next((item for item in rsp if item['positionSide'] == side.upper()), None)
@@ -227,7 +237,8 @@ class OtherOperations(OtherOperationsApi):
 
     # https://developers.binance.com/docs/zh-CN/derivatives/usds-margined-futures/trade/rest-api
     def create_future_order(self, symbol: str, order_type: str, order_side: str, amount: float, postion_side: str, price: float = None, stop_price: float = None) -> OrderInfo:
-        return self.binance.binance.create_order(
+        logger.debug(f"create_future_order {symbol} {order_type} {order_side} {amount} {postion_side} {price} {stop_price}")
+        created_order = self.binance.binance.create_order(
             symbol=symbol,
             type=order_type,
             side=order_side,
@@ -237,9 +248,12 @@ class OtherOperations(OtherOperationsApi):
                 'positionSide': postion_side.upper(),
                 'stopPrice': stop_price
             }
-        )
+        )['info']
+        logger.debug(created_order)
+        return self._transform_order(created_order)
 
     def market_future_data(self, symbol: str) -> FutureData:
+        logger.debug(f"market_future_data {symbol}")
         last_funding_rate = self.binance.get_latest_futures_price_info(symbol)['lastFundingRate']
         global_long_short_account_ratio = self.binance.get_u_base_global_long_short_account_ratio(symbol, '15m', hours_ago(1))[-1]['longShortRatio']
         top_long_short_account_ratio = self.binance.get_u_base_top_long_short_account_ratio(symbol, '15m', hours_ago(1))[-1]['longShortRatio']
@@ -285,7 +299,7 @@ class Context(BasicContext[ContextDict]):
         return {
             'account_money_amount': self.params.money,
             'account_symbol_amount': 0,
-            'position_status': 'close',
+            'position_status': 'init',
             'history': []
         }
 
@@ -298,19 +312,19 @@ class Context(BasicContext[ContextDict]):
         }
         if take_profit and postion_side == 'long' and take_profit > curr_price:
             map_by(unresolved_take_profit_order, lambda o: self.deps.other_operations.cancel_order(self.params.symbol, o['orderId']))
-            result['take_profit_order'] = self._stop_position(amount, take_profit, True, False, True)
+            result['take_profit_order'] = self._stop_position(curr_price, amount, take_profit, True, False, True)
         if stop_loss and postion_side == 'long' and stop_loss < curr_price:
             map_by(unresolved_stop_loss_order, lambda o: self.deps.other_operations.cancel_order(self.params.symbol, o['orderId']))
-            result['stop_loss_order'] = self._stop_position(amount, stop_loss, True, False, False)
+            result['stop_loss_order'] = self._stop_position(curr_price,amount, stop_loss, True, False, False)
         if take_profit and postion_side == 'short' and take_profit < curr_price:
             map_by(unresolved_take_profit_order, lambda o: self.deps.other_operations.cancel_order(self.params.symbol, o['orderId']))
-            result['take_profit_order'] = self._stop_position(amount, take_profit, False, True, True)
+            result['take_profit_order'] = self._stop_position(curr_price,amount, take_profit, False, True, True)
         if stop_loss and postion_side == 'short' and stop_loss > curr_price:
             map_by(unresolved_stop_loss_order, lambda o: self.deps.other_operations.cancel_order(self.params.symbol, o['orderId']))
-            result['stop_loss_order'] = self._stop_position(amount, stop_loss, False, True, False)
+            result['stop_loss_order'] = self._stop_position(curr_price, amount, stop_loss, False, True, False)
         return result
 
-    def _stop_position(self, amount: int, stop_price: float, is_long: bool, is_buy: bool, is_take_profit: bool) -> OrderInfo:
+    def _stop_position(self, curr_price: float, amount: int, stop_price: float, is_long: bool, is_buy: bool, is_take_profit: bool) -> OrderInfo:
         stop_position_order = self.deps.other_operations.create_future_order(
             self.params.symbol, 
             'TAKE_PROFIT_MARKET' if is_take_profit else 'STOP_MARKET', 
@@ -323,7 +337,7 @@ class Context(BasicContext[ContextDict]):
         self.deps.notification_logger.msg(
             '做多' if is_long else '做空', 
             '止盈' if is_take_profit else '止损', 
-            f'{round_to_5(change_rate(stop_position_order['avgPrice'], stop_price) * 100)} %'
+            f'{round_to_5(change_rate(curr_price, stop_price) * 100)} %'
         )
         return stop_position_order
 
@@ -449,14 +463,14 @@ def construct_system_prompt(coinname: str, risk_prefer: str) -> str:
     return f"""你是一位经验丰富的加密货币交易专家，擅长分析市场数据、技术指标和新闻信息。现在是一个新的交易时段，请按照以下流程对 **{coinname}** 进行 **1小时级别** 短线技术分析，并在必要时灵活使用杠杠来放大收益。
 
 1. **价格与K线形态分析**  
-   - 分析过去若干小时到数天的OHLCV数据（1小时K线），结合检测到的短期K线形态，判断近期趋势走向以及是否存在明显的短期波动机会。
+   - 分析过去若干小时到数天的OHLCV数据（1小时K线），结合检测到的短期K线形态以及过去7天的OHLCV数据（日K线），判断近期趋势走向以及是否存在明显的短期波动机会。
 
 2. **短周期技术指标分析**  
    - 结合常用指标（如SMA、RSI、MACD、布林带、KDJ、ATR 等），着重关注这些指标在短周期下的快速变化、趋势强度以及潜在反转信号。
    - 由于我们将使用杠杆，请仔细评估当前波动率和风险水平，判断是否需要加快或者放缓交易动作。
 
 3. **新闻与市场情绪分析**  
-   - 综合外部信息，如市场热点事件、监管动态、行业新闻等，评估其在短期内对价格可能造成的快速影响。
+   - 综合过去一个小时最新的外部信息，如市场热点事件、监管动态、行业新闻等，评估其在短期内对价格可能造成的快速影响。
 
 4. **回顾交易历史与仓位、风险分析**  
    - 参考已有的交易历史、当前仓位和风险偏好（{risk_prefer}），在确定的买多（开多）、卖多（平多）、卖空（开空）、买入平空（平空）等策略中，给出最合理的决策。
@@ -486,9 +500,10 @@ def construct_system_prompt(coinname: str, risk_prefer: str) -> str:
 请注意：  
 1. **不要超过**我当前可用的 USDT 余额或{coinname}合约持仓量。  
 2. 开仓时所需 **USDT** 不能低于 5 USDT，总价值过小会导致无法执行交易；同理，平仓的仓位总价值也需至少5 USDT。  
-3. 请谨慎使用杠杆，不要盲目放大头，最大可使用5倍杠杆，我的风险偏好是{risk_prefer}。  
+3. 请谨慎使用杠杆，不要盲目放大头，最大可使用5倍杠杆，我的风险偏好是{risk_prefer}。
 4. 遇不确定时，可保持观望（`"hold"`），只有原先的止盈或止损价格已经不太合理了才重新设置止盈或止损价格，并且要说明新止盈止损价的理由。
-5. take_profit和stop_loss可以在开仓/加仓/平仓/观望时使用，如果原有的止盈止损价格已经足够合理可以不给出，在提供止盈止损价格时，原先的仓位止盈止损价格将作废，并对整个仓位的止盈止损进行重新设置。做空的止盈价格应该比当前价格低，止损价格比当前价格高，做多的止盈价格应该比当前价格高，止损价格比当前价格低。设置止损价格时，不要超过给出的爆仓价格， 如果没有给出爆仓价格，说明还没开仓，爆仓价格可以通过杠杆倍数进行估算，比如n倍杠杆做多时爆仓价格就是当前价格的1/n，做空时爆仓价格为当前价格的(1 + 1/n)。
+5. take_profit和stop_loss可以在开仓/加仓/平仓/观望时使用，如果原有的止盈止损价格已经足够合理可以不给出，在提供止盈止损价格时，原先的仓位止盈止损价格将作废，并对整个仓位的止盈止损进行重新设置。做空的止盈价格应该比当前价格低，止损价格比当前价格高，做多的止盈价格应该比当前价格高，止损价格比当前价格低。设置止损价格时，不要超过给出的爆仓价格。
+6. 不要因为仓位投入的金额太小而每次开仓都all in，要在趋势和消息足够利好时开仓
 
 响应格式示例
 ```json
@@ -630,7 +645,8 @@ def construct_user_prompt(context: Context, coin_name: str, data_1h: List[Ohlcv]
     - %D: {indicators_1h.stoch_d}
 - 过去{len(indicators_1h.atr)}小时平均真实范围 (ATR): {indicators_1h.atr}
 
-4. 过去一小时内最新相关新闻:
+4. 新闻:
+- 过去一小时内的最新相关新闻如下
 ```
 {news_1h_text}
 ```
@@ -704,7 +720,7 @@ def update_context_info(context: Context, position_info: Optional[PositionInfo])
             })
             context.deps.notification_logger.msg("仓位已经爆仓")
 
-def validate_gpt_reply(gpt_reply_text, context: Context, position_info: PositionInfo) -> dict:
+def validate_gpt_reply(gpt_reply_text, context: Context, position_info: PositionInfo, curr_price: float) -> dict:
     try:
         logger.info(gpt_reply_text)
         advice_json = extract_json_string(gpt_reply_text)
@@ -740,9 +756,17 @@ def validate_gpt_reply(gpt_reply_text, context: Context, position_info: Position
 
         if 'take_profit' in advice_json:
             assert isinstance(advice_json['take_profit'], (int, float)), "'take_profit'字段必须是数字类型"
+            if context.get('position_status') == 'long' or advice_json['action'] == 'buy_long':
+                assert advice_json['take_profit'] > curr_price, f"'take_profit'<={curr_price}"
+            elif context.get('position_status') == 'short' or advice_json['action'] == 'sell_short':
+                assert advice_json['take_profit'] < curr_price, f"'take_profit'>={curr_price}"
 
         if 'stop_loss' in advice_json:
             assert isinstance(advice_json['stop_loss'], (int, float)), "'stop_loss'字段必须是数字类型"
+            if context.get('position_status') == 'long' or advice_json['action'] == 'buy_long':
+                assert advice_json['take_profit'] < curr_price, f"'take_profit'>={curr_price}"
+            elif context.get('position_status') == 'short' or advice_json['action'] == 'sell_short':
+                assert advice_json['take_profit'] > curr_price, f"'take_profit'<={curr_price}"
 
         if advice_json['action'] == 'hold':
             if 'take_profit' in advice_json and advice_json['take_profit'] == position_info['take_profit_order']['stopPrice']:
@@ -751,6 +775,7 @@ def validate_gpt_reply(gpt_reply_text, context: Context, position_info: Position
             if 'stop_loss' in advice_json and advice_json['stop_loss'] == position_info['stop_loss_order']['stopPrice']:
                 logger.warning("GPT response with a unchanged stop loss value")
                 del advice_json['stop_loss']
+        # TODO: 校验止盈止损价格合理
 
         return advice_json
     except Exception as err:
@@ -767,7 +792,7 @@ def gpt_analysis(context: Context, data_1h: List[Ohlcv], data_1d: List[Ohlcv], i
     def retryable_part():
         agent = context.deps.get_a_voter_agent()
         agent.set_system_prompt(sys_prompt)
-        return validate_gpt_reply(agent.ask(user_prompt), context, position_info)
+        return validate_gpt_reply(agent.ask(user_prompt), context, position_info, data_1h[-1].close)
 
     return retryable_part()
 
@@ -782,7 +807,7 @@ def strategy(context: Context):
     indicators_1h = calculate_technical_indicators(data_1h)
     news_by_platform = {}
     for platform in params.news_platforms:
-        news_by_platform[platform] = context.deps.news_api.get_news_during(platform, data_1h[-1].timestamp, data_1h[-1].timestamp + timedelta(hours=1)),
+        news_by_platform[platform] = context.deps.news_api.get_news_during(platform, data_1h[-1].timestamp, data_1h[-1].timestamp + timedelta(hours=1))
     news_1h_text = render_news_in_markdown_group_by_platform(news_by_platform)
     logger.debug(news_1h_text)
     future_data = context.deps.other_operations.market_future_data(params.symbol)

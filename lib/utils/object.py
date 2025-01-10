@@ -7,4 +7,4 @@ def omit_keys(obj: dict, keys: List[str]) -> dict:
     return {k: v for k, v in obj.items() if k not in keys}
 
 def pick_keys(obj: dict, keys: List[str]) -> dict:
-    return {k: v for k, v in obj.item() if k in keys}
+    return {k: v for k, v in obj.items() if k in keys}
