@@ -1,6 +1,4 @@
 from typing import List, Any
-import numpy as np
-
 from ..adapter.notification import NotificationAbstract
 from ..logger import logger
 
@@ -33,5 +31,3 @@ class NotificationLogger:
     def send(self) -> None:
         if len(self.message_pool):
             self.sender.send('\n'.join(self.message_pool), self.topic)
-
-# slient_notification_logger = NotificationLogger()

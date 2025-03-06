@@ -20,7 +20,7 @@ class NewsFetchProxy(NewsFetcherApi):
         self.kv_store = KeyValueStore(session)
         self.lock_factory = api_lock_factory
 
-    def get_news_from(self, platform: str, start: datetime) -> List[NewsInfo]:
+    def get_news_from(self, platform: Literal['cointime', 'caixin', 'jin10'], start: datetime) -> List[NewsInfo]:
         start_ts = dt_to_ts(start)
         logger.info("需要加锁更新本地新闻缓存")
         @with_lock(self.lock_factory, f'{platform}_query_lock', 1, 300, 300)
@@ -79,7 +79,7 @@ class NewsFetchProxy(NewsFetcherApi):
                 assert False, "Should not go here"
         return lock_part()
 
-    def get_news_during(self, platform: Literal['cointime', 'caixin'], start: datetime, end: datetime) -> List[NewsInfo]:
+    def get_news_during(self, platform: Literal['cointime', 'caixin', 'jin10'], start: datetime, end: datetime) -> List[NewsInfo]:
         start_ts, end_ts = dt_to_ts(start), dt_to_ts(end)
         assert start_ts < end_ts, "起始时间必须小于结束时间"
 
