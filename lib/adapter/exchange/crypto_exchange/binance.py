@@ -4,7 +4,7 @@ from datetime import datetime
 from ....config import get_binance_config
 from ....logger import logger
 from ....model import CryptoOhlcvHistory, TradeTicker, CryptoHistoryFrame, Ohlcv, OrderType, OrderSide, CryptoOrder, OrderFee
-from ....utils.time import dt_to_ts, timeframe_to_second, time_length_in_frame, ts_to_dt
+from ....utils.time import dt_to_ts, timeframe_to_ms, timeframe_to_second, time_length_in_frame, ts_to_dt
 from ....utils.list import map_by 
 from ..api import ExchangeAPI
 from .base import retry_patch
@@ -90,8 +90,8 @@ class BinanceExchange(ExchangeAPI):
             return biance_api_func({
                 "symbol": symbol.replace("/", ""),
                 "period": frame,
-                "limit": limit,
-                "startTime": start
+                "startTime": start,
+                "endTime": start  + limit * timeframe_to_ms(frame) - 1
             })
         
         return map_by(sliced_fetch(start_in_ts, total), datetime_mapper)
@@ -105,6 +105,9 @@ class BinanceExchange(ExchangeAPI):
     def get_u_base_global_long_short_account_ratio(self, symbol: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> List[LongShortAccountInfo]:
         return self._get_long_short_info_factory('fapidataGetGloballongshortaccountratio', symbol, frame, start, end)
     
+    # 获取资金费率历史记录
+    # def get_futures_funding_rate_history(self, symbol: str, frame: CryptoHistoryFrame, start: datetime, end: datetime = datetime.now()) -> List[any]:
+
     def get_latest_futures_price_info(self, symbol: str) -> LatestFuturesPriceInfo:
         rsp = self.binance.fapipublicGetPremiumindex({
             "symbol": symbol.replace("/", "")

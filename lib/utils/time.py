@@ -2,7 +2,7 @@ from typing import Optional
 from datetime import datetime, timezone, timedelta
 from ..model import CryptoHistoryFrame, CnStockHistoryFrame
 
-def timeframe_to_second(tframe: CryptoHistoryFrame | CnStockHistoryFrame) -> int:
+def timeframe_to_second(tframe: str) -> int:
     if tframe == '15m':
         return 15 * 60
     if tframe == '1d':
@@ -81,6 +81,9 @@ def to_utc_isoformat(dt: datetime) -> str:
 
 def utc_isoformat_to_dt(s: str) -> datetime:
     return datetime.fromisoformat(s)
+
+def time_ago_from(unit: int, frame: str, ago_from: datetime = datetime.now()) -> datetime: 
+    return ago_from - unit * timedelta(seconds=timeframe_to_second(frame))
 
 def days_ago(days: int, zone: Optional[timezone] = None) -> datetime:
     if zone:

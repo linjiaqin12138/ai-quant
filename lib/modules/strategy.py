@@ -5,14 +5,13 @@ from dataclasses import dataclass
 from ..adapter.database.kv_store import KeyValueStore
 from ..adapter.database.session import SessionAbstract, SqlAlchemySession
 
-from ..model import CryptoHistoryFrame, CnStockHistoryFrame
 from ..modules.notification_logger import NotificationLogger
 
 
 @dataclass
 class ParamsBase:
     money: float
-    data_frame: CryptoHistoryFrame | CnStockHistoryFrame
+    data_frame: str
     symbol: str
 
 class ContextApi(abc.ABC):

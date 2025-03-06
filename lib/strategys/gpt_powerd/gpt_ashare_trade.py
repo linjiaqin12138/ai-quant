@@ -137,7 +137,7 @@ class OtherDataFetcher(OhterDataFetcherApi):
                 self.session.commit()
             return today not in holiday_list
 
-    @with_retry((requests.exceptions.ConnectionError), API_MAX_RETRY_TIMES)
+    @with_retry((requests.exceptions.ConnectionError, requests.exceptions.ProxyError, requests.exceptions.Timeout), API_MAX_RETRY_TIMES)
     def get_symbol_information(self, symbol: str) -> SymbolInfo:
         if is_etf(symbol):
             df = ak.fund_name_em()
@@ -151,7 +151,7 @@ class OtherDataFetcher(OhterDataFetcherApi):
                 'name': df['value'].loc[df['item'] == '股票简称'].iloc[0],
             }
 
-    @with_retry((requests.exceptions.ConnectionError), API_MAX_RETRY_TIMES)
+    @with_retry((requests.exceptions.ConnectionError, requests.exceptions.ProxyError, requests.exceptions.Timeout), API_MAX_RETRY_TIMES)
     def get_symbol_news(self, symbol: str, filter_after: datetime) -> List[NewsInfo]:
         news_100_df = ak.stock_news_em(symbol=symbol)
 

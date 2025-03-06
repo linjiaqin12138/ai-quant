@@ -2,20 +2,29 @@
 from .baichuan import BaiChuanAgent
 from .g4f import G4fAgent
 from .paoluz import PaoluzAgent
-from .interface import GptAgentAbstract, GptSystemParams
+from .siliconflow import SiliconFlowAgent
+from .interface import GptAgentAbstract
 
-def get_agent_by_model(model: str, system_params: GptSystemParams = {}) -> GptAgentAbstract:
-    if model.startswith("Baichuan"):
-        return BaiChuanAgent(model, system_params=system_params)
-    elif model.startswith("paoluz-"):
-        return PaoluzAgent(model[len('paoluz-'):], system_params=system_params)
-    else:
-        return G4fAgent(model, system_params=system_params)
+def get_agent(provider: str, model: str, **params) -> GptAgentAbstract:
+    if provider == 'baichuan':
+        return BaiChuanAgent(model, **params)
+    
+    if provider == 'paoluz':
+        return PaoluzAgent(model, **params)
+    
+    if provider == 'g4f':
+        return G4fAgent(model, **params)
+    
+    if provider == 'siliconflow':
+        return SiliconFlowAgent(model, **params)
+
+    raise ValueError(f"Unsupported provider: {provider}")
     
 __all__ = [
-    'get_agent_by_model',
+    'get_agent',
     'GptAgentAbstract',
     'BaiChuanAgent',
     'PaoluzAgent',
-    'G4fAgent'
+    'G4fAgent',
+    'SiliconFlowAgent'
 ]

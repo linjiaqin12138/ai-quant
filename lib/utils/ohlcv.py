@@ -294,7 +294,7 @@ pattern_mapping: Dict[str, PatternInfo] = {
         "description": "可能的趋势反转信号，单根K线，开盘价接近最高或最低点。"
     },
     "CDLDOJI": {
-        "name": "十字星",
+        "name": "十字线",
         "description": "表示市场的不确定性，可能是趋势反转的信号。"
     },
     "CDLENGULFING": {

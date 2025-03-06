@@ -76,4 +76,3 @@ class KeyValueStore(KeyValueStoreAbstract):
                 return
             else:
                 logger.error(f'Failed to set update {key} with value {val}')
-

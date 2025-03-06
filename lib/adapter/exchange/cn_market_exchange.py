@@ -41,7 +41,7 @@ class CnMarketExchange(ExchangeAPI):
             last=float(stock_data['最新价']),
         )
 
-    @with_retry((requests.exceptions.ConnectionError, requests.exceptions.Timeout), API_MAX_RETRY_TIMES)
+    @with_retry((requests.exceptions.ConnectionError, requests.exceptions.Timeout, requests.exceptions.ProxyError), API_MAX_RETRY_TIMES)
     def fetch_ohlcv(self, symbol: str, frame: CnStockHistoryFrame, start: datetime, end: datetime = datetime.now()) -> OhlcvHistory[CnStockHistoryFrame]:
         """获取K线数据"""
         rounded_start = round_datetime_in_local_zone(start, frame)
