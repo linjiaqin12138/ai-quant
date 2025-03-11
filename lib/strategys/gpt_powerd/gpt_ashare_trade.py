@@ -21,7 +21,7 @@ from ...utils.number import mean
 from ...utils.news import render_news_in_markdown_group_by_platform, NewsInfo
 from ...adapter.news import NewsFetcherApi
 from ...adapter.database.session import SessionAbstract
-from ...adapter.gpt import GptAgentAbstract, get_agent_by_model
+from ...adapter.gpt import GptAgentAbstract, get_agent
 from ...adapter.database.kv_store import KeyValueStore
 from ...modules.exchange_proxy import cn_market, ExchangeOperationProxy
 from ...modules.notification_logger import NotificationLogger
@@ -451,8 +451,8 @@ def run(cmd_params: dict, notification: NotificationLogger):
     )
     deps = Dependency(
         notification=notification,
-        news_summary_gpt_agent=get_agent_by_model(cmd_params.get('news_summary_agent')),
-        decision_voters_gpt_agents=map_by(cmd_params.get('voter_agents'), lambda m: get_agent_by_model(m, { "temperature": 0.2 }))
+        news_summary_gpt_agent=get_agent('paoluz', cmd_params.get('news_summary_agent')),
+        decision_voters_gpt_agents=map_by(cmd_params.get('voter_agents'), lambda m: get_agent('paoluz', m, { "temperature": 0.2 }))
     )
     with Context(params = params, deps=deps) as context:
         strategy(context)

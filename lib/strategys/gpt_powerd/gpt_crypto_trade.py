@@ -14,7 +14,7 @@ from ...utils.news import render_news_in_markdown_group_by_time_for_each_platfor
 from ...utils.ohlcv import detect_candle_patterns
 from ...adapter.database.session import SessionAbstract
 from ...adapter.exchange.crypto_exchange import BinanceExchange
-from ...adapter.gpt import GptAgentAbstract, get_agent_by_model
+from ...adapter.gpt import GptAgentAbstract, get_agent
 from ...modules.news_proxy import news_proxy, NewsFetcherApi
 from ...modules.notification_logger import NotificationLogger
 from ...modules.strategy import BasicDependency, ParamsBase, BasicContext
@@ -355,8 +355,8 @@ def run(cmd_params: dict, notification: NotificationLogger):
     )
     deps = GptStrategyDependency(
         notification=notification,
-        news_summary_agent=get_agent_by_model(cmd_params.get('news_summary_agent')),
-        voter_agents=map_by(cmd_params.get('voter_agents'), lambda m: get_agent_by_model(m, {
+        news_summary_agent=get_agent('paoluz', cmd_params.get('news_summary_agent')),
+        voter_agents=map_by(cmd_params.get('voter_agents'), lambda m: get_agent('paoluz', m, {
             "temperature": 0.2,       # 控制随机性
             # "top_p": 0.9,             # 核采样设置
             # "frequency_penalty": 0.3, # 减少重复

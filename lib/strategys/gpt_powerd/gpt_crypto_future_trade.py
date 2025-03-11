@@ -16,7 +16,7 @@ from ...utils.time import hours_ago, timeframe_to_second
 from ...adapter.exchange.crypto_exchange.binance import BinanceExchange
 from ...adapter.database.session import SessionAbstract
 from ...adapter.news import NewsFetcherApi
-from ...adapter.gpt import get_agent_by_model, GptAgentAbstract
+from ...adapter.gpt import get_agent, GptAgentAbstract
 from ...modules.news_proxy import news_proxy
 from ...modules.exchange_proxy import CryptoProxy, ModuleDependency
 from ...modules.notification_logger import NotificationLogger
@@ -851,8 +851,8 @@ def run(cmd_params: dict, notification: NotificationLogger):
     )
     deps = Dependency(
         notification=notification,
-        news_summary_agent=get_agent_by_model(cmd_params.get('news_summary_agent')),
-        result_voter_agents=map_by(cmd_params.get('voter_agents'), lambda m: get_agent_by_model(m, { "temperature": 0.2 }))
+        news_summary_agent=get_agent('paoluz', cmd_params.get('news_summary_agent')),
+        result_voter_agents=map_by(cmd_params.get('voter_agents'), lambda m: get_agent('paoluz', m, { "temperature": 0.2 }))
     )
     with Context(params = params, deps=deps) as context:
         strategy(context)
