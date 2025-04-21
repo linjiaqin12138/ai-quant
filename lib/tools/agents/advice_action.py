@@ -3,11 +3,10 @@ from typing import List, Dict, Literal, Optional, TypedDict
 from dataclasses import dataclass
 from lib.model import Ohlcv
 from lib.config import API_MAX_RETRY_TIMES
-from lib.logger import logger
 from lib.modules.notification_logger import NotificationLogger
 from lib.utils.decorators import with_retry
 from lib.utils.string import extract_json_string
-from lib.utils.time import to_utc_isoformat, ts_to_dt
+from lib.utils.time import ts_to_dt
 from lib.utils.list import map_by
 from lib.utils.number import remain_significant_digits
 from lib.utils.ohlcv import detect_candle_patterns
@@ -33,7 +32,7 @@ CRYPTO_SYSTEM_PROMPT_TEMPLATE = """
 - amount: (Required when action is sell) action为sell时返回卖出的{coin_name}数量，不得超过持有的{coin_name}数量
 - cost: (Required when action is buy) action为buy时返回花费的USDT数量, 不得超过持有的USDT数量
 - reason: 做出此决定的详细分析报告，包括对各个数据和指标的分析，内容必须包括：OHLCV数据分析、技术指标分析(必须对所有给出的指标进行评价，包括SMA,RSI,BOLL,MACD,KDJ,ATR)、新闻事件分析、仓位和风险偏好分析
-- summary: (Required when action is buy/sell) 用30个字左右简要概括交易理由，用于交易历史复盘
+- summary: 用30个字左右简要概括决策理由，用于交易历史复盘
 
 响应格式例子：
 ```json
@@ -54,6 +53,7 @@ Example 2:
 Example 3:
 {{
     "action": "hold",
+    “summary": "市场震荡，缺乏明确信号",
     "reason": "OHLCV分析：价格在SMA20附近小幅震荡，成交量保持平稳；技术指标分析：SMA5(110.2)与SMA20(110.5)基本平行，RSI(55)处于中性位置，布林带(上轨115.6/中轨110.5/下轨105.4)呈现横向收敛趋势，MACD无明显金叉死叉，趋势平稳，随机指标%K(45)和%D(48)在中位盘整，ATR(1.8)显示波动率较低；新闻分析：市场关注美联储议息会议，主流币种开发进展平稳，DeFi总锁仓量保持稳定；交易历史回顾：历史数据显示在震荡市频繁交易往往造成损失，保持耐心等待明确信号是更好的选择；仓位分析：当前仓位适中(50%)，风险收益比例平衡，建议继续持有。"
 }}
 ```
@@ -94,12 +94,12 @@ AccountInfo = Dict[Literal['free', 'hold_amount', 'hold_val'], float]
 CryptoExchangeFutureInfo = Optional[Dict[Literal['global_long_short_account', 'top_long_short_account', 'top_long_short_amount', 'future_rate'], float]]
 SupportIndicators = List[Literal['sma', 'rsi', 'boll', 'macd', 'stoch', 'atr']]
 TradeLog = TypedDict('CryptoTradeLog ', {
-    'timestamp': int,
+    'timestamp': int, # UTC 时间戳，单位是ms
     'action': Literal['buy', 'sell'],
-    'amount': float,
-    'cost': float,
-    'position_ratio': float,
-    'summary': str
+    'amount': float, # buy或sell时必填
+    'cost': float, # buy时必填
+    'position_ratio': float, # buy或sell时必填，代表调整后的仓位比例
+    'summary': str # 一段简短的总结，hold也是必填的
 })
 TradeHistoryList = List[TradeLog]
 
@@ -275,12 +275,12 @@ def validate_crypto_advice(advice: str, max_cost: float, max_sell_amount: float)
             assert 'summary' in advice_json, f"{advice_json['action']}操作必须包含'summary'字段"
         if advice_json['action'] == 'buy':
             assert 'cost' in advice_json, "买入操作缺少'cost'字段"
-            assert isinstance(advice_json['cost'], float), "'cost'字段必须是浮点数类型"
+            assert isinstance(advice_json['cost'], (int, float)), "'cost'字段必须是浮点数类型"
             assert advice_json['cost'] > 0, "'cost'必须大于0"
             assert advice_json['cost'] <= max_cost, f"买入金额{advice_json['cost']}超过可用余额{max_cost}"
         elif advice_json['action'] == 'sell':   
             assert 'amount' in advice_json, "卖出操作缺少'amount'字段"
-            assert isinstance(advice_json['amount'], float), "'amount'字段必须是浮点数类型"
+            assert isinstance(advice_json['amount'], (int, float)), "'amount'字段必须是浮点数类型"
             assert advice_json['amount'] > 0, "'amount'必须大于0"
             # assert advice_json['amount'] <= max_sell_amount, f"卖出数量{advice_json['amount']}超过持仓数量{max_sell_amount}"
             if advice_json['amount'] > max_sell_amount:
@@ -361,7 +361,7 @@ ASHARE_SYSTEM_PROMPT_TEMPLATE = """
     3. 市场环境分析（大盘走势、板块表现、北向资金）
     4. 消息面分析（政策、行业新闻、公司公告等）
     5. 仓位和风险偏好分析
-- summary: (Required when action is buy/sell) 用30个字左右简要概括交易理由，用于交易历史复盘
+- summary:  用30个字左右简要概括决策理由，用于交易历史复盘
 
 响应格式例子：
 ```json
@@ -382,6 +382,7 @@ Example 2:
 Example 3:
 {{
     "action": "hold",
+    "summary": "市场震荡整理，缺乏明确信号，维持现有仓位",
     "reason": "OHLCV分析：价格在20日均线附近震荡整理，成交量温和，换手率保持稳定；技术指标分析：SMA5(3.45)与SMA20(3.42)基本平行，RSI(52)处于中性位置，布林带(上轨3.58/中轨3.42/下轨3.26)呈现横向收敛，MACD无明显金叉死叉，KDJ指标在50轴附近交织，ATR(0.06)显示波动率较低；市场环境：上证指数横盘整理，市场成交量平稳，北向资金小幅波动，行业景气度稳定；消息面：无重大利空利好消息；交易历史回顾：震荡市保持仓位稳定收益最佳；仓位分析：当前仓位50%，风险收益平衡，维持现有仓位。"
 }}
 注意：
@@ -472,7 +473,7 @@ def validate_ashare_advice(advice: str, max_buy_lots: float, max_sell_lots: floa
             if advice_json['action'] == 'buy':
                 assert advice_json['lots'] <= max_buy_lots, f"买入手数超过最大可买手数"
             if advice_json['action'] == 'sell':
-                assert advice_json['lots'] <= max_sell_lots, f"卖出手数超过最大可买手数"
+                assert advice_json['lots'] <= max_sell_lots, f"卖出手数超过最大可卖手数"
 
         return advice_json
     except Exception as err:
@@ -522,7 +523,8 @@ def advice_ashare_action(
         llm = get_agent(llm_provider, model, temperature=temperature, response_format='json')
         llm.set_system_prompt(system_prompt)
         llm_rsp = llm.ask(user_prompt)
-        msg_logger.msg(llm_rsp)
+        if msg_logger:
+            msg_logger.msg(llm_rsp)
         rsp = validate_ashare_advice(llm_rsp, max_lots_can_buy, account_info['hold_amount'] // 100)
         valid_keys = {'action', 'reason', 'summary', 'lots'}
         filtered_rsp = {k: v for k, v in rsp.items() if k in valid_keys}
