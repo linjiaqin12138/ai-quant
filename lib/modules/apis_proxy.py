@@ -1,12 +1,15 @@
 from typing import Dict, List
 from datetime import datetime
 
-from adapter.database.session import SqlAlchemySession
-from adapter.database.kv_store import KeyValueStore
-from adapter.apis import get_china_holiday
+from lib.adapter.database.session import SqlAlchemySession
+from lib.adapter.database.kv_store import KeyValueStore
+from lib.adapter.apis import get_china_holiday
 
 global_china_holiday_cache_by_year: Dict[str, List[str]] = {}
 def is_china_business_day(day: datetime) -> bool:
+    if day.weekday() >= 5:
+        return False
+    
     year_str = day.strftime('%Y')
     day_str = day.strftime('%Y-%m-%d')
     if year_str in global_china_holiday_cache_by_year:
@@ -22,7 +25,7 @@ def is_china_business_day(day: datetime) -> bool:
             sess.commit()
         global_china_holiday_cache_by_year[year_str] = holiday_list
         return day_str not in holiday_list
-    
+
 __all__ = [
     'is_china_business_day'
 ]

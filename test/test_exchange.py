@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 
 from lib.adapter.exchange.crypto_exchange.binance import BinanceExchange
-from lib.adapter.exchange.cn_market_exchange import CnMarketExchange
+from lib.adapter.exchange.cn_market_exchange import AshareExchange
 
 def test_can_query_range_from_remote():
     binance = BinanceExchange(True)
@@ -18,7 +18,7 @@ def test_can_query_range_from_remote():
     assert res.data[-1].timestamp == datetime(2024, 6, 30, 11, 0, 0, 0)
 
 def test_cn_market_exchange_fetch_history():
-    cn_market = CnMarketExchange()
+    cn_market = AshareExchange()
     stock_symbol = '515060'
     res = cn_market.fetch_ohlcv(symbol=stock_symbol, frame='1d', start=datetime(2024, 11, 1), end=datetime(2024, 11, 18, 1, 0, 0))
     assert len(res.data) == 11
@@ -54,11 +54,11 @@ def test_cn_market_exchange_fetch_history():
     
 
 def test_cn_market_exchange_ticker():
-    cn_market = CnMarketExchange()
+    cn_market = AshareExchange()
     res = cn_market.fetch_ticker(symbol='002415')
     assert type(res.last) is float
 
-    cn_market = CnMarketExchange()
+    cn_market = AshareExchange()
     res = cn_market.fetch_ticker(symbol='515060')
     assert type(res.last) is float
     

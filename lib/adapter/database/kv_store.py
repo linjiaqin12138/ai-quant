@@ -1,29 +1,14 @@
 from typing import Union, Dict, List
-import abc
 import json
 
 from sqlalchemy import select, update, delete
-from ...logger import logger
+from lib.logger import logger
 from .session import SessionAbstract, SqlAlchemySession
 from .sqlalchemy import events
 
 Value = Union[str | Dict | List]
 
-class KeyValueStoreAbstract(abc.ABC):
-    @abc.abstractmethod
-    def setnx(self, key: str, val: Value) -> bool:
-        raise NotImplementedError
-    @abc.abstractmethod
-    def set(self, key: str, val: Value):
-        raise NotImplementedError
-    @abc.abstractmethod
-    def get(self, key: str) -> Union[Value, None]:
-        raise NotImplementedError
-    @abc.abstractmethod
-    def delete(self, key: str):
-        raise NotImplementedError
-    
-class KeyValueStore(KeyValueStoreAbstract):
+class KeyValueStore:
     def __init__(self, session: SessionAbstract):
         self.session = session
 
@@ -76,3 +61,7 @@ class KeyValueStore(KeyValueStoreAbstract):
                 return
             else:
                 logger.error(f'Failed to set update {key} with value {val}')
+
+__all__ = [
+    'KeyValueStore'
+]

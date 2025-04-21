@@ -1,7 +1,8 @@
 import json
 import logging
+from typing import Optional
 
-from .config import get_log_level
+from lib.config import get_log_level
 
 class JSONFormatter(logging.Formatter):
     def format(self, record):
@@ -15,8 +16,6 @@ class JSONFormatter(logging.Formatter):
 
 
 log_level = getattr(logging, get_log_level())
-# file_handler = logging.FileHandler('./quant.log')
-# file_handler.setFormatter(JSONFormatter())
 
 console_handler = logging.StreamHandler()
 console_handler.setLevel(log_level)
@@ -25,11 +24,36 @@ console_handler.setFormatter(
     logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 )
 
-logger = logging.getLogger("quant")
-logger.setLevel(log_level)
-logger.propagate = False
-# 将handler添加到logger中
-logger.addHandler(console_handler)
-# logger.addHandler(file_handler)
+file_handlers = {}
 
-__all__ = ["logger"]
+def create_logger(
+    name: str,
+    *,
+    level: int = logging.DEBUG,
+    log_file: Optional[str] = None,
+) -> logging.Logger:
+    """
+    创建一个新的logger实例
+    :param name: logger的名称
+    :param level: 日志文件日志级别
+    :param log_file: 日志文件路径
+    :return: logger实例
+    """
+    logger = logging.getLogger(name)
+    # 不控制日志级别
+    logger.setLevel(logging.NOTSET)
+    logger.propagate = False
+    logger.addHandler(console_handler)
+    if log_file:
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setFormatter(JSONFormatter())
+        file_handler.setLevel(level)
+        logger.addHandler(file_handler)
+    return logger
+
+logger = create_logger("quant")
+
+__all__ = [
+    "logger",
+    "create_logger"
+]

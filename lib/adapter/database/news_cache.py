@@ -1,45 +1,15 @@
 from datetime import datetime
 from typing import Any, List, Optional, Union
-import abc
 
 from sqlalchemy import select, insert, delete
 
-from ...model import NewsInfo
-from ...utils.time import dt_to_ts, ts_to_dt
-from ...utils.list import map_by
+from lib.model import NewsInfo
+from lib.utils.time import dt_to_ts, ts_to_dt
+from lib.utils.list import map_by
 from .session import SessionAbstract
 from .sqlalchemy import hot_news_cache
 
-class HotNewsCacheAbstract(abc.ABC):
-    @abc.abstractmethod
-    def add(self, news: NewsInfo):
-        raise NotImplementedError
-    @abc.abstractmethod
-    def setnx(self, news: NewsInfo) -> int:
-        raise NotImplementedError
-    @abc.abstractmethod
-    def get_news_by_id(self, id: str) -> Union[NewsInfo, None]:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def delete_news_by_time_range(self, platform: str, start_time: Optional[datetime] = None, end_time: Optional[datetime] = None) -> int:
-        pass
-
-    @abc.abstractmethod
-    def get_news_by_time_range(self, platform: str, start_time: Optional[datetime] = None, end_time: Optional[datetime] = None) -> list[NewsInfo]:
-        """根据时间范围和平台获取新闻列表
-        
-        Args:
-            start_time: 开始时间戳
-            end_time: 结束时间戳
-            platform: 平台名称
-            
-        Returns:
-            按时间戳升序排序的新闻列表
-        """
-        raise NotImplementedError
-
-class HotNewsCache(HotNewsCacheAbstract):
+class HotNewsCache:
     def __init__(self, session: SessionAbstract):
         self.session = session
 
@@ -103,3 +73,7 @@ class HotNewsCache(HotNewsCacheAbstract):
         compiled = select(hot_news_cache).where(*conditions).order_by(hot_news_cache.c.timestamp.asc()).compile()
         res = self.session.execute(compiled.string, compiled.params)
         return map_by(res.rows, self._rows_to_news_info)
+    
+__all__ = [
+    'HotNewsCache'
+]

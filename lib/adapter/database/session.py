@@ -20,12 +20,15 @@ class SessionAbstract(abc.ABC):
     @abc.abstractmethod
     def begin(self):
         return
+
     @abc.abstractmethod
     def commit(self):
         raise NotImplementedError
+
     @abc.abstractmethod
     def rollback(self):
         raise NotImplementedError
+
     @abc.abstractmethod
     def execute(self, sql: str, params: dict) -> ExecuteResult:
         raise NotADirectoryError
@@ -69,3 +72,10 @@ class SqlAlchemySession(SessionAbstract):
             row_count= result.rowcount
         )
 
+def create_session() -> SessionAbstract:
+    return SqlAlchemySession(default_engine)
+
+__all__ = [
+    'SessionAbstract',
+    'create_session'
+]

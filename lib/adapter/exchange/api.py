@@ -1,8 +1,7 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
 
-from ...model.common import OhlcvHistory, Order, OrderSide, OrderType, TradeTicker
-
+from lib.model.common import OhlcvHistory, Order, OrderSide, OrderType, TradeTicker
 
 class ExchangeAPI(ABC):
     """交易所API抽象基类"""

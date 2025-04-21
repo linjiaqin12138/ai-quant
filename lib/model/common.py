@@ -43,11 +43,10 @@ class Ohlcv:
     close: float
     volume: float
 
-F = TypeVar('f', bound=str)
 @dataclass(frozen=True)
-class OhlcvHistory(Generic[F]):
+class OhlcvHistory:
     symbol: str
-    frame: F
+    frame: str
     data: List[Ohlcv]
 
 @dataclass

@@ -7,7 +7,7 @@ from .common import OhlcvHistory, Order
 CryptoHistoryFrame = Literal['1d', '1h', '15m']
 
 @dataclass(frozen=True)
-class CryptoOhlcvHistory(OhlcvHistory[CryptoHistoryFrame]):
+class CryptoOhlcvHistory(OhlcvHistory):
     exchange: Optional[str]
 
 @dataclass(frozen=True)

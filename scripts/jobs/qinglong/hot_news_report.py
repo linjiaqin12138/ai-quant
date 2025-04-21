@@ -4,7 +4,7 @@ import traceback
 from typing import  Dict, List
 
 from lib.adapter.notification import PushPlus, NotificationAbstract
-from lib.adapter.gpt import get_agent_by_model
+from lib.adapter.llm import get_agent
 from lib.model.news import NewsInfo
 from lib.modules.news_proxy import news_proxy
 from lib.logger import logger
@@ -64,7 +64,7 @@ class JobContext:
         self.platforms = options.platforms
         self.push = SilentPush() if options.no_push else PushPlus()
         self.news_fetcher = news_proxy
-        self.agents = map_by(options.models, get_agent_by_model)
+        self.agents = map_by(options.models, lambda x: get_agent('paoluz', x))
         self.curr_agents_index = 0
 
     def get_news_of_all_platform(self) -> Dict[str, List[NewsInfo]]:

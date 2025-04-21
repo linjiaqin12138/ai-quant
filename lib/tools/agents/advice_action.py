@@ -18,7 +18,7 @@ from lib.utils.indicators import (
     stochastic_oscillator_indicator,
     atr_indicator
 )
-from lib.adapter.gpt import get_agent
+from lib.adapter.llm import get_agent
 
 CRYPTO_SYSTEM_PROMPT_TEMPLATE = """
 你是一位经验丰富的加密货币交易专家，擅长分析市场数据、技术指标和新闻信息，现在是一个新的交易日，并按照以下过程对{coin_name}进行技术分析

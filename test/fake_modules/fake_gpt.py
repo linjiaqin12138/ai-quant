@@ -1,4 +1,4 @@
-from lib.adapter.gpt import GptAgentAbstract
+from lib.adapter.llm import GptAgentAbstract
 from typing import Optional
 
 class FakeGpt(GptAgentAbstract):

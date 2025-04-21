@@ -1,6 +1,6 @@
 from typing import List, Dict
 from lib.model.news import NewsInfo
-from lib.adapter.gpt import get_agent
+from lib.adapter.llm import get_agent
 from lib.utils.news import render_news_in_markdown_group_by_time_for_each_platform
 
 CRYPTO_SYSTEM_PROMPT_TEMPLATE = """

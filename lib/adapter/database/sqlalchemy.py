@@ -2,14 +2,14 @@ from typing import Dict
 from sqlalchemy import MetaData, create_engine
 from sqlalchemy import Table, Text, Column, Enum, String, DateTime, DECIMAL, BigInteger
 
-from ...model import CryptoHistoryFrame
-from ...config import get_database_uri, get_create_table
+from lib.model import CryptoHistoryFrame
+from lib.config import get_database_uri, get_create_table
 
 engine = create_engine(get_database_uri())
 
 metadata_obj = MetaData()
 
-def get_cache_table(market_type: str, frame: CryptoHistoryFrame) -> Table:
+def get_cache_table(market_type: str, frame: str) -> Table:
     return Table(
         market_type + "_ohlcv_cache_" + frame,
         metadata_obj,
@@ -26,6 +26,10 @@ crypto_ohlcv_cache_tables: Dict[CryptoHistoryFrame, Table] = {
     '1d': get_cache_table('crypto', '1d'),
     '1h': get_cache_table('crypto', '1h'),
     '15m': get_cache_table('crypto', '15m')
+}
+
+ashare_ohlcv_cache_tables: Dict[str, Table] = {
+    '1d': get_cache_table('ashare', '1d')
 }
 
 trade_action_info = Table(

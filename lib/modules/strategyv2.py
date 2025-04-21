@@ -18,7 +18,7 @@ from lib.adapter.database.kv_store import KeyValueStore
 from lib.adapter.notification import PushPlus
 from lib.adapter.notification.api import NotificationAbstract
 from lib.modules.notification_logger import NotificationLogger
-from lib.modules.exchange_proxy import ExchangeOperationProxy, crypto, cn_market
+from lib.modules.trade import TradeOperations, CryptoTrade, AshareTrade
 
 class StateApi(abc.ABC):
     @abc.abstractmethod
@@ -199,7 +199,7 @@ class StrategyBase(abc.ABC):
 
     # 实际运行时指定
     state: StateApi
-    exchange: ExchangeOperationProxy
+    trade_ops: TradeOperations
     logger: NotificationLogger
 
     def buy(self, spent: float = None, amount: float = None, comment: str = None) -> Order:
@@ -213,7 +213,7 @@ class StrategyBase(abc.ABC):
         self.logger.msg(f'Attempting to buy: spent={spent}, amount={amount}.')
         
         if not self._is_test_mode:
-            order = self.exchange.create_order(self.symbol, 'market', 'buy', self.name, amount=amount, spent=spent, comment=comment)
+            order = self.trade_ops.create_order(self.symbol, 'market', 'buy', self.name, amount=amount, spent=spent, comment=comment)
             self.state.decrease('free_money', order.get_cost(True))
             self.state.increase('hold_amount', order.get_amount(True))
             return order
@@ -243,7 +243,7 @@ class StrategyBase(abc.ABC):
             raise ValueError(f"Attempted to sell {amount}, but only {self.hold_amount} is held.")
 
         if not self._is_test_mode:
-            order = self.exchange.create_order(self.symbol, 'market', 'sell', self.name, amount=amount, comment=comment)
+            order = self.trade_ops.create_order(self.symbol, 'market', 'sell', self.name, amount=amount, comment=comment)
             self.state.increase('free_money', order.get_cost(True))
             self.state.decrease('hold_amount', order.get_amount(True))
             return order
@@ -296,7 +296,7 @@ class StrategyBase(abc.ABC):
         if self._is_test_mode:
             return self.state.get('bt_current_price')
         else:
-            return self.exchange.get_current_price(self.symbol)
+            return self.trade_ops.get_current_price(self.symbol)
 
     # Don't use datetime.now in _core()
     @property
@@ -339,9 +339,9 @@ class StrategyBase(abc.ABC):
         for param, val in addtional_params:
             setattr(self, param, val)
 
-        self.exchange = crypto if self.symbol.endswith('USDT') else cn_market
+        self.trade_ops = CryptoTrade() if self.symbol.endswith('USDT') else AshareTrade()
         try:
-            if not self.exchange.is_business_day():
+            if not self.trade_ops.is_business_day():
                 return
             ohlcv_list = self.get_ohlcv_history(self.symbol, self.frame, limit=self._data_fetch_amount)
             self.state = PersisitentState(self._id(), default=self._init_state())
@@ -360,7 +360,7 @@ class StrategyBase(abc.ABC):
     def _trace_back_business_day_from(self, count: int, from_time: datetime) -> datetime:
         while count > 0:
             days_ahead = time_ago_from(1, self.frame, from_time)
-            if self.exchange.is_business_day(days_ahead):
+            if self.trade_ops.is_business_day(days_ahead):
                 count -= 1
             from_time = days_ahead
         return from_time
@@ -369,9 +369,9 @@ class StrategyBase(abc.ABC):
         # TODO：根据is_test_mode，从history中捞必要的部分
         if limit:
             start_time = self._trace_back_business_day_from(limit, end_time)
-            return self.exchange.get_ohlcv_history(self.symbol, self.frame, start=start_time, end=end_time).data
+            return self.trade_ops.get_ohlcv_history(self.symbol, self.frame, start=start_time, end=end_time).data
         else:
-            return self.exchange.get_ohlcv_history(self.symbol, self.frame, start=start_time, end=end_time).data
+            return self.trade_ops.get_ohlcv_history(self.symbol, self.frame, start=start_time, end=end_time).data
 
     def back_test(
             self,
@@ -405,7 +405,7 @@ class StrategyBase(abc.ABC):
             # start_time取整，防止用输入的start_time查询不到start_time所在周期的数据
             start_time = round_datetime_in_period(start_time, self.frame)
   
-            self.exchange = crypto if self.symbol.endswith('USDT') else cn_market
+            self.trade_ops = CryptoTrade() if self.symbol.endswith('USDT') else AshareTrade()
             trace_back_start = self._trace_back_business_day_from(self._data_fetch_amount, start_time)
             history = self.get_ohlcv_history(
                 start_time = trace_back_start,

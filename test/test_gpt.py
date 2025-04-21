@@ -2,7 +2,7 @@ import pytest
 import socket
 import threading
 import json
-from lib.adapter.gpt import BaiChuanAgent
+from lib.adapter.llm import BaiChuanAgent
 
 def mock_server(port):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:

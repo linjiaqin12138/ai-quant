@@ -2,7 +2,7 @@ from typing import Literal
 from dataclasses import dataclass
 from .common import Order
 
-CnStockHistoryFrame = Literal['1d', '1w', '1M']
+CnStockHistoryFrame = Literal['1d']
 @dataclass(frozen=True)
 class AShareOrder(Order):
     def get_amount(self, excluding_fee: bool = False):

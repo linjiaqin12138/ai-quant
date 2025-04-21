@@ -1,16 +1,15 @@
 from datetime import datetime, timezone
 import akshare as ak
 import requests
-import urllib3
 
-from ...utils.decorators import with_retry
-from ...config import API_MAX_RETRY_TIMES
-from ...model import CnStockHistoryFrame
-from ...utils.time import dt_to_ts, round_datetime_in_local_zone
-from ...model.common import OhlcvHistory, Order, OrderSide, OrderType, TradeTicker, Ohlcv
+from lib.utils.decorators import with_retry
+from lib.config import API_MAX_RETRY_TIMES
+from lib.model import CnStockHistoryFrame
+from lib.utils.time import dt_to_ts, round_datetime_in_local_zone
+from lib.model.common import OhlcvHistory, Order, OrderSide, OrderType, TradeTicker, Ohlcv
 from .api import ExchangeAPI
 
-class CnMarketExchange(ExchangeAPI):
+class AshareExchange(ExchangeAPI):
     """A股交易所API实现"""
     
     def _get_symbol_type(self, symbol: str) -> str:
@@ -42,7 +41,7 @@ class CnMarketExchange(ExchangeAPI):
         )
 
     @with_retry((requests.exceptions.ConnectionError, requests.exceptions.Timeout, requests.exceptions.ProxyError), API_MAX_RETRY_TIMES)
-    def fetch_ohlcv(self, symbol: str, frame: CnStockHistoryFrame, start: datetime, end: datetime = datetime.now()) -> OhlcvHistory[CnStockHistoryFrame]:
+    def fetch_ohlcv(self, symbol: str, frame: CnStockHistoryFrame, start: datetime, end: datetime = datetime.now()) -> OhlcvHistory:
         """获取K线数据"""
         rounded_start = round_datetime_in_local_zone(start, frame)
         rounded_end = round_datetime_in_local_zone(end, frame)
@@ -109,4 +108,4 @@ class CnMarketExchange(ExchangeAPI):
         """创建订单（暂未实现）"""
         raise NotImplementedError("A股交易下单功能暂未实现")
 
-cn_market = CnMarketExchange()
+cn_market = AshareExchange()
