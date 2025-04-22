@@ -1,14 +1,27 @@
 from datetime import datetime
-
-from lib.adapter.database import create_transaction
+from typing import List, Tuple
+from lib.adapter.database import create_transaction, DbTransaction
 from lib.adapter.exchange.cn_market_exchange import AshareExchange
 from lib.model.cn_market import AShareOrder
-from lib.model.common import OhlcvHistory, Order, OrderSide, OrderType
+from lib.model.common import Ohlcv, Order, OhlcvHistory, OrderSide, OrderType
 from lib.modules.apis_proxy import is_china_business_day
 from lib.logger import logger
 from lib.utils.string import random_id
-from lib.utils.time import time_ago_from
+from lib.utils.time import round_datetime_in_period, time_ago_from
+from lib.tools.cache_decorator import use_cache
+from lib.tools.range_cache import use_range_cache
 from .api import TradeOperations
+
+
+def get_ohlcv_time_range(ohlcv: OhlcvHistory) -> Tuple[datetime, datetime]:
+    """
+    Get the time range of the OHLCV data.
+    """
+    if not ohlcv.data:
+        return (datetime.max, datetime.min)
+    if len(ohlcv.data) == 1:
+        return ohlcv.data[0].timestamp, ohlcv.data[0].timestamp
+    return ohlcv.data[0].timestamp, ohlcv.data[-1].timestamp
 
 class AshareTrade(TradeOperations):
 
@@ -18,10 +31,11 @@ class AshareTrade(TradeOperations):
 
     def is_business_day(self, day: datetime) -> bool:
         return is_china_business_day(day)
-        
+
+    @use_cache(5, use_db_cache=True, serializer=str, deserializer=float)
     def get_current_price(self, symbol: str) -> float:
-        return super().get_current_price(symbol)
-    
+        return self.exchange.fetch_ticker(symbol).last
+
     def get_ohlcv_history(
             self, 
             symbol: str, 
@@ -31,10 +45,32 @@ class AshareTrade(TradeOperations):
             limit: int = None
         ) -> OhlcvHistory:
         logger.debug(f'get_ohlcv_history with {symbol=}, {frame=}, {limit=}, {start=}, {end=}')
+
+        def store_ohlcv_in_cache(db: DbTransaction, data: List[Ohlcv]) -> None:
+            db.ohlcv_cache.add(OhlcvHistory(
+                symbol=symbol,
+                frame=frame,
+                data=data
+            ))
+
+        def get_ohlcv_by_cache(db: DbTransaction, start: datetime, end: datetime) -> List[Ohlcv]:
+            return db.ohlcv_cache.range_query(symbol, frame, start, end).data
+    
+        @use_range_cache(
+            get_data_by_cache=get_ohlcv_by_cache,
+            store_data=store_ohlcv_in_cache,
+            key_param_names=['symbol', 'frame'],
+            metadata_key_suffix='::ashare_ohlcv_cache::metadata',
+            lock_key_suffix='::ashare_ohlcv_cache::lock',
+        )
+        def get_ohlcv_by_time_range(symbol: str, frame: str, start: datetime, end: datetime) -> List[Ohlcv]:
+            return self.exchange.fetch_ohlcv(symbol, frame, start, end).data
+        
         if not limit and not start:
             raise ValueError("Invalid parameters: 'start' must be provided when 'limit' is not set.")
         if start and not end:
             end = datetime.now()
+        data: List[Ohlcv] = None
         if limit:
             end = datetime.now()
             start = end
@@ -42,8 +78,12 @@ class AshareTrade(TradeOperations):
                 start = time_ago_from(1, frame, start)
                 if self.is_business_day(start):
                     limit -= 1
-            return self.exchange.fetch_ohlcv(symbol, frame, start, end)     
-        return self.exchange.fetch_ohlcv(symbol, frame, start, end)
+        nomolized_start = round_datetime_in_period(start, frame)
+        nomolized_end = round_datetime_in_period(end, frame)
+        if nomolized_start == nomolized_end:
+            return []
+        data = get_ohlcv_by_time_range(symbol, frame, nomolized_start, nomolized_end)
+        return OhlcvHistory(symbol=symbol, frame=frame, data = data)
     
     def create_order(
             self, 
@@ -67,7 +107,10 @@ class AshareTrade(TradeOperations):
             _cost = price * amount,
             fees=[]
         )
-    
+
+ashare = AshareTrade()
+
 __all__ = [
-    'AshareTrade'
+    'AshareTrade',
+    'ashare'
 ]

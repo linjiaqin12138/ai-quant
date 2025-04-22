@@ -30,15 +30,17 @@ class AshareExchange(ExchangeAPI):
         symbol_type = self._get_symbol_type(symbol)
         
         if symbol_type == 'etf':
-            df = ak.fund_etf_spot_em()  # ETF实时行情
+            df = ak.fund_etf_spot_em()  # ETF实时行情 ak.fund_etf_spot_em()
+            stock_data = df[df['代码'] == symbol].iloc[0]
+            return TradeTicker(
+                last=float(stock_data['最新价']),
+            )
         else:
-            df = ak.stock_zh_a_spot_em()  # A股实时行情
-            
-        stock_data = df[df['代码'] == symbol].iloc[0]
-        
-        return TradeTicker(
-            last=float(stock_data['最新价']),
-        )
+            df = ak.stock_bid_ask_em(symbol=symbol)
+            stock_data = df[df['item'] == '最新'].iloc[0]
+            return TradeTicker(
+                last=float(stock_data['value']),
+            )
 
     @with_retry((requests.exceptions.ConnectionError, requests.exceptions.Timeout, requests.exceptions.ProxyError), API_MAX_RETRY_TIMES)
     def fetch_ohlcv(self, symbol: str, frame: CnStockHistoryFrame, start: datetime, end: datetime = datetime.now()) -> OhlcvHistory:

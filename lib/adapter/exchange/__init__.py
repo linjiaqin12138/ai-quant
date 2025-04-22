@@ -1,2 +1,9 @@
-from .cn_market_exchange import cn_market, AshareExchange
+from .cn_market_exchange import  AshareExchange
+from .crypto_exchange import BinanceExchange
 from .api import ExchangeAPI
+
+__all__ = [
+    'AshareExchange',
+    'BinanceExchange',
+    'ExchangeAPI'
+]

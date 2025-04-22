@@ -72,8 +72,8 @@ class SqlAlchemySession(SessionAbstract):
             row_count= result.rowcount
         )
 
-def create_session() -> SessionAbstract:
-    return SqlAlchemySession(default_engine)
+def create_session(engine: Engine = default_engine) -> SessionAbstract:
+    return SqlAlchemySession(engine)
 
 __all__ = [
     'SessionAbstract',

@@ -1,0 +1,5 @@
+flask
+pydantic==2.11.3
+flask-pydantic==0.13.1
+pyhumps==3.8.0
+gunicorn==23.0.0

@@ -1,5 +1,5 @@
 from typing import Dict, List
-
+from textwrap import dedent
 from ..model.news import NewsInfo
 from .list import filter_by, group_by, map_by
 
@@ -55,11 +55,11 @@ def render_news_in_markdown_group_by_platform(news_list_per_platform: Dict[str, 
             news_without_title = '\n'.join(map_by(news_without_title, news_to_section))
             if news_without_title:
                 news_without_title = f'### 其它新闻 \n{news_without_title}'
-            return f"""
-## {get_platform_display_name(platform)}
-{news_with_title}
-{news_without_title}
-"""
+            return dedent(f"""
+                ## {get_platform_display_name(platform)}
+                {news_with_title}
+                {news_without_title}
+            """)
         return ''
 
     return "# 各大平台新闻\n" + '\n'.join(map_by(news_list_per_platform.keys(), platform_to_section))

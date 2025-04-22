@@ -1,19 +1,19 @@
 import asyncio
 import json
 import sys
-from typing import Optional
 
 from g4f import debug as g4f_debug
 from g4f.client import Client
 from g4f.errors import *
 
-from ...config import API_MAX_RETRY_TIMES, get_http_proxy, get_log_level
-from ...logger import logger
-from ...utils.decorators import with_retry
-from ...utils.string import extract_json_string
-from .interface import GptAgentAbstract, OpenAiRetryableError
+from lib.config import API_MAX_RETRY_TIMES, get_http_proxy, get_log_level
+from lib.logger import logger
+from lib.utils.decorators import with_retry
+from lib.utils.string import extract_json_string
+from .interface import LlmAbstract
+from .openai_compatible import OpenAiApiMixin, OpenAiRetryableError
 
-class G4fAgent(GptAgentAbstract):
+class G4f(OpenAiApiMixin, LlmAbstract):
     
     def __init__(self, model: str = "gpt-3.5-turbo", **system_params):
         super().__init__(model, **system_params)

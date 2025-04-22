@@ -6,19 +6,11 @@ import logging
 import threading
 import heapq
 from queue import PriorityQueue, Empty
-from typing import Any, Callable, Dict, List, Optional, Union, Tuple
-from datetime import datetime, timedelta
-
+from typing import Any, Callable, Dict, List, Optional
+from datetime import datetime
+from lib.logger import logger
 from .task import Task, PeriodicTask, TaskStatus
 from .worker import Worker
-
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger('scheduler.scheduler')
-
 
 class TaskScheduler:
     """任务调度器，负责管理任务队列和调度任务执行"""

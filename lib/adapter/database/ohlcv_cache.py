@@ -58,7 +58,7 @@ class OhlcvCacheFetcher:
         )
 
     def add(self, history: CryptoOhlcvHistory):
-        table = self._get_table(history.frame)
+        table = self._get_table(history.frame, 'crypto' if history.symbol.endswith('USDT') else 'ashare')
         for ohlcv in history.data:
             stmt = insert(table).values(
                 symbol = history.symbol,

@@ -5,7 +5,8 @@ import requests
 from ...logger import logger
 from ...config import API_MAX_RETRY_TIMES, get_paoluz_token
 from ...utils.decorators import with_retry
-from .interface import GptAgentAbstract, OpenAiApiMixin, OpenAiRetryableError
+from .interface import LlmAbstract
+from .openai_compatible import OpenAiApiMixin, OpenAiRetryableError
 
 def api_query(method: str, endpoint: str, path: str, token: str, data: str = None):
     headers = {
@@ -36,7 +37,8 @@ def query_with_endpoint_retry(
     rsp = api_query(method, default_endpoint, path, token, data)
     if rsp.status_code != 200:
         if rsp.status_code == 429 or rsp.status_code >= 500:
-            logger.warning(f"Paoluz API calling failed with statusCode: {rsp.status_code}, retry another endpoint")
+            logger.warning(f"Paoluz API calling failed with statusCode: {rsp.status_code} with endpoint {default_endpoint}, retry another endpoint")
+            logger.debug(rsp.text)
             rsp = api_query(method, backup_endpoint, path, token, data)
             if rsp.status_code == 429:
                 raise OpenAiRetryableError(f"Paoluz API calling failed with statusCode: {rsp.status_code}, message {rsp.text}")
@@ -45,7 +47,7 @@ def query_with_endpoint_retry(
             raise Exception(f"Paoluz API calling failed with statusCode: {rsp.status_code}, response body: {rsp.text}")
     return rsp
 
-class PaoluzAgent(GptAgentAbstract, OpenAiApiMixin):
+class PaoluzAgent(OpenAiApiMixin, LlmAbstract):
     default_endpoint = "https://chatapi.nloli.xyz"
     backup_endpoint  = "https://hkc3s.shamiko.uk"
     api_key = get_paoluz_token()
@@ -67,8 +69,8 @@ class PaoluzAgent(GptAgentAbstract, OpenAiApiMixin):
         )
         return rsp.json().get('data')
 
-    def _ask(self) -> str:
-        json_data = self._build_req_body()
+    def ask(self, context: List) -> str:
+        json_data = self._build_req_body(context)
         rsp = query_with_endpoint_retry(
             self.default_endpoint, 
             self.backup_endpoint, 

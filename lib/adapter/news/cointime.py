@@ -80,8 +80,6 @@ def get_news_of_cointime(start: datetime = days_ago(1), end: datetime = datetime
     while True:
         logger.debug(f'Query news from {last_timestamp}')
         news = retryable_part()
-        # print(len(news))
-        # map_by(news, lambda x: print(x['publishedAt'], ts_to_dt(dt_to_ts(utc_isoformat_to_dt(x["publishedAt"]))).strftime("%Y-%m-%dT%H:%M:%S.%f")))
         if not news:
             logger.warning("No news found, returned")
             return reverse(result)
@@ -101,9 +99,7 @@ def get_news_of_cointime(start: datetime = days_ago(1), end: datetime = datetime
                 description=n['description'],
                 timestamp=ts_to_dt(dt_to_ts(news_timestamp)), # 变成本地时区的时间
                 url=f"https://cn.cointime.ai{n['uri']}",
-                platform="cointime",
-                reason=None,
-                mood=None
+                platform="cointime"
             ))
 
         # 更新时间戳以获取下一页的新闻

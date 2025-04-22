@@ -39,7 +39,7 @@ def test_news_adapter_get_news_from_time():
         assert news_in_range[0].timestamp < news_in_range[1].timestamp
         assert news_in_range[0].timestamp >= start
 
-@pytest.mark.skip(reason="Temporarily disabled for devselopment")
+@pytest.mark.skip(reason="容易超时，不稳定")
 def test_group_by_news_by_time():
     cases = {
         'jin10': {
@@ -62,7 +62,7 @@ def test_group_by_news_by_time():
         'cointime': cases['cointime']['news_list']
     }))
 
-@pytest.mark.skip(reason="Temporarily disabled for devselopment")
+@pytest.mark.skip(reason="容易超时，不稳定")
 def test_group_by_news_by_platform():
     sina_news = news.get_current_hot_news('sina')
     qq_news = news.get_current_hot_news('qq-news')

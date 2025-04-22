@@ -1,6 +1,0 @@
-Flask
-Flask-RESTful
-flask-sqlalchemy
-python-dotenv
-requests
-pytest

@@ -1,27 +1,24 @@
-from lib.adapter.database.kv_store import KeyValueStore
-from lib.adapter.database.session import SqlAlchemySession
-from lib.adapter.database.session import default_engine
-from fake_modules.fake_db import get_fake_session, fake_kv_store_auto_commit
+import pytest
+from lib.adapter.database import create_transaction
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 def test_set_and_get_string():
-    with get_fake_session() as fake_session:
-        kv_store = KeyValueStore(fake_session)
-        kv_store.set('value_string_test', 'value')
-        assert kv_store.get('value_string_test') == 'value'
-        fake_session.commit()
+    with create_transaction() as db:
+        db.kv_store.set('value_string_test', 'value')
+        assert db.kv_store.get('value_string_test') == 'value'
+        db.session.commit()
 
+@pytest.mark.skip(reason="Sqlite模式下不支持并发测试")
 def test_setnx():
     key = 'concurrent_key'
     successful_threads = []
 
     def try_setnx(thread_id):
-        with get_fake_session() as fake_session:
-            kv_store = KeyValueStore(fake_session)
-            result = kv_store.setnx(key, f'val_{thread_id}')
+        with create_transaction() as db:
+            result = db.kv_store.setnx(key, f'val_{thread_id}')
             if result:
                 successful_threads.append(thread_id)
-                fake_session.commit()
+                db.session.commit()
             return result
 
     with ThreadPoolExecutor(max_workers=10) as executor:

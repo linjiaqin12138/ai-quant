@@ -21,8 +21,8 @@ def test_get_amount_cost_with_fee():
         ]
     )
 
-    assert order.get_amount() == 0.01
-    assert order.get_amount(True) == 0.01 - 0.001
+    assert order.amount == 0.01
+    assert order.get_net_amount() == 0.01 - 0.001
 
-    assert order.get_cost() == 200
-    assert order.get_cost(True) == 200 + 1
+    assert order.cost == 200
+    assert order.get_net_cost() == 200 + 1

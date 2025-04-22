@@ -1,6 +1,6 @@
 from typing import List, Any
-from ..adapter.notification import NotificationAbstract
-from ..logger import logger
+from lib.adapter.notification import NotificationAbstract
+from lib.logger import logger
 
 class NotificationLogger:
 

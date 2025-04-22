@@ -1,9 +1,10 @@
 
-from ...config import get_baichuan_token
-from .interface import GptAgentAbstract, OpenAiApiMixin
+from lib.config import get_baichuan_token
+from .interface import LlmAbstract
+from .openai_compatible import OpenAiApiMixin
 
-class BaiChuanAgent(OpenAiApiMixin, GptAgentAbstract):
 
+class BaiChuan(OpenAiApiMixin, LlmAbstract):
     def _is_support_json_rsp(self) -> bool:
         return self.model in [
             'Baichuan4-Turbo', 
@@ -15,5 +16,5 @@ class BaiChuanAgent(OpenAiApiMixin, GptAgentAbstract):
     
     def __init__(self, model: str = 'Baichuan3-Turbo-128k', **params):
         super().__init__(model, **params)
-        self.endpoint = params.get('api_endpoint', "https://api.baichuan-ai.com")
-        self.api_key = params.get('token', get_baichuan_token())
+        self.endpoint = params.get('endpoint', "https://api.baichuan-ai.com")
+        self.api_key = params.get('api_key', get_baichuan_token())

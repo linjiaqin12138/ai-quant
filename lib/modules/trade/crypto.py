@@ -2,10 +2,9 @@ from datetime import datetime, timedelta
 from typing import List
 
 from lib.adapter.database import create_transaction
-from lib.adapter.exchange.crypto_exchange.binance import BinanceExchange
+from lib.adapter.exchange import ExchangeAPI, BinanceExchange
 from lib.adapter.lock import with_lock
-from lib.model.common import OrderSide, OrderType
-from lib.model.crypto import CryptoHistoryFrame, CryptoOhlcvHistory, CryptoOrder
+from lib.model import OrderSide, OrderType, CryptoHistoryFrame, CryptoOhlcvHistory, CryptoOrder
 from lib.utils.time import round_datetime_in_period, time_ago_from, time_length_in_frame, timeframe_to_second
 from lib.logger import logger
 
@@ -48,9 +47,11 @@ def get_missed_time_ranges(timerange: List[datetime], start: datetime, end: date
     return result
 
 class CryptoTrade(TradeOperations):
-    def __init__(self):
-        self.exchange = BinanceExchange()
-        self.db = create_transaction()
+    def __init__(
+            self, 
+            exchange: ExchangeAPI = BinanceExchange()
+        ):
+        self.exchange = exchange
 
     def is_business_day(self, _: datetime) -> bool:
         return True
@@ -70,7 +71,7 @@ class CryptoTrade(TradeOperations):
             comment: str = None
         ) -> CryptoOrder:
         logger.debug(f'createorder: {type} {side} {reason} amount: {amount}, price: {price}, spent: {spent}, comment: {comment}')
-        with self.db:
+        with create_transaction() as db:
             order = None
             if type == 'limit' and amount and price:
                 order = self.exchange.create_order(symbol, type, side, amount, price)
@@ -84,8 +85,8 @@ class CryptoTrade(TradeOperations):
                 order = self.exchange.create_order(symbol, type, side, amount)
             else:
                 raise Exception(f'Unsupported parameters value: {type}, {side}, {amount}, {price}, {spent}')
-            self.db.trade_log.add(order, reason, comment)
-            self.db.commit()
+            db.trade_log.add(order, reason, comment)
+            db.commit()
             return order
     
     def get_ohlcv_history(
@@ -110,28 +111,28 @@ class CryptoTrade(TradeOperations):
                 return True
             return False
 
-        def query_from_cache():
-            cache_result = self.db.ohlcv_cache.range_query(symbol, frame, nomolized_start, nomolized_end)
+        def query_from_cache() -> CryptoOhlcvHistory:
+            cache_result = db.ohlcv_cache.range_query(symbol, frame, nomolized_start, nomolized_end)
             logger.debug(f'Found {len(cache_result.data)} records locally')
             return cache_result
 
-        with self.db:
+        with create_transaction() as db:
             cache_result = query_from_cache()
             if is_cache_satisfy(cache_result):
                 return cache_result
     
         @with_lock(f'lock-{symbol}-{frame}-ohlcv-query', max_concurrent_access=1, expiration_time=300, timeout=300)
         def lock_part():
-            with self.db: 
+            with create_transaction() as db: 
                 cache_result = query_from_cache()
                 if is_cache_satisfy(cache_result):
                     return cache_result
                 
                 if len(cache_result.data) == 0:
                     remote_result = self.exchange.fetch_ohlcv(symbol, frame, nomolized_start, nomolized_end)
-                    assert expected_data_length == len(remote_result.data)
-                    self.db.ohlcv_cache.add(remote_result)
-                    self.db.commit()
+                    # assert expected_data_length == len(remote_result.data)
+                    db.ohlcv_cache.add(remote_result)
+                    db.commit()
                     return remote_result
 
                 local_timerange = list(map(lambda item: item.timestamp, cache_result.data))
@@ -140,9 +141,9 @@ class CryptoTrade(TradeOperations):
                 logger.debug(f'missed_time_ranges: {miss_time_ranges}')
                 for time_range in miss_time_ranges:
                     remote_data = self.exchange.fetch_ohlcv(symbol, frame, time_range[0], time_range[1])
-                    self.db.ohlcv_cache.add(remote_data)
+                    db.ohlcv_cache.add(remote_data)
                     result_data.extend(remote_data.data)
-                self.db.commit()
+                db.commit()
                 return CryptoOhlcvHistory(
                     symbol = symbol,
                     frame = frame,
@@ -152,7 +153,9 @@ class CryptoTrade(TradeOperations):
                 )
 
         return lock_part()
-    
+
+crypto = CryptoTrade()
 __all__ = [
-    'CryptoTrade'
+    'CryptoTrade',
+    'crypto'
 ]

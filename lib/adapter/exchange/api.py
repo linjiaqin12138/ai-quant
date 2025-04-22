@@ -5,7 +5,6 @@ from lib.model.common import OhlcvHistory, Order, OrderSide, OrderType, TradeTic
 
 class ExchangeAPI(ABC):
     """交易所API抽象基类"""
-    
     @abstractmethod
     def fetch_ticker(self, symbol: str) -> TradeTicker:
         raise NotImplementedError

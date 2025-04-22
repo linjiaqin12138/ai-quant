@@ -32,3 +32,9 @@ def with_lock(
 
         return function_with_lock
     return decorator
+
+__all__ = [
+    'with_lock',
+    'CreateLockFactory',
+    'create_db_lock',
+]

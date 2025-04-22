@@ -32,7 +32,7 @@ class TradeHistory:
             timestamp = order.timestamp,
             action = order.side,
             reason = reason,
-            amount = order.get_amount(),
+            amount = order.get_net_amount(),
             price = order.price,
             type = order.type,
             context = json.dumps(order.context),

@@ -14,11 +14,8 @@ class JSONFormatter(logging.Formatter):
             }
         )
 
-
-log_level = getattr(logging, get_log_level())
-
 console_handler = logging.StreamHandler()
-console_handler.setLevel(log_level)
+console_handler.setLevel(getattr(logging, get_log_level()))
 # 设置日志格式，包括时间戳、日志级别和日志信息
 console_handler.setFormatter(
     logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
@@ -40,8 +37,8 @@ def create_logger(
     :return: logger实例
     """
     logger = logging.getLogger(name)
-    # 不控制日志级别
-    logger.setLevel(logging.NOTSET)
+    # 设置日志级别比debug还低，由console_handler控制输出
+    logger.setLevel(5)
     logger.propagate = False
     logger.addHandler(console_handler)
     if log_file:

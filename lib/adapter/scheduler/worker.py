@@ -1,21 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import threading
+import traceback
 import time
-import logging
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
-from typing import Dict, List, Optional, Union, Any, Callable
+from typing import Any
 
-from .task import Task, TaskStatus
-
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger('scheduler.worker')
-
+from lib.logger import logger
+from .task import Task
 
 class Worker:
     """工作线程管理器，负责执行任务"""
@@ -92,9 +84,8 @@ class Worker:
                 
             except Exception as e:
                 task.retry_attempts += 1
-                logger.error(f"任务 {task.task_id} 执行失败: {str(e)}")
-                import traceback
-                print(traceback.format_exc())
+                logger.error(f"任务 {task.task_id} 执行失败: {str(e)} {traceback.format_exc()}")
+
                 if retry < task.retry_count:
                     retry += 1
                     logger.info(f"将在 {task.retry_interval}秒 后重试任务 {task.task_id}，第 {retry}/{task.retry_count} 次重试")

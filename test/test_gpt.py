@@ -2,7 +2,7 @@ import pytest
 import socket
 import threading
 import json
-from lib.adapter.llm import BaiChuanAgent
+from lib.adapter.llm import BaiChuan, Agent
 
 def mock_server(port):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -82,11 +82,12 @@ def mock_baichuan_server():
     server_thread.join(timeout=1)
 
 def test_baichuan_agent(mock_baichuan_server):
-    agent = BaiChuanAgent(
-        api_endpoint=f"http://127.0.0.1:{mock_baichuan_server}",
-        token="fake_token"
-    )
-    
+
+    agent = Agent(BaiChuan(
+        endpoint=f"http://127.0.0.1:{mock_baichuan_server}",
+        api_key="fake_token"
+    ))
+
     response = agent.ask("你好")
-    
+
     assert response == "你好!我是百川AI助手,很高兴为您服务。"

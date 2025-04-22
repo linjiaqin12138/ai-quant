@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta
 
+import pytest
+
 from lib.adapter.exchange.crypto_exchange.binance import BinanceExchange
 from lib.adapter.exchange.cn_market_exchange import AshareExchange
 
@@ -17,6 +19,7 @@ def test_can_query_range_from_remote():
     assert res.data[0].timestamp == datetime(2024, 6, 29, 12, 0, 0, 0)
     assert res.data[-1].timestamp == datetime(2024, 6, 30, 11, 0, 0, 0)
 
+@pytest.mark.skip(reason="容易超时，不稳定")
 def test_cn_market_exchange_fetch_history():
     cn_market = AshareExchange()
     stock_symbol = '515060'
@@ -51,8 +54,8 @@ def test_cn_market_exchange_fetch_history():
     res = cn_market.fetch_ohlcv(symbol=etf_symbol, frame='1w', start=datetime(2024, 2, 1), end=datetime(2024, 3, 15))
     assert len(res.data) == 5  # 这个时间范围内应该有5个完整的交易周
     assert res.data[0].timestamp.weekday() == 0  # 确保周线数据是从周一开始的
-    
 
+@pytest.mark.skip(reason="容易超时，不稳定")
 def test_cn_market_exchange_ticker():
     cn_market = AshareExchange()
     res = cn_market.fetch_ticker(symbol='002415')

@@ -1,7 +1,7 @@
 import abc
 from dataclasses import dataclass, asdict
 from datetime import datetime
-from typing import Any, Dict, Generic, List, Literal, Optional, TypeVar
+from typing import List, Literal, Optional
 
 OrderType = Literal['market', 'limit']
 OrderSide = Literal['buy', 'sell']
@@ -9,7 +9,7 @@ OrderSide = Literal['buy', 'sell']
 @dataclass(frozen=True)
 class Ohlcv:
 
-    def __dict__(self):
+    def to_dict(self):
         # 使用dataclasses.asdict()获取字典表示
         data_dict = asdict(self)
         # 将timestamp字段从datetime对象转换为时间戳
@@ -68,13 +68,38 @@ class Order(abc.ABC):
     side: OrderSide
     price: float
     _amount: float
+    # 交易涉及的总金额
     _cost: float
     fees: List[OrderFee]
 
+    @property
+    def amount(self) -> float:
+        """获取订单的原始（毛）数量。"""
+        return self._amount
+
+    @property
+    def cost(self) -> float:
+        """获取订单的原始（毛）成本/价值 (price * amount)，不包含手续费。"""
+        return self._cost
+
     @abc.abstractmethod
-    def get_amount(self, excluding_fee: bool = False):
+    def get_net_amount(self) -> float:
+        """
+        获取净交易数量。
+        对于费用以基础资产支付的情况（如某些加密货币交易），
+        此数量会扣除相应费用。
+        """
         pass
 
     @abc.abstractmethod
-    def get_cost(self, including_fee: bool = False):
+    def get_net_cost(self) -> float:
+        """
+        获取净成本/价值，计入所有以计价货币支付的费用。
+        对于买单，返回值通常 >= cost。
+        对于卖单，返回值通常 <= cost。
+        """
         pass
+
+    def get_total_fee_in_currency(self, currency: str) -> float:
+        """计算指定货币的总费用。"""
+        return sum(fee.cost for fee in self.fees if fee.currency == currency)

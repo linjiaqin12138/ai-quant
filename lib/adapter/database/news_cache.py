@@ -20,9 +20,7 @@ class HotNewsCache:
             title=row.title,
             platform=row.platform,
             url=row.url,
-            timestamp=ts_to_dt(row.timestamp),
-            reason=row.reason,
-            mood=row.mood
+            timestamp=ts_to_dt(row.timestamp)
         )
 
     def add(self, news: NewsInfo):
@@ -32,9 +30,7 @@ class HotNewsCache:
             description = news.description,
             timestamp = dt_to_ts(news.timestamp),
             url = news.url,
-            platform = news.platform,
-            reason = news.reason,
-            mood = news.mood
+            platform = news.platform
         ).compile()
         self.session.execute(compiled.string, compiled.params)
 

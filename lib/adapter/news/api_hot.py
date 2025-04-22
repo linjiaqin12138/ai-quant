@@ -35,9 +35,7 @@ def default_mapper(original_data: dict) -> NewsInfo:
         description=original_data.get("desc"),
         timestamp=timestamp,
         url=original_data.get("url"),
-        platform=original_data.get("platform"),
-        reason=None,
-        mood=None
+        platform=original_data.get("platform")
     )
 
 def toutiao_mapper(original_data: dict) -> NewsInfo:

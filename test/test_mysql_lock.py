@@ -1,8 +1,10 @@
+
+import os
+import tempfile
 import threading
 import time
 import random
 import pytest
-from fake_modules.fake_db import db_str
 from lib.adapter.lock.database import DbBasedDistributedLock
 from lib.logger import logger
 
@@ -12,7 +14,7 @@ def mysql_lock():
         'name': 'test_lock',
         'max_concurrent_access': 2,
         'expiration_time': 300,
-        'db_url': db_str
+        'db_url':  f"sqlite:///{os.path.join(tempfile.gettempdir(), 'quant_test.sqlite')}"
     })
 
 def test_acquire_lock_success_with_max_cocurrency(mysql_lock: DbBasedDistributedLock):

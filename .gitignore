@@ -13,7 +13,9 @@ bin-release/
 nohup.out
 *.egg-info
 build/
+
 notebook/.ipynb_checkpoints/
+notebook/playground
 .pytest_cache
 temp.json
 Pipfile.lock
