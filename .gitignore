@@ -8,6 +8,7 @@ bin-release/
 .settings/
 .env
 .venv/
+.vscode/
 *.pyc
 *.log
 nohup.out
@@ -15,7 +16,8 @@ nohup.out
 build/
 
 notebook/.ipynb_checkpoints/
-notebook/playground
+notebook/playground/
+scripts/jobs/
 .pytest_cache
 temp.json
 Pipfile.lock

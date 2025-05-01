@@ -183,13 +183,12 @@ class StrategyBase(abc.ABC):
             setattr(self, param, val)
 
         self.trade_ops = crypto if self.symbol.endswith('USDT') else ashare
+        self.logger = NotificationLogger(self.name, PushPlus())
         try:
-            if not self.trade_ops.is_business_day():
+            if not self.trade_ops.is_business_day(self.current_time):
                 return
-            ohlcv_list = self.get_ohlcv_history(self.symbol, self.frame, limit=self._data_fetch_amount)
             self.state = PersisitentState(self._id(), default=self._init_state())
-            self.logger = NotificationLogger(self.name, PushPlus())
-
+            ohlcv_list = self.get_ohlcv_history(limit=self._data_fetch_amount)
             self._prepare()
             self._core(ohlcv_list)
 
@@ -221,11 +220,12 @@ class StrategyBase(abc.ABC):
             frame: str = None,
             recovery_file: Optional[str] = None,
             show_indicators: List[Literal['macd', 'boll']] = [],
+            result_folder: Optional[str] = None,
             **addtional_params
         ):
         from lib.modules.strategy.back_test import BackTest
         self.symbol = symbol or self.symbol
-        self.investment = investment or self.investment
+        self.investment = investment if investment is not None else self.investment
         self.frame = frame or self.frame 
         back_test = BackTest(
             strategy=self,
@@ -234,7 +234,8 @@ class StrategyBase(abc.ABC):
             name=name,
             recovery_file=recovery_file,
             show_indicators=show_indicators,
-            addtional_params = addtional_params
+            result_folder=result_folder,
+            addtional_params = addtional_params,
         )
         back_test.run()
 

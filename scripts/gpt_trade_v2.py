@@ -1,7 +1,10 @@
 from datetime import datetime
+from enum import Enum
 import json
-from typing import List
+from typing import List, Literal, Optional
 from dataclasses import asdict, dataclass 
+
+import typer
 
 from lib.model.common import Ohlcv, Order
 from lib.tools.market_master import MarketMaster, TradeContext, TradeLog
@@ -18,13 +21,17 @@ COMMON_DEFAULT_PARAMETERS = {
     'strategy_prefer': '中长期投资'
 }
 
+class Mode(str, Enum):
+    test = "test"
+    job = "job"
+
 @dataclass
 class GptStrategyMixin:
     advice_mode_provider: str = 'paoluz'
     advice_model: str = 'byte/deepseek-r1'
     news_summary_mode_provider: str = 'paoluz'
     news_summary_model: str = 'gpt-4o-mini'
-    risk_prefer: str = '风险厌恶型',
+    risk_prefer: str = '风险厌恶型'
     strategy_prefer: str = '中长期投资'
     _data_fetch_amount = 60
 
@@ -95,33 +102,46 @@ class GptStrategy(StrategyBase):
         if self._is_test_mode:
             self.state.set('bt_addtional_info', { 'reason': advice.reason, 'summary': advice.summary })
 
-if __name__ == '__main__':
+def main(
+    symbol: str = typer.Argument(..., help="股票代码"),
+    mode: Mode = typer.Option('test', help="回测或实盘模式"),
+    name: str = typer.Argument(..., help="任务名称"),
+    investment: float = typer.Argument(..., help="初始投资金额"),
+    start_time: str = typer.Option("2025-01-01", help="回测开始时间，格式YYYY-MM-DD"),
+    end_time: str = typer.Option("2025-03-01", help="回测结束时间，格式YYYY-MM-DD"),
+    advice_model_provider: str = typer.Option("siliconflow", help="模型供应商"),
+    advice_model: str = typer.Option("deepseek-ai/DeepSeek-V3", help="模型名"),
+    news_summary_model_provider: str = typer.Option("siliconflow", help="新闻摘要模型供应商"),
+    news_summary_model: str = typer.Option("THUDM/glm-4-9b-chat", help="新闻摘要模型名"),
+    risk_prefer: str = typer.Option("风险喜好型", help="风险偏好"),
+    strategy_prefer: str = typer.Option("低吸高抛", help="策略偏好"),
+    recovery_file: Optional[str] = typer.Option("", help="回测恢复恢复文件路径"),
+    result_folder: Optional[str] = typer.Option(None, help="回测结果文件夹路径")
+):
     s = GptStrategy(
-        advice_model_provider='siliconflow',
-        advice_model='deepseek-ai/DeepSeek-V3',
-        news_summary_model_provider='siliconflow',
-        news_summary_model='THUDM/glm-4-9b-chat'
+        advice_model_provider=advice_model_provider,
+        advice_model=advice_model,
+        news_summary_model_provider=news_summary_model_provider,
+        news_summary_model=news_summary_model
     )
-    s.back_test(
-        datetime(2025, 1, 1), 
-        datetime(2025, 3, 1),
-        name='闻泰科技 1.1-3.1 回测 DeepSeek V3', 
-        symbol='600745',  
-        investment=50000,
-        risk_prefer="风险喜好型",
-        strategy_prefer="低吸高抛，注重短期收益，分批买入卖出不梭哈",
-        recovery_file="./recover_600745.json",
-        show_indicators=['boll', 'macd']
-    )
-    s.back_test(
-        datetime(2025, 4, 1), 
-        datetime(2025, 4, 25),
-        name='以太坊4月回测', 
-        symbol='WCT/USDT',  
-        frame='1d',
-        investment=50000,
-        risk_prefer="稳健型",
-        strategy_prefer="短线投资",
-        recovery_file="./recover_eth.json",
-        show_indicators=['boll', 'macd']
-    )
+    if mode == 'test':
+        s.back_test(
+            datetime.strptime(start_time, "%Y-%m-%d"),
+            datetime.strptime(end_time, "%Y-%m-%d"),
+            name=name,
+            symbol=symbol,
+            investment=investment,
+            risk_prefer=risk_prefer,
+            strategy_prefer=strategy_prefer,
+            recovery_file=recovery_file or f'{symbol}_{start_time}_{end_time}.json',
+            result_folder=result_folder or f'{symbol.replace("/", "")}_{start_time}_{end_time}'
+        )
+    else:
+        s.run(
+            name = name,
+            symbol = symbol,
+            investment = investment
+        )
+
+if __name__ == "__main__":
+    typer.run(main)

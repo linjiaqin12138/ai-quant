@@ -40,7 +40,7 @@ class BackTest:
         self.name = name
         self.recovery_file = recovery_file
         self.show_indicators = show_indicators
-        self.result_folder = result_folder or os.path.join(os.getcwd(), f'{strategy.symbol}_{strategy.frame}')
+        self.result_folder = result_folder
 
         strategy._is_test_mode = True
         strategy.logger = NotificationLogger(self.name, ConsulPrint())
@@ -125,19 +125,21 @@ class BackTest:
             'addplot': add_plot,
             'figscale': 1.5,
             'figsize': (16, 10),
-            'style': mpf.make_mpf_style(rc={'font.family': 'SimHei'})
+            # 'style': mpf.make_mpf_style(rc={'font.family': 'SimHei'})
         }
         
         # check if the result folder exists, if not create it
-        if not os.path.exists(self.result_folder):
-            os.makedirs(self.result_folder)
-        save_path = os.path.join(self.result_folder, f'{self.strategy.symbol}_{self.start_time.strftime("%Y%m%d")}_{self.end_time.strftime("%Y%m%d")}.png')
-        kwargs['savefig'] = save_path
-        mpf.plot(df, **kwargs)
-
-        # save result to csv file
-        result_csv_path = os.path.join(self.result_folder, f'{self.strategy.symbol}_{self.start_time.strftime("%Y%m%d")}_{self.end_time.strftime("%Y%m%d")}.csv')
-        df.to_csv(result_csv_path, index=False)
+        if self.result_folder:
+            if not os.path.exists(self.result_folder):
+                os.makedirs(self.result_folder)
+            symbolwithoutslash = self.strategy.symbol.replace('/', '')
+            save_path = os.path.join(self.result_folder, f'{symbolwithoutslash}_{self.start_time.strftime("%Y%m%d")}_{self.end_time.strftime("%Y%m%d")}.png')
+            kwargs['savefig'] = save_path
+            mpf.plot(df, **kwargs)
+            result_csv_path = os.path.join(self.result_folder, f'{symbolwithoutslash}_{self.start_time.strftime("%Y%m%d")}_{self.end_time.strftime("%Y%m%d")}.csv')
+            df.to_csv(result_csv_path, index=True)
+        else:
+            mpf.plot(df, **kwargs)
 
     def run(self):
         if self.recovery_file and os.path.exists(self.recovery_file):

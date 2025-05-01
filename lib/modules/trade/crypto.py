@@ -63,14 +63,15 @@ class CryptoTrade(TradeOperations):
             self, 
             symbol: str, 
             type: OrderType, 
-            side: OrderSide, 
-            reason: str,
+            side: OrderSide,
+            *,
+            tags: str, 
             amount: float = None, 
             price: float = None, 
             spent: float = None, 
             comment: str = None
         ) -> CryptoOrder:
-        logger.debug(f'createorder: {type} {side} {reason} amount: {amount}, price: {price}, spent: {spent}, comment: {comment}')
+        logger.debug(f'createorder: {type} {side} {tags} amount: {amount}, price: {price}, spent: {spent}, comment: {comment}')
         with create_transaction() as db:
             order = None
             if type == 'limit' and amount and price:
@@ -85,7 +86,7 @@ class CryptoTrade(TradeOperations):
                 order = self.exchange.create_order(symbol, type, side, amount)
             else:
                 raise Exception(f'Unsupported parameters value: {type}, {side}, {amount}, {price}, {spent}')
-            db.trade_log.add(order, reason, comment)
+            db.trade_log.add(order, tags, comment)
             db.commit()
             return order
     

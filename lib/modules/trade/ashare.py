@@ -90,8 +90,9 @@ class AshareTrade(TradeOperations):
             symbol: str, 
             type: OrderType, 
             side: OrderSide,
-            reason: str, 
-            amount: float = None,
+            *,
+            tags: str, 
+            amount: float = None, 
             price: float = None, 
             spent: float = None, 
             comment: str = None
@@ -103,8 +104,8 @@ class AshareTrade(TradeOperations):
             type=type,
             side=side,
             price=price,
-            _amount=amount,
-            _cost = price * amount,
+            _amount=amount if side == 'sell' else spent / self.get_current_price(symbol),
+            _cost = self.get_current_price(symbol) * amount if side == 'sell' else spent,
             fees=[]
         )
 

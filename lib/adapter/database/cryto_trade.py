@@ -26,12 +26,12 @@ class TradeHistory:
             return CryptoOrder(**omit_keys(record.order, ['comment', 'reason']))
         return [TradeHistoryWithComment(order=convert_order(record), comment=record.comment) for record in records.rows]
     
-    def add(self, order: CryptoOrder, reason: str, comment: str = None):
+    def add(self, order: CryptoOrder, tags: str, comment: str = None):
         stmt = insert(trade_action_info).values(
             symbol = order.symbol,
             timestamp = order.timestamp,
             action = order.side,
-            reason = reason,
+            reason = tags,
             amount = order.get_net_amount(),
             price = order.price,
             type = order.type,
