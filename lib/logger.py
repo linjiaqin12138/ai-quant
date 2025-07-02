@@ -4,6 +4,7 @@ from typing import Optional
 
 from lib.config import get_log_level
 
+
 class JSONFormatter(logging.Formatter):
     def format(self, record):
         return json.dumps(
@@ -14,6 +15,7 @@ class JSONFormatter(logging.Formatter):
             }
         )
 
+
 console_handler = logging.StreamHandler()
 console_handler.setLevel(getattr(logging, get_log_level()))
 # 设置日志格式，包括时间戳、日志级别和日志信息
@@ -22,6 +24,7 @@ console_handler.setFormatter(
 )
 
 file_handlers = {}
+
 
 def create_logger(
     name: str,
@@ -48,9 +51,7 @@ def create_logger(
         logger.addHandler(file_handler)
     return logger
 
+
 logger = create_logger("quant")
 
-__all__ = [
-    "logger",
-    "create_logger"
-]
+__all__ = ["logger", "create_logger"]

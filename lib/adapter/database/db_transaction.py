@@ -4,6 +4,7 @@ from .kv_store import KeyValueStore
 from .news_cache import HotNewsCache
 from .ohlcv_cache import OhlcvCacheFetcher
 
+
 class DbTransaction:
 
     def __init__(self, session: SessionAbstract):
@@ -25,10 +26,10 @@ class DbTransaction:
 
     def __exit__(self, *args):
         return self.session.__exit__(*args)
-    
+
+
 def create_transaction(session: SessionAbstract = create_session()) -> DbTransaction:
     return DbTransaction(session)
 
-__all__ = [
-    'create_transaction'
-]
+
+__all__ = ["create_transaction"]

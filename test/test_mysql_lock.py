@@ -1,4 +1,3 @@
-
 import os
 import tempfile
 import threading
@@ -8,14 +7,18 @@ import pytest
 from lib.adapter.lock.database import DbBasedDistributedLock
 from lib.logger import logger
 
+
 @pytest.fixture
 def mysql_lock():
-    return DbBasedDistributedLock(**{
-        'name': 'test_lock',
-        'max_concurrent_access': 2,
-        'expiration_time': 300,
-        'db_url':  f"sqlite:///{os.path.join(tempfile.gettempdir(), 'quant_test.sqlite')}"
-    })
+    return DbBasedDistributedLock(
+        **{
+            "name": "test_lock",
+            "max_concurrent_access": 2,
+            "expiration_time": 300,
+            "db_url": f"sqlite:///{os.path.join(tempfile.gettempdir(), 'quant_test.sqlite')}",
+        }
+    )
+
 
 def test_acquire_lock_success_with_max_cocurrency(mysql_lock: DbBasedDistributedLock):
     def target(lock: DbBasedDistributedLock, results, index):
@@ -28,7 +31,7 @@ def test_acquire_lock_success_with_max_cocurrency(mysql_lock: DbBasedDistributed
                 time.sleep(random.uniform(1, 2))  # Hold the lock for a moment
             else:
                 results[index] = False
-                logger.debug('Acquire lock failed')
+                logger.debug("Acquire lock failed")
         except Exception as e:
             logger.error(str(e))
             results[index] = False
@@ -49,6 +52,7 @@ def test_acquire_lock_success_with_max_cocurrency(mysql_lock: DbBasedDistributed
 
     assert sum(results) == 2
 
+
 def test_wait_lock_success(mysql_lock: DbBasedDistributedLock):
     def target(lock: DbBasedDistributedLock, results, index):
         lock_id = None
@@ -56,7 +60,7 @@ def test_wait_lock_success(mysql_lock: DbBasedDistributedLock):
             lock_id = lock.wait(100)
             results[index] = True
             logger.debug(f"acquire lock {lock_id}")
-            
+
             time.sleep(random.uniform(1, 2))  # Hold the lock for a moment
         except Exception as e:
             logger.error(str(e))

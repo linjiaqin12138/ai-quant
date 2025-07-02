@@ -9,13 +9,23 @@ from ...logger import logger
 from ...model.news import NewsInfo
 from ...utils.decorators import with_retry
 from ...utils.list import reverse
-from ...utils.time import days_ago, dt_to_ts, to_utc_isoformat, ts_to_dt, utc_isoformat_to_dt
+from ...utils.time import (
+    days_ago,
+    dt_to_ts,
+    to_utc_isoformat,
+    ts_to_dt,
+    utc_isoformat_to_dt,
+)
 from ...utils.string import url_encode
 
-class ReplyIsNotJson(Exception):
-    pass 
 
-def get_news_of_cointime(start: datetime = days_ago(1), end: datetime = datetime.now()) -> List[NewsInfo]:
+class ReplyIsNotJson(Exception):
+    pass
+
+
+def get_news_of_cointime(
+    start: datetime = days_ago(1), end: datetime = datetime.now()
+) -> List[NewsInfo]:
     """
     获取Cointime平台的新闻。
 
@@ -32,14 +42,21 @@ def get_news_of_cointime(start: datetime = days_ago(1), end: datetime = datetime
     result = []
     last_timestamp = to_utc_isoformat(end)
 
-    @with_retry((ReplyIsNotJson, curl_cffi.requests.exceptions.Timeout, curl_cffi.requests.exceptions.ConnectionError), API_MAX_RETRY_TIMES)
+    @with_retry(
+        (
+            ReplyIsNotJson,
+            curl_cffi.requests.exceptions.Timeout,
+            curl_cffi.requests.exceptions.ConnectionError,
+        ),
+        API_MAX_RETRY_TIMES,
+    )
     def retryable_part():
         """
         可重试的API请求部分。
-        
+
         Returns:
             dict: API响应的数据部分。
-        
+
         Raises:
             requests.exceptions.RequestException: 如果请求失败。
         """
@@ -58,16 +75,18 @@ def get_news_of_cointime(start: datetime = days_ago(1), end: datetime = datetime
         #     -H 'sec-fetch-user: ?1' \
         #     -H 'upgrade-insecure-requests: 1' \
         #     -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36 Edg/129.0.0.0'
-        
-        
 
         url = f"https://cn.cointime.ai/api/column-items/more?column_id=111&datetime={url_encode(last_timestamp)}&take=20&order=desc"
-        headers = { 
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36 Edg/129.0.0.0'
+        headers = {
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36 Edg/129.0.0.0"
         }
-        res = curl_requests.get(url, headers=headers, proxies={ 'http': get_http_proxy(), 'https': get_http_proxy() })
+        res = curl_requests.get(
+            url,
+            headers=headers,
+            proxies={"http": get_http_proxy(), "https": get_http_proxy()},
+        )
         if res.status_code == 404:
-            logger.warning('Coin time news return 404')
+            logger.warning("Coin time news return 404")
             return []
         res.raise_for_status()
         try:
@@ -76,9 +95,9 @@ def get_news_of_cointime(start: datetime = days_ago(1), end: datetime = datetime
             raise ReplyIsNotJson(res.content[:100])
         assert rsp_body["code"] == 0, str(rsp_body)
         return rsp_body["data"]
-    
+
     while True:
-        logger.debug(f'Query news from {last_timestamp}')
+        logger.debug(f"Query news from {last_timestamp}")
         news = retryable_part()
         if not news:
             logger.warning("No news found, returned")
@@ -87,22 +106,26 @@ def get_news_of_cointime(start: datetime = days_ago(1), end: datetime = datetime
         for n in news:
             news_timestamp = utc_isoformat_to_dt(n["publishedAt"])
             is_outof_range = dt_to_ts(news_timestamp) < dt_to_ts(start)
-            logger.debug(f"{news_timestamp.isoformat()} {n['title']}, is in range: {not is_outof_range}")
+            logger.debug(
+                f"{news_timestamp.isoformat()} {n['title']}, is in range: {not is_outof_range}"
+            )
             # 如果新闻早于指定时间则停止获取，转化为时间戳比较来避免时区问题（输入的start没时区但是news_timestamp有而且是utc)
             if is_outof_range:
                 logger.warning("Query reached start, returned")
                 return reverse(result)
 
-            result.append(NewsInfo(
-                news_id=n['itemId'],
-                title=n['title'],
-                description=n['description'],
-                timestamp=ts_to_dt(dt_to_ts(news_timestamp)), # 变成本地时区的时间
-                url=f"https://cn.cointime.ai{n['uri']}",
-                platform="cointime"
-            ))
+            result.append(
+                NewsInfo(
+                    news_id=n["itemId"],
+                    title=n["title"],
+                    description=n["description"],
+                    timestamp=ts_to_dt(dt_to_ts(news_timestamp)),  # 变成本地时区的时间
+                    url=f"https://cn.cointime.ai{n['uri']}",
+                    platform="cointime",
+                )
+            )
 
         # 更新时间戳以获取下一页的新闻
         last_timestamp = news[-1]["publishedAt"]
 
-    #return sorted(result, key=lambda x: x.timestamp)
+    # return sorted(result, key=lambda x: x.timestamp)

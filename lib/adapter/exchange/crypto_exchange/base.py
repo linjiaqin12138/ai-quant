@@ -6,22 +6,25 @@ import requests
 from lib.utils.decorators import with_retry
 from lib.config import API_MAX_RETRY_TIMES
 
-retry_decorator = with_retry((ccxt.errors.NetworkError, ccxt.errors.RequestTimeout, requests.ConnectionError), API_MAX_RETRY_TIMES)
-G = TypeVar('G')
+retry_decorator = with_retry(
+    (ccxt.errors.NetworkError, ccxt.errors.RequestTimeout, requests.ConnectionError),
+    API_MAX_RETRY_TIMES,
+)
+G = TypeVar("G")
 
 SUPPORT_RETRY_METHODS = [
-    'fetch_ohlcv',
-    'create_order',
-    'fetch_ticker',
-
+    "fetch_ohlcv",
+    "create_order",
+    "fetch_ticker",
     # Binance
-    'fapidataGetGloballongshortaccountratio',
-    'fapidataGetToplongshortaccountratio',
-    'fapidataGetToplongshortpositionratio',
-    'fapipublicGetPremiumindex',
-    'fapiPrivatePostLeverage',
-    'fapiPrivateV2GetPositionRisk'
+    "fapidataGetGloballongshortaccountratio",
+    "fapidataGetToplongshortaccountratio",
+    "fapidataGetToplongshortpositionratio",
+    "fapipublicGetPremiumindex",
+    "fapiPrivatePostLeverage",
+    "fapiPrivateV2GetPositionRisk",
 ]
+
 
 def retry_patch(exchange: G) -> G:
     for method in SUPPORT_RETRY_METHODS:

@@ -8,6 +8,7 @@ from .caixin import get_latest_news_of_caixin
 from .jin10 import get_news_of_jin10
 from .api_hot import HotNewsPlatform, get_hot_news_of_platform, ALL_HOT_NEWS_PLATFORMS
 
+
 class NewsFetcherApi(abc.ABC):
     # @abc.abstractmethod
     # def get_news_of_symbol_from(self, symbol: str, platform: str, start: datetime, end: datetime) -> List[NewsInfo]:
@@ -40,8 +41,11 @@ class NewsFetcherApi(abc.ABC):
             可能的异常说明（如有）
         """
         pass
+
     @abc.abstractmethod
-    def get_news_during(self, platform: str, start: datetime, end: datetime) -> List[NewsInfo]:
+    def get_news_during(
+        self, platform: str, start: datetime, end: datetime
+    ) -> List[NewsInfo]:
         """获取指定时间范围内的新闻信息
 
         Args:
@@ -56,7 +60,7 @@ class NewsFetcherApi(abc.ABC):
             可能的异常说明（如有）
         """
         pass
-    
+
     @abc.abstractmethod
     def get_current_hot_news(self, platform: str) -> List[NewsInfo]:
         """获取当前热门新闻
@@ -75,16 +79,23 @@ class NewsFetcherApi(abc.ABC):
 
 # 具体实现类
 class NewsFetcher(NewsFetcherApi):
-    def get_news_from(self, platform: Literal['caixin', 'cointime', 'jin10'], start: datetime) -> List[NewsInfo]:
-        if platform == 'caixin':
+    def get_news_from(
+        self, platform: Literal["caixin", "cointime", "jin10"], start: datetime
+    ) -> List[NewsInfo]:
+        if platform == "caixin":
             return get_latest_news_of_caixin(start)
-        elif platform == 'jin10':
+        elif platform == "jin10":
             return get_news_of_jin10(start, datetime.now())
         else:
             return get_news_of_cointime(start, datetime.now())
-    
-    def get_news_during(self, platform: Literal['cointime', 'jin10'], start: datetime, end: datetime = datetime.now()) -> List[NewsInfo]:
-        if platform == 'jin10':
+
+    def get_news_during(
+        self,
+        platform: Literal["cointime", "jin10"],
+        start: datetime,
+        end: datetime = datetime.now(),
+    ) -> List[NewsInfo]:
+        if platform == "jin10":
             return get_news_of_jin10(start, end)
         return get_news_of_cointime(start, end)
 

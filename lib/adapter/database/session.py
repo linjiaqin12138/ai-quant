@@ -5,15 +5,17 @@ from sqlalchemy import text, Engine
 from ...logger import logger
 from .sqlalchemy import engine as default_engine
 
+
 @dataclass(frozen=True)
 class ExecuteResult:
     rows: List[Any]
     row_count: int
 
+
 class SessionAbstract(abc.ABC):
     def __enter__(self):
         return self
-    
+
     def __exit__(self, *args):
         self.rollback()
 
@@ -33,12 +35,13 @@ class SessionAbstract(abc.ABC):
     def execute(self, sql: str, params: dict) -> ExecuteResult:
         raise NotADirectoryError
 
+
 class SqlAlchemySession(SessionAbstract):
 
     def __init__(self, engine: Engine = default_engine):
         self.engine = engine
         self.conn = None
-    
+
     def __enter__(self):
         self.begin()
         return super().__enter__()
@@ -49,7 +52,7 @@ class SqlAlchemySession(SessionAbstract):
 
     def begin(self):
         self.conn = self.engine.connect()
-        if self.engine.url.drivername.find('sqlite') >= 0:
+        if self.engine.url.drivername.find("sqlite") >= 0:
             self.execute("BEGIN IMMEDIATE TRANSACTION")
 
     def commit(self):
@@ -61,21 +64,16 @@ class SqlAlchemySession(SessionAbstract):
     def execute(self, sql: str, params: dict = None) -> ExecuteResult:
         # if self.conn is None:
         #     self.conn = self.engine.connect()
-        result = self.conn.execute(
-            text(sql),
-            params
-        )
-        logger.debug(f'SQL: {sql}')
-        logger.debug(f'params: {params}')
+        result = self.conn.execute(text(sql), params)
+        logger.debug(f"SQL: {sql}")
+        logger.debug(f"params: {params}")
         return ExecuteResult(
-            rows = result.all() if result.returns_rows else [], 
-            row_count= result.rowcount
+            rows=result.all() if result.returns_rows else [], row_count=result.rowcount
         )
+
 
 def create_session(engine: Engine = default_engine) -> SessionAbstract:
     return SqlAlchemySession(engine)
 
-__all__ = [
-    'SessionAbstract',
-    'create_session'
-]
+
+__all__ = ["SessionAbstract", "create_session"]

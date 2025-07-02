@@ -2,59 +2,65 @@ from typing import Optional
 from datetime import datetime, timezone, timedelta
 from ..model import CryptoHistoryFrame, CnStockHistoryFrame
 
+
 def timeframe_to_second(tframe: str) -> int:
-    if tframe == '15m':
+    if tframe == "15m":
         return 15 * 60
-    if tframe == '1d':
+    if tframe == "1d":
         return 60 * 60 * 24
-    if tframe == '1h':
+    if tframe == "1h":
         return 60 * 60
-    if tframe == '1s':
+    if tframe == "1s":
         return 1
-    raise Exception(f'time range {tframe} not support')
+    raise Exception(f"time range {tframe} not support")
+
 
 def timeframe_to_ms(tframe) -> int:
     return timeframe_to_second(tframe) * 1000
 
+
 def round_datetime_in_local_zone(ts: datetime, tframe: CnStockHistoryFrame) -> datetime:
     """
     根据时间周期对datetime进行向下取整，基于本地时区
-    
+
     Args:
         ts (datetime): 需要取整的时间
         tframe (CnStockHistoryFrame): 时间周期 ('1d', '1w', '1M', '1y' 等)
-    
+
     Returns:
         datetime: 取整后的datetime对象
-        
+
     Example:
         ts = '2024-03-15 14:23:45'
         tframe = '1M' -> '2024-03-01 00:00:00'
         tframe = '1y' -> '2024-01-01 00:00:00'
     """
-    if tframe == '1d':
+    if tframe == "1d":
         return ts.replace(hour=0, minute=0, second=0, microsecond=0)
-    elif tframe == '1w':
+    elif tframe == "1w":
         # 获取本周一
-        return (ts - timedelta(days=ts.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
-    elif tframe == '1M':
+        return (ts - timedelta(days=ts.weekday())).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+    elif tframe == "1M":
         # 回到本月第一天
         return ts.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     else:
         raise ValueError(f"Unsupported timeframe: {tframe}")
 
+
 def round_datetime_in_period(ts: datetime, tframe: CryptoHistoryFrame) -> datetime:
     """
     将给定的datetime按照指定的时间周期(timeframe)向下取整，基于UTC时区
     不支持1week, 1month这样的tframe，因为UTC时间戳并不以星期一开始，而且一个月天数不固定
-    
+
     Args:
         ts (datetime): 需要取整的时间
         tframe (CryptoHistoryFrame): 时间周期 (如 '15m', '1h', '1d')
-    
+
     Returns:
         datetime: 取整后的datetime对象
-        
+
     Example:
         如果 ts = '2024-03-15 14:23:45(UTC)' 且 tframe = '15m'
         返回 '2024-03-15 14:15:00(UTC)'
@@ -63,37 +69,58 @@ def round_datetime_in_period(ts: datetime, tframe: CryptoHistoryFrame) -> dateti
     """
     return ts_to_dt(dt_to_ts(ts) // timeframe_to_ms(tframe) * timeframe_to_ms(tframe))
 
+
 def dt_to_ts(ts: datetime) -> int:
     return int(ts.timestamp() * 1000)
 
-def ts_to_dt(ts: int) -> datetime:
-    return datetime.fromtimestamp(ts/ 1000)
 
-def time_length_in_frame(start: datetime, end: datetime, frame: CryptoHistoryFrame) -> int:
-    return int((dt_to_ts(round_datetime_in_period(end, frame)) - dt_to_ts(round_datetime_in_period(start, frame))) / timeframe_to_second(frame) / 1000)
+def ts_to_dt(ts: int) -> datetime:
+    return datetime.fromtimestamp(ts / 1000)
+
+
+def time_length_in_frame(
+    start: datetime, end: datetime, frame: CryptoHistoryFrame
+) -> int:
+    return int(
+        (
+            dt_to_ts(round_datetime_in_period(end, frame))
+            - dt_to_ts(round_datetime_in_period(start, frame))
+        )
+        / timeframe_to_second(frame)
+        / 1000
+    )
+
 
 def get_utc_now_isoformat() -> str:
     return to_utc_isoformat(datetime.now())
+
 
 def to_utc_isoformat(dt: datetime) -> str:
     utc_dt = dt.astimezone(timezone.utc)
     return utc_dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
+
 def utc_isoformat_to_dt(s: str) -> datetime:
     return datetime.fromisoformat(s)
 
-def time_ago_from(unit: int, frame: str, ago_from: datetime = datetime.now()) -> datetime: 
+
+def time_ago_from(
+    unit: int, frame: str, ago_from: datetime = datetime.now()
+) -> datetime:
     return ago_from - unit * timedelta(seconds=timeframe_to_second(frame))
+
 
 def days_ago(days: int, zone: Optional[timezone] = None) -> datetime:
     if zone:
         return datetime.now(zone) - timedelta(days=days)
     return datetime.now() - timedelta(days=days)
 
+
 def hours_ago(hours: int, zone: Optional[timezone] = None) -> datetime:
     if zone:
         return datetime.now(zone) - timedelta(hours=hours)
     return datetime.now() - timedelta(hours=hours)
+
 
 def minutes_ago(minutes: int, zone: Optional[timezone] = None) -> datetime:
     if zone:

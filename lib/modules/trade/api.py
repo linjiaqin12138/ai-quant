@@ -3,6 +3,7 @@ from datetime import datetime
 
 from lib.model.common import OhlcvHistory, Order, OrderSide, OrderType
 
+
 class TradeOperations(abc.ABC):
     """
     这里面的方法主要是一些交易所的操作，但和交易所的接口lib.adapter.exchange下有所不同，目的是
@@ -10,6 +11,7 @@ class TradeOperations(abc.ABC):
     2. 防止污染交易所的接口，合适的话可以考虑将一些方法放到交易所的接口中
     3. 可以放一些和交易所无关的操作，比如获取交易日历等
     """
+
     @abc.abstractmethod
     def is_business_day(self, day: datetime) -> bool:
         pass
@@ -20,31 +22,30 @@ class TradeOperations(abc.ABC):
 
     @abc.abstractmethod
     def create_order(
-        self, 
-        symbol: str, 
-        type: OrderType, 
+        self,
+        symbol: str,
+        type: OrderType,
         side: OrderSide,
         *,
-        tags: str, 
-        amount: float = None, 
-        price: float = None, 
-        spent: float = None, 
+        tags: str,
+        amount: float = None,
+        price: float = None,
+        spent: float = None,
         comment: str = None
     ) -> Order:
         pass
 
     @abc.abstractmethod
     def get_ohlcv_history(
-        self, 
-        symbol: str, 
+        self,
+        symbol: str,
         frame: str,
         *,
-        limit: int, 
-        start: datetime, 
+        limit: int,
+        start: datetime,
         end: datetime = datetime.now()
     ) -> OhlcvHistory:
         pass
 
-__all__ = [
-    'TradeOperations'
-]
+
+__all__ = ["TradeOperations"]

@@ -23,6 +23,7 @@ def get_ohlcv_time_range(ohlcv: OhlcvHistory) -> Tuple[datetime, datetime]:
         return ohlcv.data[0].timestamp, ohlcv.data[0].timestamp
     return ohlcv.data[0].timestamp, ohlcv.data[-1].timestamp
 
+
 class AshareTrade(TradeOperations):
 
     def __init__(self):
@@ -37,37 +38,41 @@ class AshareTrade(TradeOperations):
         return self.exchange.fetch_ticker(symbol).last
 
     def get_ohlcv_history(
-            self, 
-            symbol: str, 
-            frame: str, 
-            start: datetime = None, 
-            end: datetime = datetime.now(), 
-            limit: int = None
-        ) -> OhlcvHistory:
-        logger.debug(f'get_ohlcv_history with {symbol=}, {frame=}, {limit=}, {start=}, {end=}')
+        self,
+        symbol: str,
+        frame: str,
+        start: datetime = None,
+        end: datetime = datetime.now(),
+        limit: int = None,
+    ) -> OhlcvHistory:
+        logger.debug(
+            f"get_ohlcv_history with {symbol=}, {frame=}, {limit=}, {start=}, {end=}"
+        )
 
         def store_ohlcv_in_cache(db: DbTransaction, data: List[Ohlcv]) -> None:
-            db.ohlcv_cache.add(OhlcvHistory(
-                symbol=symbol,
-                frame=frame,
-                data=data
-            ))
+            db.ohlcv_cache.add(OhlcvHistory(symbol=symbol, frame=frame, data=data))
 
-        def get_ohlcv_by_cache(db: DbTransaction, start: datetime, end: datetime) -> List[Ohlcv]:
+        def get_ohlcv_by_cache(
+            db: DbTransaction, start: datetime, end: datetime
+        ) -> List[Ohlcv]:
             return db.ohlcv_cache.range_query(symbol, frame, start, end).data
-    
+
         @use_range_cache(
             get_data_by_cache=get_ohlcv_by_cache,
             store_data=store_ohlcv_in_cache,
-            key_param_names=['symbol', 'frame'],
-            metadata_key_suffix='::ashare_ohlcv_cache::metadata',
-            lock_key_suffix='::ashare_ohlcv_cache::lock',
+            key_param_names=["symbol", "frame"],
+            metadata_key_suffix="::ashare_ohlcv_cache::metadata",
+            lock_key_suffix="::ashare_ohlcv_cache::lock",
         )
-        def get_ohlcv_by_time_range(symbol: str, frame: str, start: datetime, end: datetime) -> List[Ohlcv]:
+        def get_ohlcv_by_time_range(
+            symbol: str, frame: str, start: datetime, end: datetime
+        ) -> List[Ohlcv]:
             return self.exchange.fetch_ohlcv(symbol, frame, start, end).data
-        
+
         if not limit and not start:
-            raise ValueError("Invalid parameters: 'start' must be provided when 'limit' is not set.")
+            raise ValueError(
+                "Invalid parameters: 'start' must be provided when 'limit' is not set."
+            )
         if start and not end:
             end = datetime.now()
         data: List[Ohlcv] = None
@@ -83,20 +88,20 @@ class AshareTrade(TradeOperations):
         if nomolized_start == nomolized_end:
             return []
         data = get_ohlcv_by_time_range(symbol, frame, nomolized_start, nomolized_end)
-        return OhlcvHistory(symbol=symbol, frame=frame, data = data)
-    
+        return OhlcvHistory(symbol=symbol, frame=frame, data=data)
+
     def create_order(
-            self, 
-            symbol: str, 
-            type: OrderType, 
-            side: OrderSide,
-            *,
-            tags: str, 
-            amount: float = None, 
-            price: float = None, 
-            spent: float = None, 
-            comment: str = None
-        ) -> Order:
+        self,
+        symbol: str,
+        type: OrderType,
+        side: OrderSide,
+        *,
+        tags: str,
+        amount: float = None,
+        price: float = None,
+        spent: float = None,
+        comment: str = None,
+    ) -> Order:
         return AShareOrder(
             id=random_id(10),
             timestamp=datetime.now(),
@@ -104,14 +109,14 @@ class AshareTrade(TradeOperations):
             type=type,
             side=side,
             price=price,
-            _amount=amount if side == 'sell' else spent / self.get_current_price(symbol),
-            _cost = self.get_current_price(symbol) * amount if side == 'sell' else spent,
-            fees=[]
+            _amount=(
+                amount if side == "sell" else spent / self.get_current_price(symbol)
+            ),
+            _cost=self.get_current_price(symbol) * amount if side == "sell" else spent,
+            fees=[],
         )
+
 
 ashare = AshareTrade()
 
-__all__ = [
-    'AshareTrade',
-    'ashare'
-]
+__all__ = ["AshareTrade", "ashare"]

@@ -50,4 +50,4 @@ from .task import Task, PeriodicTask, TaskStatus
 from .worker import Worker
 from .scheduler import TaskScheduler
 
-__all__ = ['Task', 'PeriodicTask', 'TaskStatus', 'Worker', 'TaskScheduler']
+__all__ = ["Task", "PeriodicTask", "TaskStatus", "Worker", "TaskScheduler"]
