@@ -30,6 +30,7 @@
    cd ..
    rm -rf ta-lib-0.6.4 ta-lib-0.6.4-src.tar.gz
    ```
+   如果是在windows下，可以直接访问https://github.com/cgohlke/talib-build/releases下载whl包，并直接`pip install`
 3. 安装 Python 依赖：
    ```bash
    pip install --no-cache-dir -r requirements.txt
