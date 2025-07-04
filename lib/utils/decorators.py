@@ -1,5 +1,6 @@
 from typing import TypeVar, Callable, Tuple, Any
 import time
+from functools import wraps
 
 from ..logger import logger
 
@@ -10,6 +11,7 @@ def with_retry(
     retry_errors: Tuple[Exception], max_retry_times: int
 ) -> Callable[[G], G]:
     def decorator(function: G) -> G:
+        @wraps(function)
         def function_with_retry(*args, **kwargs) -> Any:
             count = 0
             while True:

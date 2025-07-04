@@ -1,9 +1,9 @@
-from typing import List, Any
+from typing import List, Any, Optional, Dict
 import requests
 
-from ...logger import logger
-from ...config import API_MAX_RETRY_TIMES, get_paoluz_token
-from ...utils.decorators import with_retry
+from lib.logger import logger
+from lib.config import API_MAX_RETRY_TIMES, get_paoluz_token
+from lib.utils.decorators import with_retry
 from .interface import LlmAbstract
 from .openai_compatible import OpenAiApiMixin, OpenAiRetryableError
 
@@ -78,6 +78,8 @@ class PaoluzAgent(OpenAiApiMixin, LlmAbstract):
             "api_default_endpoint", PaoluzAgent.default_endpoint
         )
         self.api_key = system_params.get("token", PaoluzAgent.api_key)
+        # 为了兼容OpenAiApiMixin，设置endpoint属性
+        self.endpoint = self.default_endpoint
 
     @staticmethod
     def supported_models() -> List[Any]:
@@ -101,3 +103,43 @@ class PaoluzAgent(OpenAiApiMixin, LlmAbstract):
             json_data,
         )
         return rsp.json()["choices"][0]["message"]["content"]
+
+    def ask_with_tools(
+        self, context: List, available_tools: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """支持工具调用的请求方法，使用Paoluz特有的端点重试机制"""
+
+        # 获取可用工具
+        tools = (
+            self.get_available_tools(available_tools)
+            if hasattr(self, "get_available_tools")
+            else None
+        )
+
+        json_body_str = self._build_req_body(context, tools)
+
+        logger.debug(f"{self.model} calling with tools data: {json_body_str}")
+        logger.info(
+            f"{self.model} calling with tools body size: {len(json_body_str)} Byte"
+        )
+
+        # 使用Paoluz特有的端点重试机制
+        rsp = query_with_endpoint_retry(
+            self.default_endpoint,
+            self.backup_endpoint,
+            "post",
+            "/v1/chat/completions",
+            self.api_key,
+            json_body_str,
+        )
+
+        rsp_body = rsp.json()
+        message = rsp_body["choices"][0]["message"]
+
+        result = {"content": message.get("content", "")}
+
+        # 检查是否有工具调用
+        if "tool_calls" in message and message["tool_calls"]:
+            result["tool_calls"] = message["tool_calls"]
+
+        return result

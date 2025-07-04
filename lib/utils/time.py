@@ -1,6 +1,127 @@
 from typing import Optional
 from datetime import datetime, timezone, timedelta
+import re
 from ..model import CryptoHistoryFrame, CnStockHistoryFrame
+
+
+def parse_datetime_string(date_string: str) -> Optional[datetime]:
+    """
+    解析时间字符串为datetime对象
+    支持多种常见的时间格式
+
+    Args:
+        date_string: 时间字符串
+
+    Returns:
+        datetime对象，解析失败返回None
+
+    Example:
+        parse_datetime_string("2024-03-15T14:23:45Z") -> datetime(2024, 3, 15, 14, 23, 45)
+        parse_datetime_string("2024-03-15 14:23:45") -> datetime(2024, 3, 15, 14, 23, 45)
+        parse_datetime_string("Mar 15, 2024") -> datetime(2024, 3, 15, 0, 0, 0)
+    """
+    if not date_string:
+        return None
+
+    # 清理字符串
+    date_string = date_string.strip()
+
+    # 常见的时间格式模式
+    patterns = [
+        # ISO 8601 格式
+        (
+            r"(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(?:Z|[+-]\d{2}:\d{2})?",
+            lambda m: datetime(
+                int(m.group(1)),
+                int(m.group(2)),
+                int(m.group(3)),
+                int(m.group(4)),
+                int(m.group(5)),
+                int(m.group(6)),
+            ),
+        ),
+        # 标准格式: 2024-03-15 14:23:45
+        (
+            r"(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})",
+            lambda m: datetime(
+                int(m.group(1)),
+                int(m.group(2)),
+                int(m.group(3)),
+                int(m.group(4)),
+                int(m.group(5)),
+                int(m.group(6)),
+            ),
+        ),
+        # 日期格式: 2024-03-15
+        (
+            r"(\d{4})-(\d{2})-(\d{2})$",
+            lambda m: datetime(int(m.group(1)), int(m.group(2)), int(m.group(3))),
+        ),
+        # 美式格式: Mar 15, 2024 或 March 15, 2024
+        (
+            r"(\w+)\s+(\d{1,2}),?\s+(\d{4})",
+            lambda m: _parse_month_day_year(
+                m.group(1), int(m.group(2)), int(m.group(3))
+            ),
+        ),
+        # 时间戳格式: 1234567890 (10位) 或 1234567890123 (13位)
+        (r"^(\d{10})$", lambda m: datetime.fromtimestamp(int(m.group(1)))),
+        (r"^(\d{13})$", lambda m: datetime.fromtimestamp(int(m.group(1)) / 1000)),
+        # 简单格式: 03/15/2024 或 15/03/2024
+        (
+            r"(\d{1,2})/(\d{1,2})/(\d{4})",
+            lambda m: datetime(
+                int(m.group(3)), int(m.group(1)), int(m.group(2))
+            ),
+        ),
+    ]
+
+    for pattern, parser in patterns:
+        match = re.search(pattern, date_string, re.IGNORECASE)
+        if match:
+            try:
+                return parser(match)
+            except (ValueError, AttributeError):
+                continue
+
+    return None
+
+
+def _parse_month_day_year(month_str: str, day: int, year: int) -> datetime:
+    """
+    解析月份字符串为数字
+    """
+    month_names = {
+        "jan": 1,
+        "january": 1,
+        "feb": 2,
+        "february": 2,
+        "mar": 3,
+        "march": 3,
+        "apr": 4,
+        "april": 4,
+        "may": 5,
+        "jun": 6,
+        "june": 6,
+        "jul": 7,
+        "july": 7,
+        "aug": 8,
+        "august": 8,
+        "sep": 9,
+        "september": 9,
+        "oct": 10,
+        "october": 10,
+        "nov": 11,
+        "november": 11,
+        "dec": 12,
+        "december": 12,
+    }
+
+    month_num = month_names.get(month_str.lower())
+    if month_num is None:
+        raise ValueError(f"Unknown month: {month_str}")
+
+    return datetime(year, month_num, day)
 
 
 def timeframe_to_second(tframe: str) -> int:

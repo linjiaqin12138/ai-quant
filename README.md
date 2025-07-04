@@ -4,6 +4,54 @@
 - 加密货币自动交易
 - 自定义策略与策略回测
 
+## 测试
+
+本项目包含两类测试：
+
+### 单元测试（默认运行）
+这些测试使用Mock对象，运行速度快，用于验证代码逻辑的正确性：
+
+```bash
+# 运行所有单元测试
+pytest
+
+# 运行特定测试文件
+pytest test/test_agent_tool_call.py
+
+# 运行时显示详细信息
+pytest -v
+```
+
+### 集成测试（需要手动运行）
+这些测试使用真实的API调用，需要网络连接和有效的API配置，默认不会运行：
+
+```bash
+# 只运行集成测试
+pytest -m integration
+
+# 运行特定的集成测试类
+pytest test/test_agent_tool_call.py::TestAgentWithRealPaoluzProvider
+
+# 运行集成测试并显示详细信息
+pytest -m integration -v
+```
+
+### 测试配置说明
+- 集成测试被标记为 `@pytest.mark.integration`，默认被排除在常规测试运行之外
+- 慢速测试被标记为 `@pytest.mark.slow`
+- 配置文件 `pytest.ini` 中设置了默认过滤规则
+
+### Agent工具调用测试
+项目包含完整的Agent工具调用功能测试：
+- **Mock测试**：快速验证工具注册、调用逻辑和错误处理
+- **集成测试**：使用真实的Paoluz Provider验证端到端功能，包括：
+  - 真实API调用
+  - 工具注册和执行
+  - 多轮对话上下文管理
+  - 错误处理机制
+
+运行集成测试需要在 `.env` 文件中配置有效的 `PAOLUZ_AI_TOKEN`。
+
 ## 依赖安装
 
 ### 使用 Docker 安装
