@@ -30,7 +30,6 @@ LlmParams = TypedDict(
         "top_p": Optional[float],
         "frequency_penalty": Optional[float],
         "presence_penalty": Optional[float],
-        "response_format": Optional[Literal["json"]],
         "max_token": Optional[int],
         "api_key": Optional[str],
         "endpoint": Optional[str],
@@ -166,12 +165,12 @@ class LlmAbstract(abc.ABC):
         self.tools: Dict[str, Callable] = {}  # 存储工具函数
 
     @abc.abstractmethod
-    def ask(self, context: List) -> str:
+    def ask(self, context: List, response_format: Optional[str] = None) -> str:
         raise Exception("Not-Implement")
 
     @abc.abstractmethod
     def ask_with_tools(
-        self, context: List, available_tools: Optional[List[str]] = None
+        self, context: List, available_tools: Optional[List[str]] = None, response_format: Optional[str] = None
     ) -> Dict[str, Any]:
         """支持工具调用的请求方法
 
@@ -236,7 +235,7 @@ class Agent:
         self.llm = llm
         self.chat_context = []
 
-    def ask(self, question: str, tool_use: Union[bool, List[str]] = False) -> str:
+    def ask(self, question: str, tool_use: Union[bool, List[str]] = False, json_response: Optional[bool] = False) -> str:
         """发送问题并获取回答
 
         Args:
@@ -245,20 +244,21 @@ class Agent:
                      - False: 不使用工具
                      - True: 使用所有可用工具
                      - List[str]: 使用指定名称的工具列表
+            json_response: 是否返回JSON格式的响应（仅在支持时有效）
         """
         self.chat_context.append({"role": "user", "content": question})
 
         # 确定是否使用工具
         if tool_use is False:
             # 不使用工具
-            rsp_message = self.llm.ask(self.chat_context)
+            rsp_message = self.llm.ask(self.chat_context, response_format='json_object' if json_response else None)
             self.chat_context.append({"role": "assistant", "content": rsp_message})
             return rsp_message
         else:
             # 使用工具（tool_use为True或List[str]）
-            return self._handle_tool_conversation(tool_use)
+            return self._handle_tool_conversation(tool_use, response_format='json_object' if json_response else None)
 
-    def _handle_tool_conversation(self, tool_use: Union[bool, List[str]]) -> str:
+    def _handle_tool_conversation(self, tool_use: Union[bool, List[str]], response_format: Optional[str] = None) -> str:
         """处理包含工具调用的对话"""
         iteration = 0
         available_tools = None if tool_use is True else tool_use
@@ -273,7 +273,7 @@ class Agent:
                 )
 
             try:
-                response = self.llm.ask_with_tools(self.chat_context, available_tools)
+                response = self.llm.ask_with_tools(self.chat_context, available_tools, response_format)
 
                 # 如果没有工具调用，直接返回消息
                 if "tool_calls" not in response or not response["tool_calls"]:
@@ -292,7 +292,10 @@ class Agent:
 
                 # 执行所有工具调用
                 for tool_call in response["tool_calls"]:
+                    logger.info(f"Executing tool call... {tool_call['function']['name']}")
+                    logger.debug(f"Executing tool call: {tool_call['function']['name']} with params: {tool_call['function']['arguments']}")
                     tool_result = self.llm.execute_tool(tool_call)
+                    logger.debug(f"Executed tool call: {tool_call['function']['name']} with result: {tool_result}")
                     self.chat_context.append(
                         {
                             "tool_call_id": tool_call["id"],

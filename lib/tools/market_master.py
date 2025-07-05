@@ -614,7 +614,7 @@ class MarketMaster:
             self.llm_provider,
             self.model,
             temperature=self.temperature,
-            response_format="json",
+            response_format='json_object'
         )
 
         @with_retry((JsonReplyError), API_MAX_RETRY_TIMES)
@@ -669,7 +669,7 @@ class MarketMaster:
             self.llm_provider,
             self.model,
             temperature=self.temperature,
-            response_format="json",
+            response_format='json_object'
         )
 
         @with_retry((JsonReplyError), API_MAX_RETRY_TIMES)

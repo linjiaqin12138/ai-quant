@@ -57,6 +57,14 @@ def get_silicon_token() -> str:
     return os.environ.get("SILICONFLOW_TOKEN")
 
 
+def get_google_api_key() -> str:
+    return os.environ.get("GOOGLE_API_KEY")
+
+
+def get_google_cse_id() -> str:
+    return os.environ.get("GOOGLE_CSE_ID")
+
+
 def get_http_proxy() -> str:
     return os.environ.get("PROXY")
 

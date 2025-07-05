@@ -18,6 +18,7 @@ build/
 notebook/.ipynb_checkpoints/
 notebook/playground/
 scripts/jobs/
+temp/
 .pytest_cache
 temp.json
 Pipfile.lock

@@ -92,8 +92,8 @@ class PaoluzAgent(OpenAiApiMixin, LlmAbstract):
         )
         return rsp.json().get("data")
 
-    def ask(self, context: List) -> str:
-        json_data = self._build_req_body(context)
+    def ask(self, context: List, response_format: Optional[str] = None) -> str:
+        json_data = self._build_req_body(context, rsp_format=response_format)
         rsp = query_with_endpoint_retry(
             self.default_endpoint,
             self.backup_endpoint,
@@ -105,7 +105,7 @@ class PaoluzAgent(OpenAiApiMixin, LlmAbstract):
         return rsp.json()["choices"][0]["message"]["content"]
 
     def ask_with_tools(
-        self, context: List, available_tools: Optional[List[str]] = None
+        self, context: List, available_tools: Optional[List[str]] = None, response_format: Optional[str] = None, 
     ) -> Dict[str, Any]:
         """支持工具调用的请求方法，使用Paoluz特有的端点重试机制"""
 
@@ -116,7 +116,7 @@ class PaoluzAgent(OpenAiApiMixin, LlmAbstract):
             else None
         )
 
-        json_body_str = self._build_req_body(context, tools)
+        json_body_str = self._build_req_body(context, tools, response_format)
 
         logger.debug(f"{self.model} calling with tools data: {json_body_str}")
         logger.info(

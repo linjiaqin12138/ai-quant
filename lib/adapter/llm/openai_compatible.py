@@ -28,7 +28,7 @@ class OpenAiApiMixin:
         }
 
     def _build_req_body(
-        self, context: List, tools: Optional[List[Dict[str, Any]]] = None
+        self, context: List, tools: Optional[List[Dict[str, Any]]]= None, response_format: Optional[str] = None
     ) -> str:
         result = remove_none(
             {
@@ -48,10 +48,8 @@ class OpenAiApiMixin:
             result["tools"] = tools
             result["tool_choice"] = "auto"
 
-        if (
-            self.params.get("response_format") == "json"
-        ) and self._is_support_json_rsp():
-            result["response_format"] = {"type": "json_object"}
+        if (response_format) and self._is_support_json_rsp():
+            result["response_format"] = {"type": response_format}
         return json.dumps(result, ensure_ascii=False)
 
     @with_retry(
@@ -63,8 +61,8 @@ class OpenAiApiMixin:
         ),
         API_MAX_RETRY_TIMES,
     )
-    def ask(self, context: List) -> str:
-        json_body_str = self._build_req_body(context)
+    def ask(self, context: List, response_format: Optional[str] = None) -> str:
+        json_body_str = self._build_req_body(context, response_format=response_format)
         headers = self._build_req_header()
 
         logger.debug(f"{self.model} calling data: {json_body_str}")
@@ -105,7 +103,7 @@ class OpenAiApiMixin:
         API_MAX_RETRY_TIMES,
     )
     def ask_with_tools(
-        self, context: List, available_tools: Optional[List[str]] = None
+        self, context: List, available_tools: Optional[List[str]] = None, response_format: Optional[str] = None
     ) -> Dict[str, Any]:
         """支持工具调用的请求方法"""
         # 获取可用工具
@@ -115,7 +113,7 @@ class OpenAiApiMixin:
             else None
         )
 
-        json_body_str = self._build_req_body(context, tools)
+        json_body_str = self._build_req_body(context, tools, response_format)
         headers = self._build_req_header()
 
         logger.debug(f"{self.model} calling with tools data: {json_body_str}")

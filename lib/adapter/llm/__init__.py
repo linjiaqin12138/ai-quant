@@ -36,7 +36,9 @@ def get_llm_tool(
         [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": question},
-        ]
+        ],
+        tools=params.get("tools", None),
+        response_format=params.get("response_format", None),
     )
 
 
