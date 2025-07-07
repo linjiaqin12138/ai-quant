@@ -18,3 +18,4 @@ typer==0.15.3
 
 # Development tools
 black==24.8.0
+pylint

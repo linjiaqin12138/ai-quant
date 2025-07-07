@@ -19,4 +19,4 @@
 - scripts/: 存放一些命令行文件等，还有做一些实验性的功能（可能引入一些其它的第三方库啥的），比如scripts/tauric_trading_agent
 - tests/: pytest测试用例，主要是对lib/中的代码进行测试
 - notebook/: 一些在jupyter notebook中做的笔记和实验记录，AI请忽略
-- temp/: 存放临时文件和实验性代码
+- temp/: 存放临时文件和实验性代码，按日期文件夹分类

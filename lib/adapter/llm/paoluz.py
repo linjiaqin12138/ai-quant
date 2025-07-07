@@ -93,7 +93,7 @@ class PaoluzAgent(OpenAiApiMixin, LlmAbstract):
         return rsp.json().get("data")
 
     def ask(self, context: List, response_format: Optional[str] = None) -> str:
-        json_data = self._build_req_body(context, rsp_format=response_format)
+        json_data = self._build_req_body(context, response_format=response_format)
         rsp = query_with_endpoint_retry(
             self.default_endpoint,
             self.backup_endpoint,

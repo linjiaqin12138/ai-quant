@@ -51,14 +51,14 @@ def duckduckgo_search(query: str, max_results: int = 10, region: str = "us-en", 
             timelimit=time_limit,
             max_results=max_results
         ))
-        logger.debug(f"DuckDuckGo搜索结果数量: {len(results)}")
-        
+        logger.debug("DuckDuckGo搜索结果数量: %d", len(results))
+
         # 将结果转换为NewsInfo对象数组
         news_infos = []
         for result in results:
             # 生成唯一的news_id
             news_id = hash_str(f"{result.get('url', '')}{result.get('title', '')}")
-            
+
             # 解析时间戳
             date_str = result.get('date', '')
             timestamp = None
@@ -345,7 +345,7 @@ def read_web_page(url: str) -> str:
     }
     
     # 发送请求到Jina API
-    response = requests.get(jina_url, headers=headers, proxies=proxies, timeout=30)
+    response = requests.get(jina_url, headers=headers, proxies=proxies, timeout=600)
     response.raise_for_status()
     
     # 返回网页内容

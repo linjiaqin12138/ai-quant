@@ -37,7 +37,7 @@ def get_llm_tool(
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": question},
         ],
-        tools=params.get("tools", None),
+        # tools=params.get("tools", None),
         response_format=params.get("response_format", None),
     )
 
@@ -45,7 +45,8 @@ def get_llm_tool(
 __all__ = [
     "get_llm",
     "get_agent",
-    "get_llm_tool" "LlmParams",
+    "get_llm_tool",
+    "LlmParams",
     "LlmAbstract",
     "BaiChuan",
     "Paoluz",
