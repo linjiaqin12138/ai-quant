@@ -1,6 +1,7 @@
 import abc
 import inspect
 import json
+import traceback
 from typing import (
     TypedDict,
     Optional,
@@ -310,7 +311,7 @@ class Agent:
                     return response["content"]
 
             except Exception as e:
-                logger.error(f"Error in tool conversation: {str(e)}")
+                logger.error(f"Error in tool conversation: {str(e)} {traceback.format_exc()}")
                 return f"Error occurred during tool conversation: {str(e)}"
 
     def register_tool(self, func: Callable) -> Dict[str, Any]:

@@ -1,7 +1,10 @@
 # General Development Guidelines
-- 我们在windows下进行开发，执行命令行命令的时候注意使用powershell下可以执行的命令，语法上不要和Linux下的命令冲突。比如不能出现`&&`之类的语法。
+- 我们在windows下进行开发，执行命令行命令的时候注意使用powershell下可以执行的命令，语法上不要和Linux下的命令冲突。比如不能出现`&&`之类的语法。如：
+    - ❌cd d:\Project\quant\temp\2025-7-8 && python test_financial_analyzer.py info
+    - ✅cd d:\Project\quant\temp\2025-7-8; python test_financial_analyzer.py info
 - 保持与现有代码风格、代码实现方案的一致性，可以参考同一文件夹下其它模块的代码。
 - 使用中文编写Commit Message
+- 编写用于临时测试的命令行工具，使用typer库（已安装）来解析命令行
 
 # Folder Structure
 - docs/notes目录用来存放笔记，每当用户要求你总结笔记时，请创建一个markdown笔记文件`日期-主题.md`, 内容包括：

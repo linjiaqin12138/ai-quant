@@ -11,15 +11,304 @@ import traceback
 from typing import List, Dict, Any, Optional, Tuple
 from textwrap import dedent
 
+from jinja2 import Template
 from lib.utils.string import has_json_features
 from lib.tools.json_fixer import fix_json_with_llm
 from lib.adapter.llm import get_llm_tool
 from lib.tools.information_search import read_web_page
-from lib.tools.ashare_stock import get_ashare_stock_info
+from lib.tools.ashare_stock import get_ashare_stock_info, determine_exchange
 from lib.logger import logger
 from lib.utils.string import extract_json_string
 from lib.utils.decorators import with_retry
 from lib.model.error import LlmReplyInvalid
+
+# HTML报告模板
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>股票市场情绪分析报告 - {{ stock_symbol }}</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/lib/marked.umd.js"></script>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            border-left: 4px solid #3498db;
+            padding-left: 10px;
+        }
+        .sentiment-score {
+            text-align: center;
+            padding: 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 15px;
+            margin: 20px 0;
+            color: white;
+        }
+        .score-circle {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            background-color: {{ sentiment_color }};
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            font-size: 48px;
+            font-weight: bold;
+            color: white;
+        }
+        .sentiment-level {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .info-box {
+            background-color: #ecf0f1;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .url-section {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .comment {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .comment-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .author {
+            font-weight: bold;
+            color: #2980b9;
+        }
+        .time {
+            color: #7f8c8d;
+            font-size: 0.9em;
+        }
+        .content {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        .stats {
+            display: flex;
+            gap: 15px;
+            font-size: 0.9em;
+            color: #7f8c8d;
+        }
+        .sentiment-analysis {
+            background-color: #e8f5e8;
+            border: 1px solid #4caf50;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .analysis-content {
+            line-height: 1.8;
+        }
+        /* Markdown渲染样式优化 */
+        .analysis-content h1, .analysis-content h2, .analysis-content h3 {
+            color: #2c3e50;
+            margin-top: 25px;
+            margin-bottom: 15px;
+        }
+        .analysis-content h1 {
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        .analysis-content h2 {
+            border-left: 4px solid #3498db;
+            padding-left: 10px;
+        }
+        .analysis-content h3 {
+            color: #2980b9;
+        }
+        .analysis-content h4 {
+            color: #16a085;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        .analysis-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background-color: white;
+        }
+        .analysis-content th, .analysis-content td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        .analysis-content th {
+            background-color: #f5f5f5;
+            font-weight: bold;
+        }
+        .analysis-content tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .analysis-content code {
+            background-color: #f1f1f1;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        .analysis-content pre {
+            background-color: #f8f8f8;
+            border: 1px solid #e1e1e1;
+            border-radius: 5px;
+            padding: 15px;
+            overflow-x: auto;
+            margin: 15px 0;
+        }
+        .analysis-content blockquote {
+            border-left: 4px solid #3498db;
+            margin: 15px 0;
+            padding: 10px 15px;
+            background-color: #f0f7ff;
+            font-style: italic;
+        }
+        .analysis-content ul, .analysis-content ol {
+            margin: 15px 0;
+            padding-left: 30px;
+        }
+        .analysis-content li {
+            margin: 8px 0;
+        }
+        .analysis-content strong {
+            color: #2c3e50;
+            font-weight: bold;
+        }
+        .analysis-content em {
+            color: #7f8c8d;
+            font-style: italic;
+        }
+        .raw-response {
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            padding: 20px;
+            border-radius: 5px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 股票市场情绪分析报告</h1>
+        
+        <div class="info-box">
+            <strong>股票代码:</strong> {{ stock_symbol }}<br>
+            <strong>股票名称:</strong> {{ stock_name }}<br>
+            <strong>股票类型:</strong> {{ stock_type }}<br>
+            <strong>所属行业:</strong> {{ stock_business }}<br>
+            <strong>交易所:</strong> {{ exchange }}<br>
+            <strong>分析时间:</strong> {{ analysis_time }}<br>
+            <strong>总评论数:</strong> {{ total_comments }} 条<br>
+            <strong>分析页面:</strong> {{ url_results_count }} 个
+        </div>
+        
+        <div class="sentiment-score">
+            <div class="score-circle">{{ sentiment_score }}</div>
+            <div class="sentiment-level">情绪等级: {{ sentiment_level }}</div>
+            <div>市场情绪评分: {{ sentiment_score }}/100</div>
+        </div>
+        
+        <div class="sentiment-analysis">
+            <h3>🤖 AI情绪分析报告</h3>
+            <div class="analysis-content" id="analysis-content"></div>
+        </div>
+        
+        <h2>📱 各平台评论统计</h2>
+        {% for url_result in url_results %}
+        <div class="url-section">
+            <h3>平台 {{ loop.index }}: {{ url_result.platform }}</h3>
+            <p><strong>URL:</strong> <a href="{{ url_result.url }}" target="_blank">{{ url_result.url }}</a></p>
+            <p><strong>评论数量:</strong> {{ url_result.comments_count }} 条</p>
+            
+            <h4>评论内容:</h4>
+            {% if url_result.comments %}
+                {% for comment in url_result.comments %}
+                <div class="comment">
+                    <div class="comment-header">
+                        <span class="author">👤 {{ comment.get('author', '未知用户') }}</span>
+                        <span class="time">🕐 {{ comment.get('time', '未知时间') }}</span>
+                    </div>
+                    <div class="content">{{ comment.get('content', '无内容') }}</div>
+                    <div class="stats">
+                        <span>👍 {{ comment.get('likes', 0) }} 赞</span>
+                        <span>💬 {{ comment.get('replies', 0) }} 回复</span>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p><em>未获取到评论内容</em></p>
+            {% endif %}
+        </div>
+        {% endfor %}
+        
+        <div style="text-align: center; margin-top: 30px; color: #7f8c8d; font-size: 0.9em;">
+            <p>报告生成时间: {{ current_time }}</p>
+            <p>由股票市场情绪分析Agent自动生成</p>
+            <p>⚠️ 本报告仅供参考，不构成投资建议</p>
+        </div>
+    </div>
+    
+    <script>
+        // 初始化marked配置
+        marked.setOptions({
+            breaks: true,
+            gfm: true,
+            headerIds: false,
+            mangle: false
+        });
+        
+        // 获取原始markdown内容并渲染
+        const markdownContent = `{{ escaped_content }}`;
+        const htmlContent = marked.parse(markdownContent);
+        document.getElementById('analysis-content').innerHTML = htmlContent;
+    </script>
+</body>
+</html>
+"""
 
 COMMENT_EXTRACTOR_SYS_PROMPT = """
 你是一个专业的股票数据分析助手，擅长从网页内容中提取和分析股票相关信息。
@@ -135,25 +424,6 @@ class StockSentimentAnalyzer:
                         comment[field] = 0
         
         return True
-    
-    def determine_exchange(self, stock_symbol: str) -> str:
-        """
-        根据股票代码判断交易所
-        
-        Args:
-            stock_symbol: 股票代码
-            
-        Returns:
-            交易所代码：SH或SZ
-        """
-        # 根据股票代码规则判断
-        if stock_symbol.startswith("6"):
-            return "SH"  # 上海证券交易所
-        elif stock_symbol.startswith(("0", "2", "3")):
-            return "SZ"  # 深圳证券交易所
-        else:
-            # 默认返回SH
-            return "SH"
     
     def build_ashare_stock_dicussion_urls(self, stock_symbol: str, exchange: str) -> List[str]:
         """
@@ -359,7 +629,7 @@ class StockSentimentAnalyzer:
             logger.info(f"获取到股票信息: {stock_name}")
 
             # 2. 判断交易所
-            exchange = self.determine_exchange(stock_symbol)
+            exchange = determine_exchange(stock_symbol)
             result["exchange"] = exchange
             logger.info(f"判断交易所: {exchange}")
         
@@ -432,216 +702,45 @@ class StockSentimentAnalyzer:
         # 根据情绪评分确定颜色
         score = analysis_result["sentiment_score"]
         if score <= 20:
-            color = "#d32f2f"  # 红色 - 极度恐慌
+            sentiment_color = "#d32f2f"  # 红色 - 极度恐慌
         elif score <= 40:
-            color = "#f57c00"  # 橙色 - 恐慌
+            sentiment_color = "#f57c00"  # 橙色 - 恐慌
         elif score <= 60:
-            color = "#616161"  # 灰色 - 中等
+            sentiment_color = "#616161"  # 灰色 - 中等
         elif score <= 80:
-            color = "#388e3c"  # 绿色 - 贪婪
+            sentiment_color = "#388e3c"  # 绿色 - 贪婪
         else:
-            color = "#1976d2"  # 蓝色 - 极度贪婪
+            sentiment_color = "#1976d2"  # 蓝色 - 极度贪婪
         
-        html_content = dedent(f"""
-            <!DOCTYPE html>
-            <html lang="zh-CN">
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>股票市场情绪分析报告 - {stock_symbol}</title>
-                <style>
-                    body {{
-                        font-family: 'Microsoft YaHei', Arial, sans-serif;
-                        line-height: 1.6;
-                        margin: 0;
-                        padding: 20px;
-                        background-color: #f5f5f5;
-                    }}
-                    .container {{
-                        max-width: 1200px;
-                        margin: 0 auto;
-                        background-color: white;
-                        padding: 30px;
-                        border-radius: 10px;
-                        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                    }}
-                    h1 {{
-                        color: #2c3e50;
-                        text-align: center;
-                        margin-bottom: 30px;
-                        border-bottom: 3px solid #3498db;
-                        padding-bottom: 10px;
-                    }}
-                    h2 {{
-                        color: #34495e;
-                        margin-top: 30px;
-                        margin-bottom: 15px;
-                        border-left: 4px solid #3498db;
-                        padding-left: 10px;
-                    }}
-                    .sentiment-score {{
-                        text-align: center;
-                        padding: 30px;
-                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                        border-radius: 15px;
-                        margin: 20px 0;
-                        color: white;
-                    }}
-                    .score-circle {{
-                        width: 150px;
-                        height: 150px;
-                        border-radius: 50%;
-                        background-color: {color};
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        margin: 0 auto 20px;
-                        font-size: 48px;
-                        font-weight: bold;
-                        color: white;
-                    }}
-                    .sentiment-level {{
-                        font-size: 24px;
-                        font-weight: bold;
-                        margin-bottom: 10px;
-                    }}
-                    .info-box {{
-                        background-color: #ecf0f1;
-                        padding: 15px;
-                        border-radius: 5px;
-                        margin-bottom: 20px;
-                    }}
-                    .url-section {{
-                        background-color: #f8f9fa;
-                        border: 1px solid #e9ecef;
-                        border-radius: 8px;
-                        padding: 15px;
-                        margin-bottom: 20px;
-                    }}
-                    .comment {{
-                        background-color: #f8f9fa;
-                        border: 1px solid #e9ecef;
-                        border-radius: 8px;
-                        padding: 15px;
-                        margin-bottom: 15px;
-                    }}
-                    .comment-header {{
-                        display: flex;
-                        justify-content: space-between;
-                        align-items: center;
-                        margin-bottom: 10px;
-                        padding-bottom: 8px;
-                        border-bottom: 1px solid #dee2e6;
-                    }}
-                    .author {{
-                        font-weight: bold;
-                        color: #2980b9;
-                    }}
-                    .time {{
-                        color: #7f8c8d;
-                        font-size: 0.9em;
-                    }}
-                    .content {{
-                        color: #2c3e50;
-                        margin-bottom: 10px;
-                    }}
-                    .stats {{
-                        display: flex;
-                        gap: 15px;
-                        font-size: 0.9em;
-                        color: #7f8c8d;
-                    }}
-                    .sentiment-analysis {{
-                        background-color: #e8f5e8;
-                        border: 1px solid #4caf50;
-                        padding: 20px;
-                        border-radius: 8px;
-                        margin: 20px 0;
-                    }}
-                    .raw-response {{
-                        background-color: #2c3e50;
-                        color: #ecf0f1;
-                        padding: 20px;
-                        border-radius: 5px;
-                        overflow-x: auto;
-                        white-space: pre-wrap;
-                        font-family: 'Courier New', monospace;
-                        font-size: 0.9em;
-                    }}
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <h1>📊 股票市场情绪分析报告</h1>
-                    
-                    <div class="info-box">
-                        <strong>股票代码:</strong> {analysis_result["stock_symbol"]}<br>
-                        <strong>股票名称:</strong> {analysis_result["stock_name"]}<br>
-                        <strong>股票类型:</strong> {analysis_result["stock_info"].get("stock_type", "未知")}<br>
-                        <strong>所属行业:</strong> {analysis_result["stock_info"].get("stock_business", "未知")}<br>
-                        <strong>交易所:</strong> {analysis_result["exchange"]}<br>
-                        <strong>分析时间:</strong> {analysis_result["analysis_time"]}<br>
-                        <strong>总评论数:</strong> {analysis_result["total_comments"]} 条<br>
-                        <strong>分析页面:</strong> {len(analysis_result["url_results"])} 个
-                    </div>
-                    
-                    <div class="sentiment-score">
-                        <div class="score-circle">{analysis_result["sentiment_score"]}</div>
-                        <div class="sentiment-level">情绪等级: {analysis_result["sentiment_level"]}</div>
-                        <div>市场情绪评分: {analysis_result["sentiment_score"]}/100</div>
-                    </div>
-                    
-                    <div class="sentiment-analysis">
-                        <h3>🤖 AI情绪分析报告</h3>
-                        <div class="raw-response">{analysis_result["sentiment_report"]}</div>
-                    </div>
-                    
-                    <h2>📱 各平台评论统计</h2>
-        """)
+        # 预处理markdown内容，转义特殊字符
+        markdown_content = analysis_result["sentiment_report"]
+        escaped_content = markdown_content.replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
         
-        # 添加各URL的统计
-        for i, url_result in enumerate(analysis_result["url_results"], 1):
+        # 处理URL结果，添加平台信息
+        processed_url_results = []
+        for url_result in analysis_result["url_results"]:
             platform = "雪球" if "xueqiu.com" in url_result["url"] else "股吧" if "guba.eastmoney.com" in url_result["url"] else "其他平台"
-            
-            html_content += f"""
-        <div class="url-section">
-            <h3>平台 {i}: {platform}</h3>
-            <p><strong>URL:</strong> <a href="{url_result['url']}" target="_blank">{url_result['url']}</a></p>
-            <p><strong>评论数量:</strong> {url_result['comments_count']} 条</p>
-            
-            <h4>评论内容:</h4>
-"""
-            
-            if url_result["comments"]:
-                for comment in url_result["comments"]:  # 只显示前5条评论
-                    html_content += f"""
-            <div class="comment">
-                <div class="comment-header">
-                    <span class="author">👤 {comment.get('author', '未知用户')}</span>
-                    <span class="time">🕐 {comment.get('time', '未知时间')}</span>
-                </div>
-                <div class="content">{comment.get('content', '无内容')}</div>
-                <div class="stats">
-                    <span>👍 {comment.get('likes', 0)} 赞</span>
-                    <span>💬 {comment.get('replies', 0)} 回复</span>
-                </div>
-            </div>
-"""
-            else:
-                html_content += "<p><em>未获取到评论内容</em></p>"
-            
-            html_content += "</div>"
+            processed_url_result = url_result.copy()
+            processed_url_result["platform"] = platform
+            processed_url_results.append(processed_url_result)
         
-        html_content += dedent(f"""
-                    <div style="text-align: center; margin-top: 30px; color: #7f8c8d; font-size: 0.9em;">
-                        <p>报告生成时间: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
-                        <p>由股票市场情绪分析Agent自动生成</p>
-                        <p>⚠️ 本报告仅供参考，不构成投资建议</p>
-                    </div>
-                </div>
-            </body>
-            </html>
-        """)
+        # 渲染HTML内容
+        html_content = Template(HTML_TEMPLATE).render(
+            stock_symbol=stock_symbol,
+            stock_name=analysis_result["stock_name"],
+            stock_type=analysis_result["stock_info"].get("stock_type", "未知"),
+            stock_business=analysis_result["stock_info"].get("stock_business", "未知"),
+            exchange=analysis_result["exchange"],
+            analysis_time=analysis_result["analysis_time"],
+            total_comments=analysis_result["total_comments"],
+            url_results_count=len(analysis_result["url_results"]),
+            sentiment_score=analysis_result["sentiment_score"],
+            sentiment_level=analysis_result["sentiment_level"],
+            sentiment_color=sentiment_color,
+            escaped_content=escaped_content,
+            url_results=processed_url_results,
+            current_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        )
         
         return html_content
     

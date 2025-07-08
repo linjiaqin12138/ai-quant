@@ -118,7 +118,6 @@ class PaoluzAgent(OpenAiApiMixin, LlmAbstract):
 
         json_body_str = self._build_req_body(context, tools, response_format)
 
-        logger.debug(f"{self.model} calling with tools data: {json_body_str}")
         logger.info(
             f"{self.model} calling with tools body size: {len(json_body_str)} Byte"
         )
