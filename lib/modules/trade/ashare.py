@@ -33,6 +33,21 @@ class AshareTrade(TradeOperations):
     def is_business_day(self, day: datetime) -> bool:
         return is_china_business_day(day)
 
+    def is_business_time(self, time: datetime) -> bool:
+        if not self.is_business_day(time):
+            return False
+        
+        # 判断time是否有时区，如果有时区，转换到东八区
+        if time.tzinfo is not None:
+            time = time.astimezone(datetime.timezone(datetime.timedelta(hours=8)))
+
+        # 判断time是否在东八区时间的9:30到15:00之间
+        start_time = time.replace(hour=9, minute=30, second=0, microsecond=0)
+        end_time = time.replace(hour=15, minute=0, second=0, microsecond=0)
+        if start_time <= time <= end_time:
+            return True
+        return False
+        
     @use_cache(5, use_db_cache=True, serializer=str, deserializer=float)
     def get_current_price(self, symbol: str) -> float:
         return self.exchange.fetch_ticker(symbol).last
@@ -77,6 +92,8 @@ class AshareTrade(TradeOperations):
             end = datetime.now()
         data: List[Ohlcv] = None
         if limit:
+            # workaround for limit 50 but query 49
+            limit += 1 
             end = datetime.now()
             start = end
             while limit > 0:
@@ -87,6 +104,7 @@ class AshareTrade(TradeOperations):
         nomolized_end = round_datetime_in_period(end, frame)
         if nomolized_start == nomolized_end:
             return []
+
         data = get_ohlcv_by_time_range(symbol, frame, nomolized_start, nomolized_end)
         return OhlcvHistory(symbol=symbol, frame=frame, data=data)
 

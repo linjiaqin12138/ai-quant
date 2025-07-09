@@ -72,13 +72,36 @@ def get_ashare_stock_info(symbol: str) -> dict:
 
 # 不适用数据库 Data too long for column 'context' at row 1
 @use_cache(600)
-def get_stock_news(symbol: str) -> List[NewsInfo]:
+def get_stock_news(symbol: str, time_limit: str = None) -> List[NewsInfo]:
     """
     获取A股股票的新闻数据，使用数据库缓存
+    
+    Args:
+        symbol: 股票代码
+        time_limit: 时间限制，可选值: 'd'(一天), 'w'(一周), 'm'(一个月), 'y'(一年)。
+                   如果为None，返回所有新闻
+    
+    Returns:
+        NewsInfo对象列表，按时间倒序排列
     """
     # 从 akshare 获取数据
     news_df = ak.stock_news_em(symbol=symbol)
     news_df["发布时间"] = pd.to_datetime(news_df["发布时间"])
+    
+    # 根据time_limit过滤新闻
+    if time_limit:
+        current_time = datetime.now()
+        time_limit_map = {
+            'd': timedelta(days=1),
+            'w': timedelta(weeks=1), 
+            'm': timedelta(days=30),
+            'y': timedelta(days=365)
+        }
+        
+        if time_limit in time_limit_map:
+            cutoff_time = current_time - time_limit_map[time_limit]
+            news_df = news_df[news_df["发布时间"] >= cutoff_time]
+    
     news_info_list: List[NewsInfo] = []
 
     for _, row in news_df.iterrows():
@@ -304,10 +327,10 @@ def get_financial_indicators(symbol: str) -> Dict[str, Any]:
 
     return result
 
-
+# 里面的函数都设置了7天缓存，可以不用设置了
 def get_comprehensive_financial_data(symbol: str) -> Dict[str, Any]:
     """
-    获取公司综合财务数据（资产负债表、利润表、现金流量表）
+    获取公司综合财务数据（资产负债表、利润表、现金流量表、财务指标）
 
     Args:
         symbol: 股票代码
@@ -368,7 +391,7 @@ def clean_data_for_json(data):
         return convert_to_json_serializable(data)
 
 
-@use_cache(86400, use_db_cache=True)
+@use_cache(86400 * 7, use_db_cache=True)
 def get_shareholder_changes_data(stock_code: str) -> Dict[str, Any]:
     """
     获取指定股票的股东股本变动详情（最新数据）

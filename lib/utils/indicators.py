@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List
+from typing import List, Literal, Optional
 import pandas as pd
 import talib
 from lib.model import Ohlcv
@@ -117,6 +117,28 @@ class ATRIndicatorResult:
     @property
     def atr_series(self) -> pd.Series:
         return pd.Series(self.atr)
+
+
+@dataclass(frozen=True)
+class VWMAIndicatorResult:
+    vwma: List[float]
+
+    @property
+    def vwma_series(self) -> pd.Series:
+        return pd.Series(self.vwma)
+
+
+@dataclass
+class IndicatorsResult:
+    """存储所有技术指标计算结果的数据类"""
+    sma5: Optional[SMAIndicatorResult] = None
+    sma20: Optional[SMAIndicatorResult] = None
+    rsi: Optional[RSIIndicatorResult] = None
+    boll: Optional[BollingerBandsIndicatorResult] = None
+    macd: Optional[MACDIndicatorResult] = None
+    stoch: Optional[StochasticOscillatorIndicatorResult] = None
+    atr: Optional[ATRIndicatorResult] = None
+    vwma: Optional[VWMAIndicatorResult] = None
 
 
 def sma_indicator(ohlcv_list: List[Ohlcv], timeperiod: int = 5) -> SMAIndicatorResult:
@@ -245,3 +267,67 @@ def atr_indicator(ohlcv_list: List[Ohlcv], timeperiod: int = 14) -> ATRIndicator
     df["atr"] = talib.ATR(df["high"], df["low"], df["close"], timeperiod=timeperiod)
     atr_series = df["atr"].dropna()
     return ATRIndicatorResult(atr=atr_series.tolist())
+
+
+def vwma_indicator(ohlcv_list: List[Ohlcv], timeperiod: int = 14) -> VWMAIndicatorResult:
+    """
+    计算成交量加权移动平均线（Volume Weighted Moving Average）技术指标
+    :param ohlcv_list: 包含OHLCV数据的列表
+    :param timeperiod: 计算VWMA的时间周期长度
+    :return: 包含计算结果的VWMAIndicatorResult对象
+    """
+    df = to_df(ohlcv_list)
+    df["vwma"] = talib.WMA(df["close"] * df["volume"], timeperiod=timeperiod) / talib.WMA(
+        df["volume"], timeperiod=timeperiod
+    )
+    vwma_series = df["vwma"].dropna()
+    return VWMAIndicatorResult(vwma=vwma_series.tolist())
+
+
+def calculate_indicators(
+    ohlcv_list: List[Ohlcv],
+    use_indicators: List[Literal["sma", "rsi", "boll", "macd", "stoch", "atr", "vwma"]],
+) -> IndicatorsResult:
+    """
+    批量计算多个技术指标
+
+    :param ohlcv_list: 包含OHLCV数据的列表
+    :param indicators: 需要计算的技术指标列表，支持: "sma", "rsi", "boll", "macd", "stoch", "atr", "vwma"
+    :return: IndicatorsResult对象，包含各个计算的技术指标
+    """
+    results = IndicatorsResult()
+
+    if not ohlcv_list:
+        return results
+
+    for indicator in use_indicators:
+        try:
+            if indicator == "sma":
+                if len(ohlcv_list) >= 5:
+                    results.sma5 = sma_indicator(ohlcv_list, 5)
+                if len(ohlcv_list) >= 20:
+                    results.sma20 = sma_indicator(ohlcv_list, 20)
+
+            elif indicator == "rsi" and len(ohlcv_list) >= 15:
+                results.rsi = rsi_indicator(ohlcv_list, 14)
+
+            elif indicator == "boll" and len(ohlcv_list) >= 20:
+                results.boll = bollinger_bands_indicator(ohlcv_list, 20, 2.0, 2.0)
+
+            elif indicator == "macd" and len(ohlcv_list) >= 36:
+                results.macd = macd_indicator(ohlcv_list, 12, 26, 9)
+
+            elif indicator == "stoch" and len(ohlcv_list) >= 19:
+                results.stoch = stochastic_oscillator_indicator(ohlcv_list, 14, 3, 3)
+
+            elif indicator == "atr" and len(ohlcv_list) >= 15:
+                results.atr = atr_indicator(ohlcv_list, 14)
+
+            elif indicator == "vwma" and len(ohlcv_list) >= 20:
+                results.vwma = vwma_indicator(ohlcv_list, 20)
+
+        except Exception as e:
+            # 如果某个指标计算失败，跳过该指标继续计算其他指标
+            continue
+
+    return results

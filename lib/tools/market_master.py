@@ -21,6 +21,8 @@ from lib.utils.indicators import (
     macd_indicator,
     stochastic_oscillator_indicator,
     atr_indicator,
+    vwma_indicator,
+    calculate_indicators
 )
 from lib.adapter.llm import get_llm_tool
 from .news_helper import NewsHelper
@@ -205,32 +207,33 @@ def format_indicators(
     :param use_indicators: 需要计算的技术指标列表
     :return: 格式化后的技术指标文本描述
     """
+    
     result_texts = []
+    result = calculate_indicators(ohlcv_list=ohlcv_list, use_indicators=use_indicators)
     if "sma" in use_indicators:
-        if len(ohlcv_list) >= 5:
-            sma5 = map_by(sma_indicator(ohlcv_list, 5).sma[-max_length:], round_to_5)
+        if result.sma5:
+            sma5 = map_by(result.sma5.sma[-max_length:], round_to_5)
             result_texts.append(f"- 过去{len(sma5)}天5日简单移动平均线 (SMA5): {sma5}")
-        if len(ohlcv_list) >= 20:
-            sma20 = map_by(sma_indicator(ohlcv_list, 20).sma[-max_length:], round_to_5)
+        if result.sma20:
+            sma20 = map_by(result.sma20.sma[-max_length:], round_to_5)
             result_texts.append(
-                f"- 过去{len(sma20)}天20日简单移动平均线 (SMA5): {sma20}"
+                f"- 过去{len(sma20)}天20日简单移动平均线 (SMA20): {sma20}"
             )
-    if "rsi" in use_indicators and len(ohlcv_list) >= 15:
-        rsi_values = rsi_indicator(ohlcv_list).rsi[-max_length:]
-        rsi_values_rounded = map_by(rsi_values, round_to_5)
+    if "rsi" in use_indicators and result.rsi:
+        rsi_values_rounded = map_by(result.rsi.rsi[-max_length:], round_to_5)
         result_texts.append(
             f"- 过去{len(rsi_values_rounded)}天相对强弱指数 (RSI): {rsi_values_rounded}"
         )
-    if "boll" in use_indicators and len(ohlcv_list) >= 20:
-        boll = bollinger_bands_indicator(ohlcv_list)
+    if "boll" in use_indicators and result.boll:
+        boll = result.boll
         boll_upper = map_by(boll.upperband[-max_length:], round_to_5)
         boll_middle = map_by(boll.middleband[-max_length:], round_to_5)
         boll_lower = map_by(boll.lowerband[-max_length:], round_to_5)
         result_texts.append(f"- 过去{len(boll_upper)}天布林带上轨: {boll_upper}")
         result_texts.append(f"- 过去{len(boll_middle)}天布林带中轨: {boll_middle}")
         result_texts.append(f"- 过去{len(boll_lower)}天布林带下轨: {boll_lower}")
-    if "macd" in use_indicators and len(ohlcv_list) >= 36:
-        macd = macd_indicator(ohlcv_list)
+    if "macd" in use_indicators and result.macd:
+        macd = result.macd
         macd_hist = map_by(
             macd.macdhist[-max_length:], round_to_5
         )  # 假设macdhist存储MACD柱状图数据
@@ -240,8 +243,8 @@ def format_indicators(
         result_texts.append(f"    - 趋势转好: {'是' if macd.is_turn_good else '否'}")
         result_texts.append(f"    - 趋势转坏: {'是' if macd.is_turn_bad else '否'}")
         result_texts.append(f"    - 过去{len(macd_hist)}天MACD柱状图: {macd_hist}")
-    if "stoch" in use_indicators and len(ohlcv_list) > 18:
-        stoch = stochastic_oscillator_indicator(ohlcv_list)
+    if "stoch" in use_indicators and result.stoch:
+        stoch = result.stoch
         stoch_slowk = map_by(stoch.slowk[-max_length:], round_to_5)
         stoch_slowd = map_by(stoch.slowd[-max_length:], round_to_5)
         result_texts.append(
@@ -249,12 +252,15 @@ def format_indicators(
         )
         result_texts.append(f"    - %K: {stoch_slowk}")
         result_texts.append(f"    - %D: {stoch_slowd}")
-    if "atr" in use_indicators and len(ohlcv_list) >= 15:
-        atr_values = atr_indicator(ohlcv_list).atr[-max_length:]
-        atr_values_rounded = map_by(atr_values, round_to_5)
+    if "atr" in use_indicators and result.atr:
+        atr_values_rounded = map_by(result.atr.atr[-max_length:], round_to_5)
         result_texts.append(
             f"- 过去{len(atr_values_rounded)}天平均真实波幅 (ATR): {atr_values_rounded}"
         )
+    if "vwma" in use_indicators and result.vwma:
+        vwma = result.vwma
+        vwma_values = map_by(vwma.vwma[-max_length:], round_to_5)
+        result_texts.append(f"- 过去{len(vwma_values)}天成交量加权平均价 (VWMA): {vwma_values}")
 
     return "\n".join(result_texts)
 

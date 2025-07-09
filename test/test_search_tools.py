@@ -1,8 +1,6 @@
 import pytest
-import json
-import os
 from datetime import datetime
-from lib.tools.information_search import duckduckgo_search, google_search, unified_search, get_global_news_report, read_web_page
+from lib.tools.information_search import duckduckgo_search, google_search, unified_search, read_web_page
 from lib.config import get_http_proxy
 from lib.model.news import NewsInfo
 
@@ -296,47 +294,6 @@ class TestInformationSearch:
         print(f"搜索功能集成测试通过")
         print(f"DuckDuckGo结果: {len(ddg_results)} 条")
         print(f"统一搜索结果: {len(unified_results)} 条")
-    
-    @pytest.mark.integration
-    @pytest.mark.slow
-    def test_get_global_news_report(self):
-        """测试获取全球新闻报告功能"""
-        try:
-            # 测试默认参数
-            result = get_global_news_report()
-            
-            # 验证返回结果
-            assert isinstance(result, str)
-            assert len(result) > 0
-            
-            print("全球新闻报告测试通过")
-            print(f"报告长度: {len(result)}")
-            
-        except Exception as e:
-            print(f"全球新闻报告测试失败: {e}")
-            # 在测试环境中，我们允许LLM调用失败
-            pass
-    
-    @pytest.mark.integration
-    @pytest.mark.slow
-    def test_get_global_news_report_time_ranges(self):
-        """测试不同时间范围的全球新闻报告"""
-        time_ranges = ['d', 'w']
-        
-        for time_range in time_ranges:
-            try:
-                result = get_global_news_report(time_range=time_range)
-                
-                # 验证返回结果
-                assert isinstance(result, str)
-                assert len(result) > 0
-                
-                print(f"时间范围 {time_range} 测试通过，结果长度: {len(result)}")
-                
-            except Exception as e:
-                print(f"时间范围 {time_range} 测试失败: {e}")
-                # 在测试环境中，我们允许某些时间范围失败
-                continue
 
 
 if __name__ == "__main__":

@@ -69,6 +69,9 @@ class CryptoTrade(TradeOperations):
 
     def is_business_day(self, _: datetime) -> bool:
         return True
+    
+    def is_business_time(self, time: datetime) -> bool:
+        return True
 
     def get_current_price(self, symbol: str) -> float:
         return self.exchange.fetch_ticker(symbol).last

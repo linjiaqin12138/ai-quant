@@ -17,6 +17,12 @@ class TradeOperations(abc.ABC):
         pass
 
     @abc.abstractmethod
+    def is_business_time(self, time: datetime) -> bool:
+        """
+        判断是否是交易时间
+        """
+        pass
+    @abc.abstractmethod
     def get_current_price(self, symbol: str) -> float:
         pass
 

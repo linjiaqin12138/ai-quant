@@ -310,7 +310,8 @@ HTML_TEMPLATE = """
 </html>
 """
 
-COMMENT_EXTRACTOR_SYS_PROMPT = """
+# 评论提取器系统提示词模板
+COMMENT_EXTRACTOR_SYS_PROMPT_TEMPLATE = """
 你是一个专业的股票数据分析助手，擅长从网页内容中提取和分析股票相关信息。
 现在时间是{curr_time_str}。
 请按照以下要求操作：
@@ -337,7 +338,8 @@ Response Format Example (请严格follow)
 ]
 """
 
-SENTIMENT_ANALYZER_SYS_PROMPT = """
+# 情绪分析器系统提示词模板
+SENTIMENT_ANALYZER_SYS_PROMPT_TEMPLATE = """
 你是一个专业的股票市场情绪分析专家，擅长分析投资者评论并评估市场情绪。
 
 你的任务是：
@@ -373,7 +375,7 @@ class StockSentimentAnalyzer:
         """初始化分析器"""
         # 创建评论提取工具
         self.comment_extractor = get_llm_tool(
-            system_prompt=COMMENT_EXTRACTOR_SYS_PROMPT.format(curr_time_str=datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
+            system_prompt=COMMENT_EXTRACTOR_SYS_PROMPT_TEMPLATE.format(curr_time_str=datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
             provider=provider,
             model=model,
             response_format="json_object"
@@ -381,7 +383,7 @@ class StockSentimentAnalyzer:
         
         # 创建情绪分析工具
         self.sentiment_analyzer = get_llm_tool(
-            system_prompt=SENTIMENT_ANALYZER_SYS_PROMPT,
+            system_prompt=SENTIMENT_ANALYZER_SYS_PROMPT_TEMPLATE,
             provider=provider,
             model=model
         )

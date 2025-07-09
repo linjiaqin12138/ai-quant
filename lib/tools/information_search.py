@@ -217,6 +217,7 @@ def unified_search(query: str, max_results: int = 10, region: str = "zh-cn", tim
     """
     # 首先尝试使用Google搜索
     try:
+        logger.info("正在搜索：%s", query)
         api_key = get_google_api_key()
         cse_id = get_google_cse_id()
         
@@ -230,88 +231,6 @@ def unified_search(query: str, max_results: int = 10, region: str = "zh-cn", tim
         # Google搜索失败，回退到DuckDuckGo搜索
         print(f"Google搜索失败，回退到DuckDuckGo搜索: {e}")
         return duckduckgo_search(query, max_results, region, time_limit)
-
-def get_global_news_report(provider: str = 'paoluz', model: str = 'gpt-4o-mini', time_range: str = 'w') -> str:
-    """
-    获取全球新闻和宏观经济信息
-    
-    Args:
-        provider: LLM提供商
-        model: 模型名称
-        time_range: 时间范围，可选值: 'd'(一天), 'w'(一周), 'm'(一个月), 'y'(一年)
-    
-    Returns:
-        分析后的新闻摘要
-    """
-    # 根据时间范围设置描述
-    time_descriptions = {
-        'd': '一天内',
-        'w': '一周内',
-        'm': '一个月内', 
-        'y': '一年内'
-    }
-    
-    time_desc = time_descriptions.get(time_range, '一周内')
-    
-    # 设置系统提示
-    system_prompt = f"""你是一个专业的金融分析师。请搜索{time_desc}的全球新闻和宏观经济信息，重点关注对交易有用的信息。请分析这些新闻对市场的潜在影响，并提供简洁的投资建议。回复请使用中文。"""
-    
-    agent = get_agent(provider, model)
-    agent.set_system_prompt(system_prompt)
-    
-    # 注册统一搜索工具 - 优先使用Google搜索，失败时使用DuckDuckGo
-    agent.register_tool(unified_search)
-    
-    # 构建搜索提示
-    prompt = f"""
-    请使用unified_search工具搜索以下关键词的最新新闻，获取{time_desc}的信息（time_limit参数设置为"{time_range}"）：
-
-    1. "global economy macroeconomic indicators" (全球经济和宏观经济指标)
-    2. "central bank policy interest rates" (央行政策和利率)
-    3. "market volatility stock market news" (市场波动和股市新闻)
-    4. "geopolitical events market impact" (地缘政治事件和市场影响)
-    5. "inflation data economic reports" (通胀数据和经济报告)
-    6. "cryptocurrency bitcoin market" (加密货币和比特币市场)
-    7. "oil gold commodity prices" (石油黄金商品价格)
-    
-    搜索时请使用以下参数：
-    - time_limit: "{time_range}"
-    - max_results: 10
-    
-    搜索完成后，请分析这些新闻信息并提供：
-    
-    ## 分析报告结构：
-    
-    ### 1. 主要市场影响因素总结
-    - 列出最重要的3-5个市场驱动因素
-    - 简要说明其影响程度和时间范围
-    
-    ### 2. 资产类别影响分析
-    - **股票市场**: 对主要股指的影响分析
-    - **债券市场**: 对利率和债券价格的影响
-    - **外汇市场**: 对主要货币对的影响
-    - **商品市场**: 对黄金、石油等大宗商品的影响
-    - **加密货币**: 对比特币等数字资产的影响
-    
-    ### 3. 投资建议
-    - **短期建议** (1-2周): 具体的交易策略和仓位建议
-    - **中期建议** (1-3个月): 资产配置和风险管理
-    
-    ### 4. 风险提示
-    - 需要重点关注的风险因素
-    - 可能的黑天鹅事件
-    - 建议的风险控制措施
-    
-    请确保所有信息都基于搜索到的最新新闻数据，并保持客观和专业的分析态度。
-    
-    注意：如果搜索返回的是模拟数据（由于网络问题），请在分析中说明这一点，并基于一般市场知识提供分析。
-    """
-    
-    try:
-        response = agent.ask(prompt, tool_use=True)
-        return response
-    except Exception as e:
-        return f"获取新闻信息失败: {str(e)}"
 
 @with_retry(
     retry_errors=(ConnectionError, TimeoutError, OSError, RatelimitException),

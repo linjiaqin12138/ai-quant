@@ -1,4 +1,5 @@
-from typing import Dict, List
+from functools import wraps
+from typing import Callable, Dict, List
 from textwrap import dedent
 from ..model.news import NewsInfo
 from .list import filter_by, group_by, map_by
@@ -22,6 +23,39 @@ platform_name_map = {
 
 def get_platform_display_name(platform: str) -> str:
     return platform_name_map.get(platform, platform)
+
+
+def news_info_to_dict(news: NewsInfo) -> Dict:
+    """
+    将NewsInfo对象转换为字典格式，这是一个无副作用的工具函数
+
+    Args:
+        news: NewsInfo对象
+
+    Returns:
+        包含新闻信息的字典
+    """
+    return {
+        "news_id": news.news_id,
+        "title": news.title,
+        "timestamp": news.timestamp.isoformat(),
+        "url": news.url,
+        "platform": news.platform,
+        "description": news.description,
+    }
+
+
+def news_list_to_dict_list(news_list: List[NewsInfo]) -> List[Dict]:
+    """
+    将NewsInfo对象列表转换为字典列表，这是一个无副作用的工具函数
+
+    Args:
+        news_list: NewsInfo对象列表
+
+    Returns:
+        包含新闻信息的字典列表
+    """
+    return [news_info_to_dict(news) for news in news_list]
 
 
 def render_news_list(news_list: List[NewsInfo]) -> str:
@@ -134,3 +168,21 @@ def render_news_in_markdown_group_by_time_for_each_platform(
                     result.append(f"- {news.description}\n")
         result.append("\n")
     return "".join(result)
+
+def news_list_to_markdown(function: Callable[..., List[NewsInfo]]) -> Callable[..., str]:
+    """
+    装饰器：将返回List[NewsInfo]的函数转换为返回markdown字符串的函数
+    
+    Args:
+        function: 返回List[NewsInfo]的函数
+        
+    Returns:
+        返回markdown字符串的函数
+    """
+    @wraps(function)
+    def wrapper(*args, **kwargs) -> str:
+        news_list = function(*args, **kwargs)
+        grouped_news = group_by(news_list, lambda n: n.platform)
+        return render_news_in_markdown_group_by_platform(grouped_news)
+    
+    return wrapper

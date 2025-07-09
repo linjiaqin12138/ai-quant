@@ -206,7 +206,7 @@ class LlmAbstract(abc.ABC):
                 result = self.tools[function_name](**function_args)
                 return str(result)
             except Exception as e:
-                logger.error(f"Error executing tool {function_name}: {str(e)}")
+                logger.error(f"Error executing tool {function_name}: {str(e)} %s", traceback.format_exc())
                 return f"Error executing tool {function_name}: {str(e)}"
         else:
             return f"Tool {function_name} not found"
