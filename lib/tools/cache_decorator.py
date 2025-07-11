@@ -17,21 +17,17 @@ from lib.adapter.database.kv_store import Value
 memory_cache: dict[str, tuple[Any, datetime]] = {}
 
 
-def generate_cache_key(func: Callable, args: tuple, kwargs: dict) -> str:
+def generate_cache_key(arguments_dict: dict, meta_dict: dict) -> str:
     """
     根据函数及其参数生成一个唯一的、可重复的缓存键。
     尝试使用JSON序列化参数，如果失败则使用repr。
     """
     try:
-        # 绑定参数到签名以处理默认值和名称
-        sig = inspect.signature(func)
-        bound_args = sig.bind_partial(
-            *args, **kwargs
-        )  # Use bind_partial before apply_defaults
-        bound_args.apply_defaults()
         # 创建一个包含函数限定名和排序后参数的列表
-        key_parts = [func.__module__, func.__qualname__]
-        for k, v in sorted(bound_args.arguments.items()):
+        module_name = meta_dict.get("module")
+        function_name = meta_dict.get("function")
+        key_parts = [module_name, function_name]
+        for k, v in sorted(arguments_dict.items()):
             if k == "self":  # 会导致key的名字中出现地址，每次运行都不一样
                 continue
             try:
@@ -48,11 +44,10 @@ def generate_cache_key(func: Callable, args: tuple, kwargs: dict) -> str:
         return "||".join(key_parts)
     except Exception as e:
         logger.error(
-            f"Error generating cache key for {func.__name__}: {e}", exc_info=True
+            f"Error generating cache key for {function_name}: {e}", exc_info=True
         )
         # 回退到不太可靠但总能工作的键
-        return f"{func.__module__}.{func.__qualname__}:{repr(args)}:{repr(kwargs)}"
-
+        return f"{module_name}.{function_name}:{repr(arguments_dict)}"
 
 def use_cache(
     ttl_seconds: int,
@@ -60,7 +55,7 @@ def use_cache(
     key_prefix: str = "cache",
     serializer: Optional[Callable[[Any], Value]] = None,
     deserializer: Optional[Callable[[Value], Any]] = None,
-    key_generator: Callable[[Callable, tuple, dict], str] = generate_cache_key,
+    key_generator: Callable[[dict, dict], str] = generate_cache_key,
 ) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """
     一个装饰器，用于在内存和（可选）数据库键值存储中缓存函数结果。
@@ -85,7 +80,15 @@ def use_cache(
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             nonlocal use_db_cache  # 允许修改闭包中的use_db_cache
             now = datetime.now()
-            cache_key = key_generator(func, args, kwargs)
+            sig = inspect.signature(func)
+            bound_args = sig.bind_partial(
+                *args, **kwargs
+            )  # Use bind_partial before apply_defaults
+            bound_args.apply_defaults()
+            cache_key = key_generator(bound_args.arguments, {
+                "module": func.__module__,
+                "function": func.__name__,
+            })
             db_cache_key = f"{key_prefix}:{cache_key}"
 
             # 1. 检查内存缓存

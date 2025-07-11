@@ -1,6 +1,5 @@
 from datetime import datetime
 from typing import List
-import requests
 import httplib2
 
 from duckduckgo_search import DDGS
@@ -8,7 +7,6 @@ from duckduckgo_search.exceptions import RatelimitException
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from lib.adapter.llm import get_agent
 from lib.config import get_http_proxy, get_google_api_key, get_google_cse_id
 from lib.model.news import NewsInfo
 from lib.utils.time import parse_datetime_string
@@ -16,10 +14,6 @@ from lib.utils.string import hash_str
 from lib.utils.decorators import with_retry
 from lib.logger import logger
 
-@with_retry(
-    retry_errors=(ConnectionError, TimeoutError, OSError, RatelimitException),
-    max_retry_times=3
-)
 def duckduckgo_search(query: str, max_results: int = 10, region: str = "us-en", time_limit: str = "w") -> List[NewsInfo]:
     """
     使用DuckDuckGo搜索新闻信息
@@ -83,10 +77,6 @@ def duckduckgo_search(query: str, max_results: int = 10, region: str = "us-en", 
         
         return news_infos
 
-@with_retry(
-    retry_errors=(ConnectionError, TimeoutError, OSError, HttpError),
-    max_retry_times=3
-)
 def google_search(query: str, max_results: int = 10, region: str = "us-en", time_limit: str = "w") -> List[NewsInfo]:
     """
     使用Google Custom Search API搜索新闻信息
@@ -202,6 +192,10 @@ def google_search(query: str, max_results: int = 10, region: str = "us-en", time
     except HttpError as e:
         raise ConnectionError(f"Google搜索API请求失败: {e}")
 
+@with_retry(
+    retry_errors=(ConnectionError, TimeoutError, OSError, HttpError, RatelimitException),
+    max_retry_times=3
+)
 def unified_search(query: str, max_results: int = 10, region: str = "zh-cn", time_limit: str = "w") -> List[NewsInfo]:
     """
     统一搜索函数，优先使用Google搜索，失败时使用DuckDuckGo搜索
@@ -216,57 +210,19 @@ def unified_search(query: str, max_results: int = 10, region: str = "zh-cn", tim
         NewsInfo对象数组
     """
     # 首先尝试使用Google搜索
-    try:
-        logger.info("正在搜索：%s", query)
-        api_key = get_google_api_key()
-        cse_id = get_google_cse_id()
-        
-        if api_key and cse_id:
-            return google_search(query, max_results, region, time_limit)
-        else:
-            # 如果没有配置Google API，直接使用DuckDuckGo
-            return duckduckgo_search(query, max_results, region, time_limit)
-            
-    except Exception as e:
-        # Google搜索失败，回退到DuckDuckGo搜索
-        print(f"Google搜索失败，回退到DuckDuckGo搜索: {e}")
-        return duckduckgo_search(query, max_results, region, time_limit)
 
-@with_retry(
-    retry_errors=(ConnectionError, TimeoutError, OSError, RatelimitException),
-    max_retry_times=3
-)
-def read_web_page(url: str) -> str:
-    """
-    使用Jina API读取网页内容
-    
-    Args:
-        url: 要读取的网页URL
-    
-    Returns:
-        网页内容字符串
-    """
-    # Jina Reader API端点
-    jina_url = f"https://r.jina.ai/{url}"
-    
-    # 获取代理设置
-    proxy = get_http_proxy()
-    proxies = None
-    if proxy:
-        proxies = {
-            'http': proxy,
-            'https': proxy
-        }
-    
-    # 设置请求头
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    }
-    
-    # 发送请求到Jina API
-    response = requests.get(jina_url, headers=headers, proxies=proxies, timeout=600)
-    response.raise_for_status()
-    
-    # 返回网页内容
-    return response.text
+    logger.info("正在搜索：%s", query)
+    api_key = get_google_api_key()
+    cse_id = get_google_cse_id()
+
+    if api_key and cse_id:
+        try:
+            return google_search(query, max_results, region, time_limit)
+        except Exception as e:
+            logger.error(f"Google搜索失败，错误信息: {e}")
+            # 如果Google搜索失败，回退到DuckDuckGo搜索
+            logger.info(f"Google搜索失败，尝试使用DuckDuckGo搜索: {e}")
+            
+    return duckduckgo_search(query, max_results, region, time_limit)
+
 

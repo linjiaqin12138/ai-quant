@@ -16,8 +16,9 @@ from jinja2 import Template
 from lib.adapter.llm import get_agent
 from lib.utils.news import render_news_in_markdown_group_by_platform
 from lib.tools.news_helper import NewsHelper
-from lib.tools.information_search import unified_search, read_web_page
+from lib.tools.information_search import unified_search
 from lib.tools.ashare_stock import get_ashare_stock_info
+from lib.tools.web_page_reader import WebPageReader
 from lib.logger import logger
 
 # HTML报告模板
@@ -399,7 +400,7 @@ CRYPTO_ANALYSIS_PROMPT_TEMPLATE = """
 1. 调用 get_global_news_report 获取全球宏观经济新闻
 2. 调用 get_crypto_news_from_cointime 获取加密货币专业新闻  
 3. 使用 serch_engine 搜索 "{symbol}" 相关的最新消息
-4. 如发现重要新闻链接，使用 read_web_page 深入了解详情
+4. 如发现重要新闻链接，使用 read_page_content 深入了解详情
 
 **重点关注：**
 - {symbol} 的价格动态和技术发展
@@ -420,7 +421,7 @@ STOCK_ANALYSIS_PROMPT_TEMPLATE = """
 2. 调用 get_global_news_report 获取全球宏观经济新闻
 3. 调用 get_stock_news 获取该股票的专门新闻、该股票所属行业市场动态
 4. 使用 serch_engine 搜索 "{stock_name}" 或 "{stock_code}" 相关消息
-5. 如发现重要新闻链接，使用 read_web_page 深入了解详情
+5. 如发现重要新闻链接，使用 read_page_content 深入了解详情
 
 **重点关注：**
 - 公司业务动态和经营状况
@@ -436,11 +437,16 @@ STOCK_ANALYSIS_PROMPT_TEMPLATE = """
 class NewsAgent:
     """新闻分析Agent"""
     
-    def __init__(self, provider: str = "paoluz", model: str = "deepseek-v3"):
+    def __init__(
+            self, 
+            provider: str = "paoluz", 
+            model: str = "deepseek-v3",
+            web_page_reader: Optional[WebPageReader] = None
+        ):
         """初始化新闻分析器"""
         self.news_helper = NewsHelper(llm_provider=provider, model=model)
         self.agent = get_agent(provider, model)
-        
+        self.web_page_reader = web_page_reader or WebPageReader(provider, model)
         # 记录工具调用结果
         self.tool_results = []
         
@@ -450,8 +456,8 @@ class NewsAgent:
         self.agent.register_tool(self._wrap_tool(self.get_crypto_news_from_cointime))
         self.agent.register_tool(self._wrap_tool(self.get_stock_news))
         self.agent.register_tool(self._wrap_tool(self.serch_engine))
-        self.agent.register_tool(self._wrap_tool(read_web_page))
-        
+        self.agent.register_tool(self._wrap_tool(self.read_page_content))
+
         self.agent.set_system_prompt(dedent("""
         你是一位专业的金融新闻分析师，擅长收集和分析各类金融市场新闻信息。
 
@@ -466,12 +472,12 @@ class NewsAgent:
         - `get_crypto_news_from_cointime`: 获取加密货币新闻，仅适用于加密货币标的
         - `get_stock_news`: 获取A股股票新闻，仅适用于A股股票代码
         - `serch_engine`: 通用搜索工具，可用于补充搜索相关信息
-        - `read_web_page`: 阅读网页详细内容，用于深入了解重要新闻
+        - `read_page_content`: 阅读网页详细内容，用于深入了解重要新闻
 
         **分析流程：**
         1. 先判断标的类型（A股股票 vs 加密货币）
         2. 调用相应的新闻获取工具
-        3. 如发现重要新闻链接，使用read_web_page深入了解
+        3. 如发现重要新闻链接，使用read_page_content深入了解
         4. 综合所有信息，提供专业的分析报告
 
         **报告要求：**
@@ -494,11 +500,11 @@ class NewsAgent:
                 result = tool_func(*args, **kwargs)
                 # 计算新闻数量（简单估算，按行数计算）
                 # 计算新闻数量
-                if tool_name in ['read_web_page', 'get_global_news_report']:
+                if tool_name in ['read_page_content', 'get_global_news_report']:
                     news_count = 0  # 这两个工具不参与新闻统计
                 else:
                     # 统计类似"### [标题](链接)"格式的新闻行数
-                    news_count = len(re.findall(r'#*\s*\[.*?\]\(.*?\)', result)) if result else 0
+                    news_count = len(re.findall(r'#+\s*\[.*?\]\(.*?\)', result)) if result else 0
                 
                 self.tool_results.append({
                     "tool_name": tool_name,
@@ -561,6 +567,17 @@ class NewsAgent:
         支持格式: '2023-10-01 12:00'
         """
         return datetime.strptime(time_str, "%Y-%m-%d %H:%M")
+
+    def read_page_content(self, url: str) -> str:
+        """
+        读取网页并提取文章内容
+        Args:
+            url: 网页URL
+        
+        Returns:
+            网页内容
+        """
+        return self.web_page_reader.read_and_extract(url, "提取正文")
 
     def serch_engine(self, query: str, from_time: str, max_result: int = 10) -> str:
         """

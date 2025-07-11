@@ -501,6 +501,50 @@ HTML_TEMPLATE = """
 </html>
 """
 
+MARKET_ANALYST_PROMPT = """
+你是一位经验丰富的技术分析专家，擅长分析股票和加密货币市场。你的任务是根据用户的请求，自主选择合适的工具进行深入的技术分析。
+
+## 可用工具说明
+
+1. **get_symbol_basic_info()**: 获取股票或加密货币的基本信息
+2. **get_ohlcv_data()**: 获取OHLCV历史数据
+3. **calculate_technical_indicators(indicators, max_length)**: 计算技术指标
+4. **detect_candlestick_patterns()**: 检测K线形态
+
+## 分析原则
+
+1. **数据充足性**: 首先确保获取足够的历史数据（强烈建议40-50天）来支持所有技术指标的准确计算
+2. **循序渐进**: 先获取基本信息，再获取充足的价格数据，然后选择合适的技术指标
+3. **工具选择**: 根据市场情况和分析目标，选择最相关的指标组合（建议4-6个指标）
+4. **综合分析**: 结合价格走势、技术指标和K线形态进行综合判断
+5. **风险评估**: 务必评估当前市场风险，给出明确的风险提示
+
+## 输出要求
+
+1. 提供详细的技术分析报告，包含：
+    - 趋势分析（短期、中期、长期）
+    - 关键支撑和阻力位
+    - 技术指标解读
+    - K线形态分析（如果检测到）
+    - 市场情绪评估
+    - 风险评估
+
+2. 给出明确的交易建议：
+    - **买入**: 多个指标显示积极信号，风险可控
+    - **卖出**: 多个指标显示负面信号，风险较高
+    - **持有**: 信号不明确或处于关键位置
+
+3. 在报告末尾添加一个Markdown表格，总结关键要点：
+    | 分析项目 | 状态 | 说明 |
+    |----------|------|------|
+    | 趋势方向 | 上升/下降/震荡 | 具体说明 |
+    | 技术指标 | 积极/中性/消极 | 主要信号 |
+    | K线形态 | 看涨/看跌/中性 | 形态说明 |
+    | 风险等级 | 低/中/高 | 风险因素 |
+    | 交易建议 | 买入/卖出/持有 | 建议理由 |
+
+请根据用户的具体需求，主动选择和调用相应的工具，进行专业的技术分析。记住要获取足够的历史数据以确保技术指标计算的准确性。
+"""
 class MarketAnalyst:
     """智能市场分析师"""
     
@@ -520,38 +564,58 @@ class MarketAnalyst:
         
         # 创建Agent
         self.agent = get_agent(provider, model, temperature=0.2)
-        self._register_tools()
-        self._set_system_prompt()
-    
-    def _get_ohlcv_history(self, symbol: str) -> List[Ohlcv]:
+        self.agent.register_tool(self.get_ohlcv_data)
+        self.agent.register_tool(self.calculate_technical_indicators)
+        self.agent.register_tool(self.detect_candlestick_patterns)
+        logger.info("已注册4个分析工具")
+        self.agent.set_system_prompt(MARKET_ANALYST_PROMPT)
+
+    @property
+    def _is_crypto(self) -> bool:
+        return "USDT" in self.current_symbol.upper()
+
+    def _get_ohlcv_history(self) -> List[Ohlcv]:
         """获取OHLCV历史数据"""
-        market_type = "crypto" if "USDT" in symbol.upper() else "ashare"
-        
-        if market_type == "crypto":
-            history = crypto.get_ohlcv_history(symbol, "1d", limit=self.ohlcv_days)
+        if self._is_crypto:
+            history = crypto.get_ohlcv_history(self.current_symbol, "1d", limit=self.ohlcv_days)
         else:
-            history = ashare.get_ohlcv_history(symbol, "1d", limit=self.ohlcv_days)
+            history = ashare.get_ohlcv_history(self.current_symbol, "1d", limit=self.ohlcv_days)
         
         return history.data[-self.ohlcv_days:]
     
+    def _get_symbol_basic_info(self) -> Dict[str, Any]:
+        if self._is_crypto:
+            info = {
+                "symbol": self.current_symbol,
+                "name": self.current_symbol.replace("USDT", "").replace("/", ""),
+                "market": "crypto",
+            }
+        else:
+            stock_info = get_ashare_stock_info(self.current_symbol)
+            info = {
+                "symbol": self.current_symbol,
+                "name": stock_info.get("stock_name", "未知"),
+                "business": stock_info.get("stock_business", "未知"),
+                "market": "ashare",
+            }
+        return info 
+    
     def get_ohlcv_data(
         self,
-        symbol: str,
-        days: Annotated[int, "获取多少天的数据，默认30天"] = 30
     ) -> str:
         """获取股票或加密货币的OHLCV数据"""
         try:
-            ohlcv_list = self._get_ohlcv_history(symbol)
+            ohlcv_list = self._get_ohlcv_history()
             if not ohlcv_list:
-                return f"❌ 无法获取{symbol}的OHLCV数据"
+                return f"❌ 无法获取{self.current_symbol}的OHLCV数据"
             
-            formatted_data = format_ohlcv_list(ohlcv_list[-days:])
-            logger.info(f"成功获取{symbol}的{len(ohlcv_list)}天OHLCV数据")
+            formatted_data = format_ohlcv_list(ohlcv_list)
+            logger.info(f"成功获取{self.current_symbol}的{len(ohlcv_list)}天OHLCV数据")
             return formatted_data
             
         except Exception as e:
             logger.error(f"获取OHLCV数据失败: {e}")
-            return f"❌ 获取{symbol}的OHLCV数据失败: {str(e)}"
+            return f"❌ 获取{self.current_symbol}的OHLCV数据失败: {str(e)}"
 
     def calculate_technical_indicators(
         self,
@@ -563,7 +627,7 @@ class MarketAnalyst:
             if not self.current_symbol:
                 return "❌ 请先调用get_ohlcv_data获取数据"
             
-            ohlcv_list = self._get_ohlcv_history(self.current_symbol)
+            ohlcv_list = self._get_ohlcv_history()
             if not ohlcv_list:
                 return f"❌ 无法获取{self.current_symbol}的历史数据"
             
@@ -579,13 +643,10 @@ class MarketAnalyst:
     def detect_candlestick_patterns(self) -> str:
         """检测K线形态"""
         try:
-            if not self.current_symbol:
-                return "❌ 请先调用get_ohlcv_data获取数据"
-            
-            ohlcv_list = self._get_ohlcv_history(self.current_symbol)
+            ohlcv_list = self._get_ohlcv_history()
             if not ohlcv_list or len(ohlcv_list) < 5:
                 return f"❌ 数据不足，无法检测K线形态（需要至少5个数据点）"
-            
+
             patterns = format_ohlcv_pattern(ohlcv_list)
             if patterns:
                 logger.info(f"成功检测{self.current_symbol}的K线形态")
@@ -597,116 +658,22 @@ class MarketAnalyst:
             logger.error(f"检测K线形态失败: {e}")
             return f"❌ 检测K线形态失败: {str(e)}"
 
-    def get_stock_basic_info(self, symbol: str) -> str:
+    def get_symbol_basic_info_str(self) -> str:
         """获取股票基本信息"""
         try:
-            self.current_symbol = symbol
+            info = self._get_symbol_basic_info()
             
-            if "USDT" in symbol.upper():
-                info = {
-                    "symbol": symbol,
-                    "name": symbol.replace("USDT", "").replace("/", ""),
-                    "type": "加密货币",
-                    "market": "crypto",
-                    "description": f"{symbol}是一个加密货币交易对"
-                }
-            else:
-                stock_info = get_ashare_stock_info(symbol)
-                info = {
-                    "symbol": symbol,
-                    "name": stock_info.get("stock_name", "未知"),
-                    "type": stock_info.get("stock_type", "股票"),
-                    "business": stock_info.get("stock_business", "未知"),
-                    "market": "ashare",
-                    "description": f"{stock_info.get('stock_name', symbol)}是一只A股股票，属于{stock_info.get('stock_business', '未知')}行业"
-                }
-            
-            result = f"📈 {info['name']}({symbol}) 基本信息:\n"
-            result += f"• 类型: {info['type']}\n"
+            result = f"📈 {info['name']}({self.current_symbol}) 基本信息:\n"
             result += f"• 市场: {info['market']}\n"
             if 'business' in info:
                 result += f"• 行业: {info['business']}\n"
-            result += f"• 描述: {info['description']}"
-            
-            logger.info(f"成功获取{symbol}的基本信息")
+    
+            logger.info(f"成功获取{self.current_symbol}的基本信息")
             return result
             
         except Exception as e:
             logger.error(f"获取股票基本信息失败: {e}")
-            return f"❌ 获取{symbol}基本信息失败: {str(e)}"
-    
-    def _register_tools(self):
-        """注册分析工具"""
-        self.agent.register_tool(self.get_stock_basic_info)
-        self.agent.register_tool(self.get_ohlcv_data)
-        self.agent.register_tool(self.calculate_technical_indicators)
-        self.agent.register_tool(self.detect_candlestick_patterns)
-        logger.info("已注册4个分析工具")
-    
-    def _set_system_prompt(self):
-        """设置系统提示"""
-        system_prompt = dedent("""
-        你是一位经验丰富的技术分析专家，擅长分析股票和加密货币市场。你的任务是根据用户的请求，自主选择合适的工具进行深入的技术分析。
-        
-        ## 可用工具说明
-        
-        1. **get_stock_basic_info(symbol)**: 获取股票或加密货币的基本信息
-        2. **get_ohlcv_data(symbol, days)**: 获取OHLCV历史数据
-        3. **calculate_technical_indicators(indicators, max_length)**: 计算技术指标
-        4. **detect_candlestick_patterns()**: 检测K线形态
-        
-        ## ⚠️ 数据量要求 - 重要说明
-        
-        **不同技术指标对历史数据的要求不同，为确保所有技术指标都能准确计算，强烈建议获取至少40天以上的OHLCV数据：**
-        
-        ### 各指标最低数据要求：
-        - **SMA(5日)**: 最少5天数据
-        - **SMA(20日)**: 最少20天数据  
-        - **RSI**: 最少15天数据
-        - **布林带(BOLL)**: 最少20天数据
-        - **MACD**: 最少36天数据 ⭐ (计算复杂度最高，需要26日EMA+12日EMA+9日信号线)
-        - **随机指标(STOCH/KDJ)**: 最少19天数据
-        - **ATR**: 最少15天数据
-        - **VWMA**: 最少20天数据 (成交量加权移动平均线)
-        
-        **推荐策略**: 为确保所有指标都能准确计算，建议调用get_ohlcv_data时设置days参数为40-50天。
-        
-        ## 分析原则
-        
-        1. **数据充足性**: 首先确保获取足够的历史数据（强烈建议40-50天）来支持所有技术指标的准确计算
-        2. **循序渐进**: 先获取基本信息，再获取充足的价格数据，然后选择合适的技术指标
-        3. **工具选择**: 根据市场情况和分析目标，选择最相关的指标组合（建议4-6个指标）
-        4. **综合分析**: 结合价格走势、技术指标和K线形态进行综合判断
-        5. **风险评估**: 务必评估当前市场风险，给出明确的风险提示
-        
-        ## 输出要求
-        
-        1. 提供详细的技术分析报告，包含：
-           - 趋势分析（短期、中期、长期）
-           - 关键支撑和阻力位
-           - 技术指标解读
-           - K线形态分析（如果检测到）
-           - 市场情绪评估
-           - 风险评估
-        
-        2. 给出明确的交易建议：
-           - **买入**: 多个指标显示积极信号，风险可控
-           - **卖出**: 多个指标显示负面信号，风险较高
-           - **持有**: 信号不明确或处于关键位置
-        
-        3. 在报告末尾添加一个Markdown表格，总结关键要点：
-           | 分析项目 | 状态 | 说明 |
-           |----------|------|------|
-           | 趋势方向 | 上升/下降/震荡 | 具体说明 |
-           | 技术指标 | 积极/中性/消极 | 主要信号 |
-           | K线形态 | 看涨/看跌/中性 | 形态说明 |
-           | 风险等级 | 低/中/高 | 风险因素 |
-           | 交易建议 | 买入/卖出/持有 | 建议理由 |
-        
-        请根据用户的具体需求，主动选择和调用相应的工具，进行专业的技术分析。记住要获取足够的历史数据以确保技术指标计算的准确性。
-        """)
-        
-        self.agent.set_system_prompt(system_prompt)
+            return f"❌ 获取{self.current_symbol}基本信息失败: {str(e)}"
     
     def analyze_stock_market(self, symbol: str, user_request: str = None) -> Dict[str, Any]:
         """
@@ -719,45 +686,23 @@ class MarketAnalyst:
         Returns:
             完整的分析结果
         """
+        self.current_symbol = symbol
         result = {
-            "symbol": symbol,
+            "symbol": self.current_symbol,
             "analysis_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "success": False
         }
         
         try:
             logger.info(f"开始分析{symbol}，用户需求：{user_request or '全面技术分析'}")
-            
-            # 获取基本信息
-            if "USDT" in symbol.upper():
-                result["stock_name"] = symbol.replace("USDT", "").replace("/", "")
-                result["market_type"] = "加密货币"
-            else:
-                stock_info = get_ashare_stock_info(symbol)
-                result["stock_name"] = stock_info.get("stock_name", "未知")
-                result["market_type"] = "A股"
-                result["stock_info"] = stock_info
-            
-            # 获取历史数据
-            ohlcv_list = self._get_ohlcv_history(symbol)
-            if not ohlcv_list:
-                raise Exception("无法获取历史数据")
-            
-            # 准备原始数据
-            result["raw_ohlcv_data"] = format_ohlcv_list(ohlcv_list)
-            result["raw_indicators_data"] = format_indicators(ohlcv_list, ["sma", "rsi", "macd", "boll"], 20)
-            result["raw_patterns_data"] = format_ohlcv_pattern(ohlcv_list) or ""
-            
-            # 准备图表数据
-            result["ohlcv_data"] = self._prepare_chart_data(ohlcv_list)
-            result["indicators_data"] = self._parse_indicators_for_chart(ohlcv_list)
-            
             # AI分析
-            request = f"请对{symbol}进行技术分析。用户需求：{user_request}" if user_request else f"请对{symbol}进行全面的技术分析，包括趋势分析、技术指标分析、K线形态分析，并给出交易建议。"
-            
-            analysis_result = self.agent.ask(request, tool_use=True)
-            result["analysis_result"] = analysis_result
-            
+            if user_request:
+                request = f"请对{symbol}进行技术分析，并满足用户需求：{user_request}"
+            else:
+                request = f"请对{symbol}进行全面的技术分析，包括趋势分析、技术指标分析、K线形态分析，并给出交易建议。"
+            request += f"\n{self.get_symbol_basic_info_str()}\n"
+
+            result["analysis_result"] = self.agent.ask(request, tool_use=True)
             result["success"] = True
             logger.info(f"分析完成：{symbol}")
             
@@ -822,20 +767,23 @@ class MarketAnalyst:
         markdown_content = analysis_result["analysis_result"]
         escaped_content = markdown_content.replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
         
+        basic_info_dict = self._get_symbol_basic_info()
+        # 获取历史数据
+        ohlcv_list = self._get_ohlcv_history() or []
         # 渲染HTML内容
         html_content = Template(HTML_TEMPLATE).render(
-            symbol=analysis_result["symbol"],
-            stock_name=analysis_result["stock_name"],
-            market_type=analysis_result["market_type"],
+            symbol=self.current_symbol,
+            stock_name=basic_info_dict['name'],
+            market_type=basic_info_dict['market'],
             analysis_time=analysis_result["analysis_time"],
             data_days=self.ohlcv_days,
             indicators_used="SMA, RSI, MACD, 布林带",
             escaped_analysis_content=escaped_content,
-            raw_ohlcv_data=analysis_result["raw_ohlcv_data"],
-            raw_indicators_data=analysis_result["raw_indicators_data"],
-            raw_patterns_data=analysis_result["raw_patterns_data"],
-            ohlcv_data_json=json.dumps(analysis_result["ohlcv_data"]),
-            indicators_data_json=json.dumps(analysis_result["indicators_data"]),
+            raw_ohlcv_data=format_ohlcv_list(ohlcv_list) or "",
+            raw_indicators_data=format_indicators(ohlcv_list, ["sma", "rsi", "macd", "boll"], 20) or "",
+            raw_patterns_data=format_ohlcv_pattern(ohlcv_list) or "",
+            ohlcv_data_json=json.dumps(self._prepare_chart_data(ohlcv_list)),
+            indicators_data_json=json.dumps(self._parse_indicators_for_chart(ohlcv_list)),
             current_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         )
         

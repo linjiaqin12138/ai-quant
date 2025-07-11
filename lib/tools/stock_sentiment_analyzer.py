@@ -12,10 +12,10 @@ from typing import List, Dict, Any, Optional, Tuple
 from textwrap import dedent
 
 from jinja2 import Template
-from lib.utils.string import has_json_features
-from lib.tools.json_fixer import fix_json_with_llm
 from lib.adapter.llm import get_llm_tool
-from lib.tools.information_search import read_web_page
+from lib.utils.string import has_json_features
+from lib.tools.json_fixer import JsonFixer
+from lib.tools.web_page_reader import WebPageReader
 from lib.tools.ashare_stock import get_ashare_stock_info, determine_exchange
 from lib.logger import logger
 from lib.utils.string import extract_json_string
@@ -371,7 +371,13 @@ LLM_RETRY_TIME = 1
 class StockSentimentAnalyzer:
     """股票市场情绪分析器"""
     
-    def __init__(self, provider: str = "paoluz", model: str = "deepseek-v3"):
+    def __init__(
+            self, 
+            provider: str = "paoluz",
+            model: str = "deepseek-v3",
+            web_page_reader: Optional[WebPageReader] = None,
+            json_fixer: Optional[JsonFixer] = None
+        ):
         """初始化分析器"""
         # 创建评论提取工具
         self.comment_extractor = get_llm_tool(
@@ -388,8 +394,9 @@ class StockSentimentAnalyzer:
             model=model
         )
 
+        self.web_page_reader = web_page_reader or WebPageReader(provider=provider, model=model)
         # Fix Json Tool
-        self.fix_json_tool = lambda text: fix_json_with_llm(text, provider=provider, model=model)
+        self.fix_json_tool = json_fixer.fix if json_fixer else JsonFixer(provider=provider, model=model).fix
     
     def _validate_comment_schema(self, comment: Any) -> bool:
         """
@@ -475,9 +482,9 @@ class StockSentimentAnalyzer:
         Returns:
             Tuple[原始响应, 评论列表]
         """
-        # 直接调用read_web_page获取页面内容
+        # 直接调用read_page_content获取页面内容
         logger.info(f"正在获取页面内容: {url}")
-        page_content = read_web_page(url)
+        page_content = self.web_page_reader.read_and_extract(url, '提取评论区')
         
         # 使用LLM分析页面内容并提取评论, 截取前15000个字符以避免过长
         

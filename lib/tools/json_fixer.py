@@ -3,31 +3,12 @@ JSON修复工具
 
 使用大模型修复有问题的JSON字符串，处理不完整、格式错误等问题
 """
-
-import json
 from typing import Optional, Union
 from lib.logger import logger
 from lib.utils.string import extract_json_string
 from lib.adapter.llm import get_llm_tool
 
-
-def fix_json_with_llm(broken_json: str, provider: str='paoluz', model: str = 'gpt-4o-mini') -> Optional[Union[dict, list]]:
-    """
-    使用大模型修复有问题的JSON字符串
-    
-    Args:
-        broken_json: 有问题的JSON字符串
-        
-    Returns:
-        修复后的JSON对象，如果修复失败返回None
-    """
-    try:
-        # 避免循环导入，在函数内部导入
-        
-        
-        # 创建JSON修复工具
-        json_fixer = get_llm_tool(
-            system_prompt="""
+SYS_PROMPT = """
 你是一个专业的JSON修复专家。你的任务是修复用户提供的不完整或有问题的JSON字符串。
 
 重要修复规则：
@@ -54,42 +35,66 @@ def fix_json_with_llm(broken_json: str, provider: str='paoluz', model: str = 'gp
 输出：[{"content": "他说：\"你好\""}, {"content": "再见"}]
 
 请直接返回修复后的有效JSON，不要包含任何解释文字。
-""",
-            provider=provider,
-            model=model,
-            response_format="json_object"
-        )
+"""
+
+class JsonFixer:
+    """JSON修复器，使用大模型修复有问题的JSON字符串"""
+    
+    def __init__(self, provider: str = 'paoluz', model: str = 'gpt-4o-mini'):
+        """
+        初始化JSON修复器
         
-        # 调用大模型修复JSON
-        logger.info("使用大模型修复JSON字符串")
-        fixed_json_str = json_fixer(f"请修复以下JSON字符串，保持数组结构，只保留完整的元素：\n{broken_json}")
-        logger.info("大模型修复结果: %s", fixed_json_str)
-        # 尝试解析修复后的JSON
-        result = extract_json_string(fixed_json_str)
-        logger.info("提取到的JSON对象: %s", result)
-        if result:
-            logger.info("大模型成功修复JSON字符串")
-            return result
-        else:
-            logger.warning("大模型修复JSON失败")
+        Args:
+            provider: LLM提供商
+            model: 使用的模型
+        """
+        self.provider = provider
+        self.model = model
+        self._json_fixer = get_llm_tool(SYS_PROMPT, provider=provider, model=model, response_format="json_object")
+
+    def fix(self, broken_json: str) -> Optional[Union[dict, list]]:
+        """
+        修复有问题的JSON字符串
+        
+        Args:
+            broken_json: 有问题的JSON字符串
+            
+        Returns:
+            修复后的JSON对象，如果修复失败返回None
+        """
+        try:
+            # 调用大模型修复JSON
+            logger.info("使用大模型修复JSON字符串")
+            fixed_json_str = self._json_fixer(f"请修复以下JSON字符串，保持数组结构，只保留完整的元素：\n{broken_json}")
+            logger.debug("大模型修复结果: %s", fixed_json_str)
+            
+            # 尝试解析修复后的JSON
+            result = extract_json_string(fixed_json_str)
+            logger.debug("提取到的JSON对象: %s", result)
+            
+            if result:
+                logger.info("大模型成功修复JSON字符串")
+                return result
+            else:
+                logger.warning("大模型修复JSON失败")
+                return None
+                
+        except Exception as e:
+            logger.warning(f"LLM JSON修复失败: {e}")
             return None
-        
-    except Exception as e:
-        logger.warning(f"LLM JSON修复失败: {e}")
-        return None
 
 
-def try_parse_json(s: str) -> Optional[Union[dict, list]]:
+def fix_json_with_llm(broken_json: str, provider: str='paoluz', model: str = 'gpt-4o-mini') -> Optional[Union[dict, list]]:
     """
-    尝试解析JSON字符串
+    使用大模型修复有问题的JSON字符串（兼容性函数）
     
     Args:
-        s: 要解析的字符串
+        broken_json: 有问题的JSON字符串
+        provider: LLM提供商
+        model: 使用的模型
         
     Returns:
-        解析后的JSON对象，如果解析失败返回None
+        修复后的JSON对象，如果修复失败返回None
     """
-    try:
-        return json.loads(s)
-    except json.JSONDecodeError:
-        return None
+    fixer = JsonFixer(provider, model)
+    return fixer.fix(broken_json)

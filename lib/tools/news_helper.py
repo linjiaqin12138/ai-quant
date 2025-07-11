@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from textwrap import dedent
 from typing import List
 from lib.adapter.llm import get_agent, get_llm_tool
-from lib.model.news import NewsInfo
+from lib.tools.cache_decorator import use_cache
 from lib.tools.information_search import unified_search
 from lib.utils.news import (
     news_list_to_markdown,
@@ -46,12 +46,21 @@ ASHARE_SYSTEM_PROMPT_TEMPLATE = """
 
 search_tool = news_list_to_markdown(unified_search)
 
+def cache_key_generator(kwargs: dict, *args) -> str:
+    """
+    生成缓存键，只要from_time的年月日相同就命中缓存
+    """
+    from_time: datetime = kwargs["from_time"]
+    date_str = from_time.strftime("%Y-%m-%d")
+    return f"global_news_report:{date_str}"
+    
 @dataclass
 class NewsHelper:
     llm_provider: str = "paoluz"
     model: str = "gpt-4o-mini"
     temperature: float = 0.2
 
+    @use_cache(86400, use_db_cache=True, key_generator=cache_key_generator)
     def get_global_news_report(self, from_time: datetime, end_time: datetime = datetime.now()) -> str:
         """
         获取全球新闻和宏观经济信息

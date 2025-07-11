@@ -13,7 +13,8 @@ import traceback
 
 from jinja2 import Template
 from lib.adapter.llm import get_agent
-from lib.tools.information_search import unified_search, read_web_page
+from lib.tools.information_search import unified_search
+from lib.tools.web_page_reader import read_web_page
 from lib.tools.ashare_stock import (
     get_comprehensive_financial_data,
     get_shareholder_changes_data,
@@ -302,18 +303,6 @@ class FundamentalAnalyzer:
         self.provider = provider
         self.model = model
     
-    def get_stock_code_by_name(self, company_name: str) -> str:
-        """
-        根据公司名称获取股票代码
-        
-        Args:
-            company_name: 公司名称
-            
-        Returns:
-            股票代码，如果未找到返回空字符串
-        """
-        return self.stock_mapping.get(company_name, "")
-    
     def create_fundamental_agent(self, stock_info: dict, stock_code: str = ""):
         """
         创建基本面数据分析Agent
@@ -340,7 +329,7 @@ class FundamentalAnalyzer:
         share_holder_change_data = get_shareholder_changes_data(stock_code)
         agent.chat_context.append({
             "role": "user",
-            "content": f"财务数据（来源akshare）: {json.dumps(financial_data, indent=2, ensure_ascii=False)}\n"
+            "content": f"财务数据（来源akshare）: {json.dumps(financial_data, indent=2, ensure_ascii=False)}"
                        f"股东变动数据（来源akshare）: {json.dumps(share_holder_change_data, indent=2, ensure_ascii=False)}"
         })
         agent.register_tool(unified_search)
@@ -374,7 +363,7 @@ class FundamentalAnalyzer:
 
         如果搜索结果中有具体的分析文章链接，使用read_web_page工具读取详细内容
 
-        最后提供综合基本面分析报告，参考以下结构进行适当调整：
+        最后提供综合基本面分析报告，参考以下结构模板进行适当调整：
 
         ## {company_name}（{stock_code}）基本面分析报告
 
@@ -637,7 +626,6 @@ class FundamentalAnalyzer:
             logger.error(f"保存HTML报告失败: {str(e)}")
             return None
 
-    def save_analysis_report(self, analysis_result: Dict[str, Any], save_folder_path: Optional[str] = None) -> Optional[str]:
         """
         保存基本面分析报告到文件（HTML格式）
         
