@@ -3,7 +3,7 @@ from .baichuan import BaiChuan
 from .g4f import G4f
 from .paoluz import PaoluzAgent
 from .siliconflow import SiliconFlow
-from .interface import LlmAbstract, LlmParams, Agent
+from .interface import LlmAbstract, LlmParams
 
 
 def get_llm(provider: str, model: str, **params) -> LlmAbstract:
@@ -20,11 +20,6 @@ def get_llm(provider: str, model: str, **params) -> LlmAbstract:
         return SiliconFlow(model, **params)
 
     raise ValueError(f"Unsupported provider: {provider}")
-
-
-def get_agent(provider: str, model: str, **params) -> Agent:
-    llm = get_llm(provider, model, **params)
-    return Agent(llm)
 
 
 def get_llm_tool(
@@ -44,7 +39,6 @@ def get_llm_tool(
 
 __all__ = [
     "get_llm",
-    "get_agent",
     "get_llm_tool",
     "LlmParams",
     "LlmAbstract",

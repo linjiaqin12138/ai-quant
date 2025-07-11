@@ -2,7 +2,8 @@ import pytest
 import socket
 import threading
 import json
-from lib.adapter.llm import BaiChuan, Agent
+from lib.adapter.llm import BaiChuan
+from lib.modules.agent import Agent
 
 
 def mock_server(port):

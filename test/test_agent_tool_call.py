@@ -13,8 +13,9 @@ from typing import List, Dict, Any, Optional, Annotated
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from lib.adapter.llm.interface import Agent, LlmAbstract, extract_function_schema
-from lib.adapter.llm import get_agent  # 导入真实的Agent工厂函数
+from lib.modules.agent import Agent
+from lib.adapter.llm.interface import LlmAbstract, extract_function_schema
+from lib.modules import get_agent  # 导入真实的Agent工厂函数
 
 
 # 测试用的工具函数

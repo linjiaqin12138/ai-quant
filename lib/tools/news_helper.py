@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from textwrap import dedent
 from typing import List
-from lib.adapter.llm import get_agent, get_llm_tool
+from lib.modules import get_agent, get_llm_tool
 from lib.tools.cache_decorator import use_cache
 from lib.tools.information_search import unified_search
 from lib.utils.news import (

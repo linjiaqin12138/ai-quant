@@ -22,7 +22,7 @@ from lib.tools.market_master import (
     format_ohlcv_pattern
 )
 from lib.utils.indicators import calculate_indicators
-from lib.adapter.llm import get_agent
+from lib.modules import get_agent
 from lib.logger import logger
 
 # HTML报告模板

@@ -13,7 +13,7 @@ from typing import Dict, Any, Optional
 from textwrap import dedent
 from jinja2 import Template
 
-from lib.adapter.llm import get_agent
+from lib.modules import get_agent
 from lib.utils.news import render_news_in_markdown_group_by_platform
 from lib.tools.news_helper import NewsHelper
 from lib.tools.information_search import unified_search

@@ -12,7 +12,7 @@ from textwrap import dedent
 import traceback
 
 from jinja2 import Template
-from lib.adapter.llm import get_agent
+from lib.modules import get_agent
 from lib.tools.information_search import unified_search
 from lib.tools.web_page_reader import read_web_page
 from lib.tools.ashare_stock import (
@@ -404,7 +404,7 @@ class FundamentalAnalyzer:
         - 近期大股东增减持情况
         - 机构投资者进出动态
         - 股东变动对公司治理的影响
-        - 股东稳定性评估
+        - 股东变动的原因分析
 
         #### 3.3 公司治理评估
         - 股权结构的合理性

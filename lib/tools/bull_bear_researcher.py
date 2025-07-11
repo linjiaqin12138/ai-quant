@@ -11,7 +11,7 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 from jinja2 import Template
 
-from lib.adapter.llm import get_agent, get_llm_tool
+from lib.modules import get_agent, get_llm_tool
 from lib.logger import logger
 
 # HTML报告模板
