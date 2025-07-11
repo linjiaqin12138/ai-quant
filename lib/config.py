@@ -69,6 +69,11 @@ def get_http_proxy() -> str:
     return os.environ.get("PROXY")
 
 
+def get_pinecone_api_key() -> str:
+    """获取Pinecone API Key"""
+    return os.environ.get("PINECONE_API_KEY")
+
+
 API_MAX_RETRY_TIMES = int(os.environ.get("API_MAX_RETRY_TIMES") or 5)
 
 if __name__ == "__main__":
