@@ -247,3 +247,37 @@ def get_default_chromadb_config() -> Dict[str, Any]:
     }
     
     return config
+
+
+def create_default_vector_db(default_path: str = "./chroma_db") -> VectorDatabaseAbstract:
+    """
+    创建默认向量数据库实例
+    
+    优先尝试使用Pinecone，如果失败则回退到ChromaDB
+    
+    Args:
+        default_path: ChromaDB默认路径
+        
+    Returns:
+        VectorDatabaseAbstract: 向量数据库实例
+        
+    Raises:
+        Exception: 如果所有数据库都创建失败
+    """
+    try:
+        # 优先尝试使用Pinecone
+        pinecone_config = get_default_pinecone_config()
+        if pinecone_config.get("api_key"):
+            return create_pinecone_database(api_key=pinecone_config["api_key"])
+    except Exception:
+        # 忽略Pinecone创建失败的异常
+        pass
+    
+    # 回退到ChromaDB
+    try:
+        chromadb_config = get_default_chromadb_config()
+        return create_chromadb_database(
+            path=chromadb_config.get("path", default_path)
+        )
+    except Exception as e:
+        raise Exception(f"创建默认向量数据库失败: {e}")

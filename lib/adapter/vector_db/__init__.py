@@ -25,7 +25,8 @@ from .vector_database_factory import (
     create_pinecone_database,
     create_chromadb_database,
     get_default_pinecone_config,
-    get_default_chromadb_config
+    get_default_chromadb_config,
+    create_default_vector_db
 )
 
 __all__ = [
@@ -49,4 +50,5 @@ __all__ = [
     'create_chromadb_database',
     'get_default_pinecone_config',
     'get_default_chromadb_config',
+    'create_default_vector_db',
 ]

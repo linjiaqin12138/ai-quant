@@ -20,10 +20,6 @@ from lib.tools.cache_decorator import use_cache
 from lib.utils.decorators import with_retry
 from lib.utils.string import extract_json_string
 
-# 添加项目根目录到路径
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
-from lib.modules import get_agent
 from lib.adapter.llm import get_llm_direct_ask
 from lib.logger import logger
 
@@ -86,6 +82,9 @@ def read_web_page(url: str) -> str:
     
     # 发送请求到Jina API
     response = requests.get(jina_url, headers=headers, proxies=proxies, timeout=600)
+    if response.status_code == 451:
+        raise Exception("根据法律要求，无法爬取该网页内容")
+
     response.raise_for_status()
     
     # 返回网页内容

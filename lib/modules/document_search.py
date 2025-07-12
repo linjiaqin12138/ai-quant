@@ -23,7 +23,8 @@ from lib.adapter.vector_db import (
     create_pinecone_database,
     create_chromadb_database,
     get_default_pinecone_config,
-    get_default_chromadb_config
+    get_default_chromadb_config,
+    create_default_vector_db
 )
 from lib.adapter.embedding import (
     EmbeddingAbstract,
@@ -136,42 +137,19 @@ class DocumentSearch:
         self.embedding_dimension = embedding_dimension
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
-        
+        self.vector_db = vector_db
+        self.embedding_service = embedding_service
         # 初始化向量数据库
-        if vector_db is None:
-            self.vector_db = self._create_default_vector_db()
-        else:
-            self.vector_db = vector_db
-            
+        if self.vector_db is None:
+            self.vector_db = create_default_vector_db(default_path="./chromadb")
+   
         # 初始化嵌入服务
-        if embedding_service is None:
+        if self.embedding_service is None:
             self.embedding_service = PaoluzEmbedding()
-        else:
-            self.embedding_service = embedding_service
             
         # 自动创建索引
         if auto_create_index:
             self._ensure_index_exists()
-    
-    def _create_default_vector_db(self) -> VectorDatabaseAbstract:
-        """创建默认向量数据库实例"""
-        try:
-            # 优先尝试使用Pinecone
-            pinecone_config = get_default_pinecone_config()
-            if pinecone_config.get("api_key"):
-                logger.info("使用Pinecone作为向量数据库")
-                return create_pinecone_database(api_key=pinecone_config["api_key"])
-        except Exception as e:
-            logger.warning(f"创建Pinecone数据库失败: {e}")
-        
-        # 回退到ChromaDB
-        try:
-            chromadb_config = get_default_chromadb_config()
-            logger.info("使用ChromaDB作为向量数据库")
-            return create_chromadb_database(path=chromadb_config.get("path", "./chromadb"))
-        except Exception as e:
-            logger.error(f"创建ChromaDB数据库失败: {e}")
-            raise
     
     def _ensure_index_exists(self) -> None:
         """确保索引存在"""

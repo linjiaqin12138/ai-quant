@@ -14,7 +14,7 @@ from lib.utils.string import hash_str
 from lib.utils.decorators import with_retry
 from lib.logger import logger
 
-def duckduckgo_search(query: str, max_results: int = 10, region: str = "us-en", time_limit: str = "w") -> List[NewsInfo]:
+def duckduckgo_search(query: str, max_results: int = 10, region: str = "us-en", time_limit: str = None) -> List[NewsInfo]:
     """
     使用DuckDuckGo搜索新闻信息
     
@@ -77,7 +77,7 @@ def duckduckgo_search(query: str, max_results: int = 10, region: str = "us-en", 
         
         return news_infos
 
-def google_search(query: str, max_results: int = 10, region: str = "us-en", time_limit: str = "w") -> List[NewsInfo]:
+def google_search(query: str, max_results: int = 10, region: str = "us-en", time_limit: str =  None) -> List[NewsInfo]:
     """
     使用Google Custom Search API搜索新闻信息
     
@@ -136,7 +136,7 @@ def google_search(query: str, max_results: int = 10, region: str = "us-en", time
         'm': 'm1',      # 一个月
         'y': 'y1'       # 一年
     }
-    date_restrict = time_limit_map.get(time_limit, 'w1')
+    date_restrict = time_limit_map.get(time_limit, 'w1') if time_limit else None
     
     # 根据region设置搜索语言和地区
     search_params = {
@@ -196,7 +196,7 @@ def google_search(query: str, max_results: int = 10, region: str = "us-en", time
     retry_errors=(ConnectionError, TimeoutError, OSError, HttpError, RatelimitException),
     max_retry_times=3
 )
-def unified_search(query: str, max_results: int = 10, region: str = "zh-cn", time_limit: str = "w") -> List[NewsInfo]:
+def unified_search(query: str, max_results: int = 10, region: str = "zh-cn", time_limit: str = None) -> List[NewsInfo]:
     """
     统一搜索函数，优先使用Google搜索，失败时使用DuckDuckGo搜索
     

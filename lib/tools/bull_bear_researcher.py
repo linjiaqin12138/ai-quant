@@ -5,14 +5,17 @@ Bull Bear Researcher Agent
 """
 
 import os
+import re
 from textwrap import dedent
 import traceback
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Annotated
 from datetime import datetime
 from jinja2 import Template
 
 from lib.adapter.llm import get_llm_direct_ask
 from lib.modules import get_agent
+from lib.tools.information_search import unified_search
+from lib.tools.web_page_reader import WebPageReader, read_web_page
 from lib.logger import logger
 
 # HTML报告模板
@@ -219,6 +222,18 @@ HTML_TEMPLATE = """
             border-top: 1px solid #ecf0f1;
             padding-top: 20px;
         }
+        .early-end-notice {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            color: #856404;
+        }
+        .early-end-notice h3 {
+            color: #856404;
+            margin-top: 0;
+        }
     </style>
 </head>
 <body>
@@ -227,11 +242,22 @@ HTML_TEMPLATE = """
         
         <div class="info-box">
             <strong>分析标的:</strong> {{ symbol }}<br>
-            <strong>辩论轮数:</strong> {{ rounds }}<br>
+            <strong>计划轮数:</strong> {{ planned_rounds }}<br>
+            <strong>实际轮数:</strong> {{ actual_rounds }}<br>
             <strong>LLM提供商:</strong> {{ provider }}<br>
             <strong>使用模型:</strong> {{ model }}<br>
             <strong>分析时间:</strong> {{ analysis_time }}<br>
+            {% if early_end %}
+            <strong>提前结束:</strong> 是 - {{ early_end_reason }}<br>
+            {% endif %}
         </div>
+        
+        {% if early_end %}
+        <div class="early-end-notice">
+            <h3>⚠️ 辩论提前结束</h3>
+            <p>{{ early_end_reason }}</p>
+        </div>
+        {% endif %}
         
         {% if market_research_report or sentiment_report or news_report or fundamentals_report %}
         <h2>📊 输入报告数据</h2>
@@ -282,8 +308,8 @@ HTML_TEMPLATE = """
         
         <div class="summary-stats">
             <div class="stat-card">
-                <div class="stat-number">{{ rounds }}</div>
-                <div class="stat-label">辩论轮数</div>
+                <div class="stat-number">{{ actual_rounds }}</div>
+                <div class="stat-label">实际轮数</div>
             </div>
             <div class="stat-card">
                 <div class="stat-number">{{ total_exchanges }}</div>
@@ -370,18 +396,38 @@ HTML_TEMPLATE = """
 </body>
 </html>
 """
+
 BULL_SYS_PROMPT = dedent(
     """
-        你是一位专业的多头分析师，支持投资该股票。你的任务是构建强有力的、基于证据的论据，强调增长潜力、竞争优势和积极的市场指标。利用提供的研究和数据来解决担忧并有效反驳空头论点。
+        你是一位专业的多头分析师，支持投资该标的。你的任务是构建强有力的、基于证据的论据，强调增长潜力、竞争优势和积极的市场指标。
 
-        重点关注的要点：
-        - 增长潜力：突出公司的市场机会、收入预测和可扩展性。
-        - 竞争优势：强调独特产品、强品牌或主导市场地位等因素。
-        - 积极指标：使用财务健康、行业趋势和最近的积极新闻作为证据。
-        - 反驳空头观点：用具体数据和合理推理批判性分析空头论点，彻底解决担忧，并说明为什么多头观点具有更强的价值。
-        - 参与：以对话风格呈现你的论点，直接回应空头分析师的观点并进行有效辩论，而不是仅仅列出数据。
+        **重要说明：**
+        1. 系统提示词中给出的参考信息完全可信，不需要验证
+        2. 除了系统提示词中的参考信息外，所有论点都必须通过工具搜索获取具体出处：
+            - 每个论点必须先使用`unified_search`搜索相关新闻报道或分析报告
+            - 使用`read_web_page`深入阅读搜索结果中的具体链接，获取详细信息
+            - 引用时必须使用具体的新闻/报告URL，不能仅引用公司官网或平台首页
+            - 即便你已经知道某个信息，也必须通过工具搜索找到对应的具体出处
+        3. 在构建论点时：
+            - 每个论点都必须有对应的具体新闻/报告URL支持
+            - 如果搜索不到具体出处，就不要使用这个论点
+            - 不要捏造或篡改任何数据和事实
+        4. 当你的工具搜索结果找不到有力的反驳证据，且对方论点确实合理时，请输出：
+            <DEBATE_CONCEDE>我承认对方的观点更有说服力</DEBATE_CONCEDE>
+
+        **可用工具：**
+        - `unified_search`: 搜索相关信息来支持你的论点
+        - `read_web_page`: 深入阅读网页内容获取详细信息
+
+        **重点关注的要点：**
+        - 增长潜力：突出市场机会、收入预测和可扩展性
+        - 竞争优势：强调独特产品、强品牌或主导市场地位等因素
+        - 积极指标：使用财务健康、行业趋势和最近的积极新闻作为证据
+        - 反驳空头观点：用具体数据和合理推理批判性分析空头论点，彻底解决担忧，并说明为什么多头观点具有更强的价值
+        - 参与：以对话风格呈现你的论点，直接回应空头分析师的观点并进行有效辩论，而不是仅仅列出数据
 
         请提供令人信服的多头论点，反驳空头的担忧，并参与动态辩论，展示多头立场的优势。你还必须处理反思并从过去的经验教训和错误中学习。
+        
         参考信息：
         {context}
     """
@@ -389,16 +435,35 @@ BULL_SYS_PROMPT = dedent(
 
 BEAR_SYS_PROMPT = dedent(
     """
-        你是一位专业的空头分析师，反对投资该股票。你的目标是提出充分理由的论点，强调风险、挑战和负面指标。利用提供的研究和数据来突出潜在的不利因素并有效反驳多头论点。
+        你是一位专业的空头分析师，反对投资该标的。你的目标是提出充分理由的论点，强调风险、挑战和负面指标。
 
-        重点关注的要点：
-        - 风险和挑战：突出市场饱和、财务不稳定或可能阻碍股票表现的宏观经济威胁等因素。
-        - 竞争劣势：强调市场地位较弱、创新下降或来自竞争对手的威胁等脆弱性。
-        - 负面指标：使用财务数据、市场趋势或最近不利新闻的证据来支持你的立场。
-        - 反驳多头观点：用具体数据和合理推理批判性分析多头论点，暴露弱点或过度乐观的假设。
-        - 参与：以对话风格呈现你的论点，直接回应多头分析师的观点并进行有效辩论，而不是简单地列出事实。
+        **重要说明：**
+        1. 系统提示词中给出的参考信息完全可信，不需要验证
+        2. 除了系统提示词中的参考信息外，所有论点都必须通过工具搜索获取具体出处：
+            - 每个论点必须先使用`unified_search`搜索相关新闻报道或分析报告
+            - 使用`read_web_page`深入阅读搜索结果中的具体链接，获取详细信息
+            - 引用时必须使用具体的新闻/报告URL，不能仅引用公司官网或平台首页
+            - 即便你已经知道某个信息，也必须通过工具搜索找到对应的具体出处
+        3. 在构建论点时：
+            - 每个论点都必须有对应的具体新闻/报告URL支持
+            - 如果搜索不到具体出处，就不要使用这个论点
+            - 不要捏造或篡改任何数据和事实
+        4. 当你的工具搜索结果找不到有力的反驳证据，且对方论点确实合理时，请输出：
+            <DEBATE_CONCEDE>我承认对方的观点更有说服力</DEBATE_CONCEDE>
 
-        请提供令人信服的空头论点，反驳多头的主张，并参与动态辩论，展示投资该股票的风险和弱点。你还必须处理反思并从过去的经验教训和错误中学习。
+        **可用工具：**
+        - `unified_search`: 搜索相关信息来支持你的论点
+        - `read_web_page`: 深入阅读网页内容获取详细信息
+
+        **重点关注的要点：**
+        - 风险和挑战：突出市场饱和、财务不稳定或可能阻碍表现的宏观经济威胁等因素
+        - 竞争劣势：强调市场地位较弱、创新下降或来自竞争对手的威胁等脆弱性
+        - 负面指标：使用财务数据、市场趋势或最近不利新闻的证据来支持你的立场
+        - 反驳多头观点：用具体数据和合理推理批判性分析多头论点，暴露弱点或过度乐观的假设
+        - 参与：以对话风格呈现你的论点，直接回应多头分析师的观点并进行有效辩论，而不是简单地列出事实
+
+        请提供令人信服的空头论点，反驳多头的主张，并参与动态辩论，展示投资该标的的风险和弱点。你还必须处理反思并从过去的经验教训和错误中学习。
+        
         参考信息：
         {context}
     """
@@ -406,9 +471,9 @@ BEAR_SYS_PROMPT = dedent(
 
 SUMMARY_SYS_PROMPT = dedent(
     """
-        作为投资组合经理和辩论主持人，你的角色是对本轮辩论进行批判性评估，并做出明确的决定：支持空头分析师、支持多头分析师，或仅在有充分理由的情况下选择“持有”。
+        作为投资组合经理和辩论主持人，你的角色是对本轮辩论进行批判性评估，并做出明确的决定：支持空头分析师、支持多头分析师，或仅在有充分理由的情况下选择"持有"。
 
-        请简明扼要地总结双方的关键观点，重点突出最有说服力的证据或推理。你的推荐——买入、卖出或持有——必须明确且可执行。避免仅因双方观点都有道理就默认选择“持有”；你需要基于辩论中最有力的论据做出立场。
+        请简明扼要地总结双方的关键观点，重点突出最有说服力的证据或推理。你的推荐——买入、卖出或持有——必须明确且可执行。避免仅因双方观点都有道理就默认选择"持有"；你需要基于辩论中最有力的论据做出立场。
 
         此外，请为交易员制定详细的投资计划，包括：
 
@@ -419,10 +484,44 @@ SUMMARY_SYS_PROMPT = dedent(
     """
 )
 
+def _search_information(query: str, max_results: int = 10) -> str:
+    """
+    搜索相关信息的工具函数
+    
+    Args:
+        query: 搜索关键词
+        max_results: 最大结果数量
+    
+    Returns:
+        搜索结果的文本描述
+    """
+    try:
+        news_list = unified_search(query, max_results=max_results)
+        if not news_list:
+            return f"未找到关于'{query}'的相关信息"
+        
+        result = f"关于'{query}'的搜索结果：\n\n"
+        for i, news in enumerate(news_list, 1):
+            result += f"{i}. **{news.title}**\n"
+            result += f"   来源: {news.platform}\n"
+            result += f"   链接: {news.url}\n"
+            result += f"   描述: {news.description}\n"
+            result += f"   时间: {news.timestamp.strftime('%Y-%m-%d %H:%M')}\n\n"
+        
+        return result
+    except Exception as e:
+        return f"搜索失败: {str(e)}"
+
 class BullBearResearcher:
     """牛熊辩论研究员"""
     
-    def __init__(self, provider: str = "paoluz", model: str = "deepseek-v3", rounds: int = 3):
+    def __init__(
+            self,
+            provider: str = "paoluz", 
+            model: str = "deepseek-v3", 
+            rounds: int = 1,
+            web_page_reader: Optional[WebPageReader] = None
+        ):
         """
         初始化牛熊辩论研究员
         
@@ -430,6 +529,7 @@ class BullBearResearcher:
             provider: LLM提供商
             model: 使用的模型
             rounds: 辩论轮数 (1-5)
+            web_page_reader: 可选的网页阅读器
         """
         self.provider = provider
         self.model = model
@@ -438,9 +538,9 @@ class BullBearResearcher:
         # 创建两个Agent
         self.bull_agent = get_agent(provider, model, temperature=0.7)
         self.bear_agent = get_agent(provider, model, temperature=0.7)
-        
-        
-        
+        self.web_page_reader = web_page_reader or WebPageReader(provider=provider, model=model)
+        # 为两个Agent注册工具
+
         # 存储报告数据
         self.market_research_report = ""
         self.sentiment_report = ""
@@ -453,6 +553,10 @@ class BullBearResearcher:
 
         # 设置系统提示
         self._set_system_prompts()
+        self.bull_agent.register_tool(_search_information)
+        self.bull_agent.register_tool(self._read_web_page)
+        self.bear_agent.register_tool(_search_information)
+        self.bear_agent.register_tool(self._read_web_page)
     
     def _set_system_prompts(self):
         """设置牛熊双方的系统提示"""
@@ -461,6 +565,25 @@ class BullBearResearcher:
         bear_prompt = BEAR_SYS_PROMPT.format(context=context)
         self.bull_agent.set_system_prompt(bull_prompt)
         self.bear_agent.set_system_prompt(bear_prompt)
+
+    def _read_web_page(self, url: str) -> str:
+        """
+        读取网页内容
+        
+        Args:
+            url: 网页链接
+            
+        Returns:
+            网页内容
+        """
+        logger.info(f"读取 {url}")
+        try:
+            content = self.web_page_reader.read_and_extract(url, "提取正文内容")
+            if not content:
+                return f"无法读取网页内容: {url}"
+            return content
+        except Exception as e:
+            return f"读取网页失败: {str(e)}"
     
     def add_market_research_report(self, report: str):
         """添加市场研究报告"""
@@ -514,6 +637,10 @@ class BullBearResearcher:
             "role": role,
             "content": content
         })
+    
+    def _check_debate_concede(self, content: str) -> bool:
+        """检查是否有认输标识"""
+        return bool(re.search(r'<DEBATE_CONCEDE>.*?</DEBATE_CONCEDE>', content, re.IGNORECASE | re.DOTALL))
 
     def start_debate(self, symbol: str) -> Dict[str, Any]:
         """
@@ -529,7 +656,10 @@ class BullBearResearcher:
         
         result = {
             "symbol": symbol,
-            "rounds": self.rounds,
+            "planned_rounds": self.rounds,
+            "actual_rounds": 0,
+            "early_end": False,
+            "early_end_reason": "",
             "summary": "",
             "success": False,
             "error_message": ""
@@ -545,26 +675,85 @@ class BullBearResearcher:
             logger.info(f"第{round_num}轮辩论开始...")
 
             logger.info(f"🐂 多头分析中...")
-            bull_response = self.bull_agent.ask(f"请开始发表你的观点")
+            bull_response = self.bull_agent.ask(f"请开始发表你的观点，分析{symbol}的投资价值", tool_use=True)
             self._add_history(round_num, "多头", bull_response)
+            
+            # 检查多头是否认输
+            if self._check_debate_concede(bull_response):
+                result.update({
+                    "actual_rounds": round_num,
+                    "early_end": True,
+                    "early_end_reason": "多头分析师在第1轮认输"
+                })
+                logger.info(f"🏁 辩论提前结束：多头分析师认输")
+                # 直接生成总结
+                summary = self._generate_summary()
+                result.update({
+                    "summary": summary,
+                    "debate_history": self.debate_history,
+                    "success": True
+                })
+                return result
 
             logger.info(f"🐻 空头分析中...")
-            bear_response = self.bear_agent.ask(f"请基于多头的观点进行反驳：{bull_response}")
+            bear_response = self.bear_agent.ask(f"请基于多头的观点进行反驳，分析{symbol}的投资风险：{bull_response}", tool_use=True)
             self._add_history(round_num, "空头", bear_response)
+            
+            # 检查空头是否认输
+            if self._check_debate_concede(bear_response):
+                result.update({
+                    "actual_rounds": round_num,
+                    "early_end": True,
+                    "early_end_reason": "空头分析师在第1轮认输"
+                })
+                logger.info(f"🏁 辩论提前结束：空头分析师认输")
+                # 直接生成总结
+                summary = self._generate_summary()
+                result.update({
+                    "summary": summary,
+                    "debate_history": self.debate_history,
+                    "success": True
+                })
+                return result
+            
             round_num += 1
 
             while round_num <= self.rounds:
                 logger.info(f"第{round_num}轮辩论开始...")
 
                 logger.info(f"🐂 多头分析中...")
-                bull_response = self.bull_agent.ask(f"请基于空头的观点进行反驳：{bear_response}")
+                bull_response = self.bull_agent.ask(f"请基于空头的观点进行反驳：{bear_response}", tool_use=True)
                 self._add_history(round_num, "多头", bull_response)
+                
+                # 检查多头是否认输
+                if self._check_debate_concede(bull_response):
+                    result.update({
+                        "actual_rounds": round_num,
+                        "early_end": True,
+                        "early_end_reason": f"多头分析师在第{round_num}轮认输"
+                    })
+                    logger.info(f"🏁 辩论提前结束：多头分析师认输")
+                    break
 
                 logger.info(f"🐻 空头分析中...")
-                bear_response = self.bear_agent.ask(f"请基于多头的观点进行反驳：{bull_response}")
+                bear_response = self.bear_agent.ask(f"请基于多头的观点进行反驳：{bull_response}", tool_use=True)
                 self._add_history(round_num, "空头", bear_response)
                 
+                # 检查空头是否认输
+                if self._check_debate_concede(bear_response):
+                    result.update({
+                        "actual_rounds": round_num,
+                        "early_end": True,
+                        "early_end_reason": f"空头分析师在第{round_num}轮认输"
+                    })
+                    logger.info(f"🏁 辩论提前结束：空头分析师认输")
+                    break
+                
                 round_num += 1
+            
+            # 如果没有提前结束，设置实际轮数
+            if not result["early_end"]:
+                result["actual_rounds"] = self.rounds
             
             # 生成总结
             logger.info("📋 生成辩论总结...")
@@ -643,7 +832,10 @@ class BullBearResearcher:
         # 渲染HTML内容
         html_content = Template(HTML_TEMPLATE).render(
             symbol=analysis_result["symbol"],
-            rounds=analysis_result["rounds"],
+            planned_rounds=analysis_result["planned_rounds"],
+            actual_rounds=analysis_result["actual_rounds"],
+            early_end=analysis_result["early_end"],
+            early_end_reason=analysis_result["early_end_reason"],
             provider=self.provider,
             model=self.model,
             analysis_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
