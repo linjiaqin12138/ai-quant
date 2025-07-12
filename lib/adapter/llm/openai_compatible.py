@@ -1,12 +1,13 @@
 import json
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Literal, Optional
 
 import requests
 
 from lib.config import API_MAX_RETRY_TIMES
 from lib.logger import logger
 from lib.utils.decorators import with_retry
-from lib.utils.object import remove_none
+from lib.utils.object import pretty_output, remove_none
+from .interface import ChatResponse, debug_req, debug_rsp
 
 
 class OpenAiRetryableError(Exception): ...
@@ -28,8 +29,12 @@ class OpenAiApiMixin:
         }
 
     def _build_req_body(
-        self, context: List, tools: Optional[List[Dict[str, Any]]]= None, response_format: Optional[str] = None
-    ) -> str:
+        self, 
+        context: List, 
+        tools: Optional[List[Dict[str, Any]]]= None,
+        tool_choice: Optional[Literal['auto', 'required', 'none']] = None,
+        response_format: Optional[Literal['json_object']] = None
+    ) -> dict:
         result = remove_none(
             {
                 "model": self.model,
@@ -46,11 +51,11 @@ class OpenAiApiMixin:
         # 添加工具定义
         if tools:
             result["tools"] = tools
-            result["tool_choice"] = "auto"
+            result["tool_choice"] = tool_choice or "auto"
 
         if (response_format) and self._is_support_json_rsp():
             result["response_format"] = {"type": response_format}
-        return json.dumps(result, ensure_ascii=False)
+        return result
 
     @with_retry(
         (
@@ -61,26 +66,37 @@ class OpenAiApiMixin:
         ),
         API_MAX_RETRY_TIMES,
     )
-    def ask(self, context: List, response_format: Optional[str] = None) -> str:
-        json_body_str = self._build_req_body(context, response_format=response_format)
+    def chat(
+        self, 
+        messages: List[Dict[str, Any]], 
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Literal['auto', 'required', 'none']] = None,
+        response_format: Optional[Literal['json_object']] = None
+    ) -> ChatResponse:
+        """统一的聊天接口实现"""
+        json_body = self._build_req_body(messages, tools, tool_choice, response_format)
         headers = self._build_req_header()
-
-        logger.debug(f"{self.model} calling data: {json_body_str}")
-        logger.info(f"{self.model} calling with body size: {len(json_body_str)} Byte")
+        path = "/v1/chat/completions"
+        debug_req('POST', self.endpoint, path, headers, json_body)
         response = requests.post(
-            f"{self.endpoint}/v1/chat/completions",
-            data=json_body_str,
+            f"{self.endpoint}{path}",
+            json=json_body,
             headers=headers,
             stream=False,
         )
         logger.info(f"{self.model} calling statusCode: {response.status_code}")
-        logger.debug(f"{self.model} response header {response.headers}")
-        logger.debug(f"{self.model} response body {response.text}")
-
+        debug_rsp(response)
         if response.status_code == 200:
             rsp_body = response.json()
-            rsp_message = rsp_body["choices"][0]["message"]["content"]
-            return rsp_message
+            message = rsp_body["choices"][0]["message"]
+
+            result: ChatResponse = {"content": message.get("content", ""), "tool_calls": None}
+
+            # 检查是否有工具调用
+            if "tool_calls" in message and message["tool_calls"]:
+                result["tool_calls"] = message["tool_calls"]
+
+            return result
 
         if (
             response.status_code >= 400
@@ -93,15 +109,12 @@ class OpenAiApiMixin:
 
         raise OpenAiRetryableError(f"{self.model} failed with error: {response.text}")
 
-    @with_retry(
-        (
-            OpenAiRetryableError,
-            requests.exceptions.ConnectionError,
-            requests.exceptions.Timeout,
-            requests.exceptions.ProxyError,
-        ),
-        API_MAX_RETRY_TIMES,
-    )
+    def ask(self, context: List, response_format: Optional[str] = None) -> str:
+        """向后兼容的ask方法，已过时，请使用chat方法"""
+        logger.warning("ask method is deprecated, please use chat method instead")
+        response = self.chat(context, tools=None, response_format=response_format)
+        return response.get("content", "")
+
     def ask_with_tools(
         self, context: List, available_tools: Optional[List[str]] = None, response_format: Optional[str] = None
     ) -> Dict[str, Any]:
@@ -113,7 +126,7 @@ class OpenAiApiMixin:
             else None
         )
 
-        json_body_str = self._build_req_body(context, tools, response_format)
+        json_body_str = json.dumps(self._build_req_body(context, tools, response_format))
         headers = self._build_req_header()
         logger.info(
             f"{self.model} calling with tools body size: {len(json_body_str)} Byte"

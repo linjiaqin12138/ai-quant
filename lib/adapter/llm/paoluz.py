@@ -1,29 +1,27 @@
-from typing import List, Any, Optional, Dict
+import json
+from typing import List, Any, Literal, Optional, Dict
 import requests
 
 from lib.logger import logger
 from lib.config import API_MAX_RETRY_TIMES, get_paoluz_token
 from lib.utils.decorators import with_retry
-from .interface import LlmAbstract
+from lib.utils.object import pretty_output
+from .interface import LlmAbstract, ChatResponse, debug_req, debug_rsp
 from .openai_compatible import OpenAiApiMixin, OpenAiRetryableError
 
-
-def api_query(method: str, endpoint: str, path: str, token: str, data: str = None):
+def api_query(method: str, endpoint: str, path: str, token: str, data: dict = None):
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {token}"}
-    logger.debug(
-        f"Paoluz API calling endpoint {endpoint}{path} data: {data}, headers: {headers}"
-    )
+    debug_req(method, endpoint, path, headers, data)
     if data:
-        logger.info(f"Paoluz API calling with body size: {len(data)} Byte")
+        logger.info(f"Paoluz API calling with body size: {len(json.dumps(data))} Byte")
     if method == "post":
         response = requests.post(
-            f"{endpoint}{path}", data=data, headers=headers, stream=False
+            f"{endpoint}{path}", json=data, headers=headers, stream=False
         )
     else:
         response = requests.get(f"{endpoint}{path}", headers=headers)
-    logger.info(f"Paoluz API calling statusCode: {response.status_code}")
-    logger.debug(f"Paoluz API response header {response.headers}")
-    logger.debug(f"Paoluz API response body {response.text}")
+    logger.info(f"Paoluz API calling status code: {response.status_code}")
+    debug_rsp(response)
     return response
 
 
@@ -42,7 +40,7 @@ def query_with_endpoint_retry(
     method: str,
     path: str,
     token: str,
-    data: str = None,
+    data: dict = None,
 ) -> requests.Response:
     rsp = api_query(method, default_endpoint, path, token, data)
     if rsp.status_code != 200:
@@ -50,17 +48,13 @@ def query_with_endpoint_retry(
             logger.warning(
                 f"Paoluz API calling failed with statusCode: {rsp.status_code} with endpoint {default_endpoint}, retry another endpoint"
             )
-            logger.debug(rsp.text)
             rsp = api_query(method, backup_endpoint, path, token, data)
             if rsp.status_code == 429:
-                raise OpenAiRetryableError(
-                    f"Paoluz API calling failed with statusCode: {rsp.status_code}, message {rsp.text}"
-                )
+                raise OpenAiRetryableError("Paoluz response error:" + rsp.text[:200])
             assert rsp.status_code == 200
         else:
-            raise Exception(
-                f"Paoluz API calling failed with statusCode: {rsp.status_code}, response body: {rsp.text}"
-            )
+            logger.error(f"Paoluz API calling failed with statusCode: {rsp.status_code} with endpoint {default_endpoint}")
+            raise Exception("Paoluz response error:" + rsp.text[:200])
     return rsp
 
 
@@ -92,8 +86,15 @@ class PaoluzAgent(OpenAiApiMixin, LlmAbstract):
         )
         return rsp.json().get("data")
 
-    def ask(self, context: List, response_format: Optional[str] = None) -> str:
-        json_data = self._build_req_body(context, response_format=response_format)
+    def chat(
+        self, 
+        messages: List[Dict[str, Any]], 
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Literal['auto', 'required', 'none']] = None,
+        response_format: Optional[Literal['json_object']] = None
+    ) -> ChatResponse:
+        """统一的聊天接口实现"""
+        json_data = self._build_req_body(messages, tools, tool_choice, response_format)
         rsp = query_with_endpoint_retry(
             self.default_endpoint,
             self.backup_endpoint,
@@ -102,43 +103,16 @@ class PaoluzAgent(OpenAiApiMixin, LlmAbstract):
             self.api_key,
             json_data,
         )
-        return rsp.json()["choices"][0]["message"]["content"]
-
-    def ask_with_tools(
-        self, context: List, available_tools: Optional[List[str]] = None, response_format: Optional[str] = None, 
-    ) -> Dict[str, Any]:
-        """支持工具调用的请求方法，使用Paoluz特有的端点重试机制"""
-
-        # 获取可用工具
-        tools = (
-            self.get_available_tools(available_tools)
-            if hasattr(self, "get_available_tools")
-            else None
-        )
-
-        json_body_str = self._build_req_body(context, tools, response_format)
-
-        logger.info(
-            f"{self.model} calling with tools body size: {len(json_body_str)} Byte"
-        )
-
-        # 使用Paoluz特有的端点重试机制
-        rsp = query_with_endpoint_retry(
-            self.default_endpoint,
-            self.backup_endpoint,
-            "post",
-            "/v1/chat/completions",
-            self.api_key,
-            json_body_str,
-        )
-
+        
         rsp_body = rsp.json()
         message = rsp_body["choices"][0]["message"]
 
-        result = {"content": message.get("content", "")}
+        result: ChatResponse = {"content": message.get("content", ""), "tool_calls": None}
 
         # 检查是否有工具调用
         if "tool_calls" in message and message["tool_calls"]:
             result["tool_calls"] = message["tool_calls"]
 
         return result
+
+    # ...existing deprecated methods...

@@ -43,7 +43,7 @@ __all__ = [
     "LlmParams",
     "LlmAbstract",
     "BaiChuan",
-    "Paoluz",
+    "PaoluzAgent",
     "G4f",
     "SiliconFlow",
 ]

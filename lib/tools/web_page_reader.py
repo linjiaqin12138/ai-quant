@@ -23,7 +23,8 @@ from lib.utils.string import extract_json_string
 # 添加项目根目录到路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from lib.modules import get_agent, get_llm_tool
+from lib.modules import get_agent
+from lib.adapter.llm import get_llm_tool
 from lib.logger import logger
 
 SYS_PROMPT = """你是一个专业的网页内容分析师，擅长从网页内容中提取用户需要的特定信息。

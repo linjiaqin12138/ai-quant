@@ -527,4 +527,4 @@ class DocumentSearch:
 
 
 # 创建默认实例
-document_search = DocumentSearch()
+# document_search = DocumentSearch()

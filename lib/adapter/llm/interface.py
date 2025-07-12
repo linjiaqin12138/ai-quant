@@ -1,8 +1,8 @@
 import abc
 import inspect
 import json
-import traceback
 from typing import (
+    Literal,
     TypedDict,
     Optional,
     List,
@@ -14,6 +14,10 @@ from typing import (
     get_origin,
     get_args,
 )
+
+import requests
+
+from lib.utils.object import pretty_output
 
 # 兼容不同Python版本的Annotated导入
 try:
@@ -33,17 +37,39 @@ LlmParams = TypedDict(
         "max_token": Optional[int],
         "api_key": Optional[str],
         "endpoint": Optional[str],
-        "tools": Optional[List[Dict[str, Any]]],  # 新增工具定义
     },
 )
 
-# 新增工具调用相关的类型定义
+# 工具调用相关的类型定义
 ToolCall = TypedDict("ToolCall", {"id": str, "type": str, "function": Dict[str, Any]})
-
+ToolCallFunctionDef = TypedDict(
+    "ToolCallFunctionDef",
+    {
+        "name": str,
+        "description": str,
+        "parameters": Dict[str, Any], # JSON Schema Object
+        'strict': bool
+    },
+)
+ToolCallReq = TypedDict(
+    "ToolCallReq",
+    {
+        "type": Literal['function'],
+        "function": ToolCallFunctionDef,
+    },
+)
 ToolResponse = TypedDict(
     "ToolResponse", {"tool_call_id": str, "role": str, "content": str}
 )
 
+# 聊天响应类型定义
+ChatResponse = TypedDict(
+    "ChatResponse", 
+    {
+        "content": Optional[str],
+        "tool_calls": Optional[List[ToolCall]],
+    }
+)
 
 def extract_function_schema(func: Callable) -> Dict[str, Any]:
     """从函数签名和文档字符串中提取工具参数schema"""
@@ -124,7 +150,7 @@ def extract_function_schema(func: Callable) -> Dict[str, Any]:
             "type": "object",
             "properties": properties,
             "required": required,
-        },
+        }
     }
 
 
@@ -157,82 +183,72 @@ def _type_to_json_schema(python_type) -> Dict[str, Any]:
     else:
         return {"type": "string"}  # 默认为字符串类型
 
+def debug_req(method: str, endpoint: str, path: str, headers: dict, body_json: dict):
+    """Debug request content for logging."""
+    logger.debug(f"Request URL: {method.upper()} {endpoint}{path}")
+    logger.debug(f"Request Header: {pretty_output(headers)}")
+    logger.debug(f"Request JSON: {pretty_output(body_json)}")
+
+
+def debug_rsp(rsp: requests.Response):
+    """Debug response content for logging."""
+    # logger.debug(f"Response Status Code: {rsp.status_code}")
+    logger.debug(f"Response Header: {pretty_output(dict(rsp.headers))}")
+    try:
+        logger.debug(f"Response JSON: {pretty_output(rsp.json())}")
+    except requests.exceptions.JSONDecodeError:
+        logger.debug(f"Response Text: {rsp.text}")
 
 class LlmAbstract(abc.ABC):
+    """LLM抽象基类，专注于不同provider的聊天接口适配"""
+    
     def __init__(self, model: str, **system_params):
         self.model = model
         self.params: LlmParams = system_params
-        self.tools: Dict[str, Callable] = {}  # 存储工具函数
 
     @abc.abstractmethod
+    def chat(
+        self, 
+        messages: List[Dict[str, Any]], 
+        tools: Optional[List[ToolCallReq]] = None,
+        tool_choice: Literal['auto', 'required', 'none'] = None,
+        response_format: Optional[Literal['json_object']] = None
+    ) -> ChatResponse:
+        """统一的聊天接口
+        
+        Args:
+            messages: 消息列表
+            tools: 工具定义列表，None表示不使用工具
+            tool_choice: 工具选择策略，'auto'表示自动选择工具
+            response_format: 响应格式，如'json_object'
+            
+        Returns:
+            ChatResponse: 包含content和tool_calls的响应
+        """
+        raise NotImplementedError("chat method must be implemented")
+
+    # 为了向后兼容，保留原有方法但标记为过时
     def ask(self, context: List, response_format: Optional[str] = None) -> str:
-        raise Exception("Not-Implement")
+        """向后兼容的ask方法，已过时，请使用chat方法"""
+        logger.warning("ask method is deprecated, please use chat method instead")
+        response = self.chat(context, tools=None, response_format=response_format)
+        return response.get("content", "")
 
-    @abc.abstractmethod
     def ask_with_tools(
         self, context: List, available_tools: Optional[List[str]] = None, response_format: Optional[str] = None
     ) -> Dict[str, Any]:
-        """支持工具调用的请求方法
-
-        Args:
-            context: 对话上下文
-            available_tools: 可用工具列表，None表示使用所有工具
-
-        Returns:
-            包含content和tool_calls的字典
-        """
-        raise Exception("Not-Implement")
-
-    def register_tool(self, func: Callable) -> Dict[str, Any]:
-        """自动从函数签名注册工具"""
-        schema = extract_function_schema(func)
-        self.tools[schema["name"]] = func
-
-        tool_def = {"type": "function", "function": schema}
-
-        if "tools" not in self.params or self.params["tools"] is None:
-            self.params["tools"] = []
-        self.params["tools"].append(tool_def)
-
-        return schema  # 返回schema供调试使用
-
-    def execute_tool(self, tool_call: ToolCall) -> str:
-        """执行工具调用"""
-        function_name = tool_call["function"]["name"]
-        function_args = json.loads(tool_call["function"]["arguments"])
-
-        if function_name in self.tools:
-            try:
-                result = self.tools[function_name](**function_args)
-                return str(result)
-            except Exception as e:
-                logger.error(f"Error executing tool {function_name}: {str(e)} {traceback.format_exc()}")
-                return f"Error executing tool {function_name}: {str(e)}"
-        else:
-            return f"Tool {function_name} not found"
-
-    def get_available_tools(
-        self, tool_names: Optional[List[str]] = None
-    ) -> List[Dict[str, Any]]:
-        """获取可用工具列表"""
-        if not self.params.get("tools"):
-            return []
-
-        if tool_names is None:
-            return self.params["tools"]
-
-        # 筛选指定的工具
-        available_tools = []
-        for tool in self.params["tools"]:
-            if tool["function"]["name"] in tool_names:
-                available_tools.append(tool)
-
-        return available_tools
+        """向后兼容的ask_with_tools方法，已过时，请使用chat方法"""
+        logger.warning("ask_with_tools method is deprecated, please use chat method instead")
+        # 这里无法直接转换available_tools，因为需要Agent层的工具管理
+        response = self.chat(context, tools=None, response_format=response_format)
+        return response
 
 
 __all__ = [
     "LlmAbstract",
-    "extract_function_schema",
+    "LlmParams",
     "ToolCall",
-    "ToolResponse",
+    "ToolResponse", 
+    "ChatResponse",
+    "extract_function_schema",
 ]

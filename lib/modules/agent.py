@@ -1,15 +1,55 @@
+import inspect
 import json
 import traceback
-from typing import Optional, List, Dict, Any, Callable, Union
+from typing import Annotated, Optional, List, Dict, Any, Callable, Union, get_args, get_origin, get_type_hints
 
 from lib.logger import logger
-from lib.adapter.llm.interface import LlmAbstract
-
+from lib.adapter.llm.interface import LlmAbstract, ChatResponse, extract_function_schema
 
 class Agent:
     def __init__(self, llm: LlmAbstract):
         self.llm = llm
         self.chat_context = []
+        self.tools = {}  # 注册的工具函数
+        self.tool_schemas = []  # 工具的schema定义
+
+    def register_tool(self, func: Callable) -> Dict[str, Any]:
+        """注册工具函数"""
+        tool_schema = extract_function_schema(func)
+        self.tools[func.__name__] = func
+        self.tool_schemas.append({
+            "type": "function",
+            "function": tool_schema
+        })
+        logger.debug(f"Tool registered: {func.__name__}")
+        return tool_schema
+
+    def execute_tool(self, tool_call: Dict[str, Any]) -> str:
+        """执行工具调用"""
+        function_name = tool_call["function"]["name"]
+        arguments = tool_call["function"]["arguments"]
+        
+        if function_name not in self.tools:
+            return f"Error: Tool '{function_name}' not found"
+        
+        try:
+            # 解析参数
+            if isinstance(arguments, str):
+                args = json.loads(arguments)
+            else:
+                args = arguments
+            
+            # 执行工具函数
+            result = self.tools[function_name](**args)
+            
+            # 确保返回字符串
+            if isinstance(result, str):
+                return result
+            else:
+                return json.dumps(result, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"Error executing tool {function_name}: {str(e)}")
+            return f"Error executing tool {function_name}: {str(e)}"
 
     def ask(self, question: str, tool_use: Union[bool, List[str]] = False, json_response: Optional[bool] = False) -> str:
         """发送问题并获取回答
@@ -27,9 +67,14 @@ class Agent:
         # 确定是否使用工具
         if tool_use is False:
             # 不使用工具
-            rsp_message = self.llm.ask(self.chat_context, response_format='json_object' if json_response else None)
-            self.chat_context.append({"role": "assistant", "content": rsp_message})
-            return rsp_message
+            response = self.llm.chat(
+                self.chat_context, 
+                tools=None, 
+                response_format='json_object' if json_response else None
+            )
+            content = response.get("content", "")
+            self.chat_context.append({"role": "assistant", "content": content})
+            return content
         else:
             # 使用工具（tool_use为True或List[str]）
             return self._handle_tool_conversation(tool_use, response_format='json_object' if json_response else None)
@@ -37,7 +82,19 @@ class Agent:
     def _handle_tool_conversation(self, tool_use: Union[bool, List[str]], response_format: Optional[str] = None) -> str:
         """处理包含工具调用的对话"""
         iteration = 0
-        available_tools = None if tool_use is True else tool_use
+        
+        # 准备工具定义
+        if tool_use is True:
+            # 使用所有工具
+            available_tools = self.tool_schemas
+        elif isinstance(tool_use, list):
+            # 使用指定的工具
+            available_tools = [
+                schema for schema in self.tool_schemas 
+                if schema['function']['name'] in tool_use
+            ]
+        else:
+            available_tools = []
 
         while True:
             iteration += 1
@@ -49,10 +106,10 @@ class Agent:
                 )
 
             try:
-                response = self.llm.ask_with_tools(self.chat_context, available_tools, response_format)
+                response = self.llm.chat(self.chat_context, tools=available_tools, response_format=response_format)
 
                 # 如果没有工具调用，直接返回消息
-                if "tool_calls" not in response or not response["tool_calls"]:
+                if not response.get("tool_calls"):
                     content = response.get("content", "")
                     self.chat_context.append({"role": "assistant", "content": content})
                     return content
@@ -70,7 +127,7 @@ class Agent:
                 for tool_call in response["tool_calls"]:
                     logger.info(f"Executing tool call... {tool_call['function']['name']}")
                     logger.debug(f"Executing tool call: {tool_call['function']['name']} with params: {tool_call['function']['arguments']}")
-                    tool_result = self.llm.execute_tool(tool_call)
+                    tool_result = self.execute_tool(tool_call)
                     logger.debug(f"Executed tool call: {tool_call['function']['name']} with result: {tool_result}")
                     self.chat_context.append(
                         {
@@ -89,10 +146,6 @@ class Agent:
             except Exception as e:
                 logger.error(f"Error in tool conversation: {str(e)} {traceback.format_exc()}")
                 return f"Error occurred during tool conversation: {str(e)}"
-
-    def register_tool(self, func: Callable) -> Dict[str, Any]:
-        """注册工具函数"""
-        return self.llm.register_tool(func)
 
     def set_system_prompt(self, prompt: str):
         self.chat_context = [{"role": "system", "content": prompt}]
