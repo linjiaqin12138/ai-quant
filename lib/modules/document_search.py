@@ -226,10 +226,6 @@ class DocumentSearch:
         
         return chunks
     
-    @use_cache(
-        300,
-        use_db_cache=True
-    )
     def _get_embeddings(self, texts: List[str]) -> List[List[float]]:
         """
         获取文本嵌入

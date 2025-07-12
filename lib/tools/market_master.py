@@ -24,7 +24,7 @@ from lib.utils.indicators import (
     vwma_indicator,
     calculate_indicators
 )
-from lib.adapter.llm import get_llm_tool
+from lib.adapter.llm import get_llm_direct_ask
 from .news_helper import NewsHelper
 from .ashare_stock import get_ashare_stock_info
 
@@ -615,7 +615,7 @@ class MarketMaster:
         )
         if self.msg_logger:
             self.msg_logger.msg(user_prompt)
-        llm_ask = get_llm_tool(
+        llm_ask = get_llm_direct_ask(
             system_prompt,
             self.llm_provider,
             self.model,
@@ -670,7 +670,7 @@ class MarketMaster:
         )
         if self.msg_logger:
             self.msg_logger.msg(user_prompt)
-        llm_ask = get_llm_tool(
+        llm_ask = get_llm_direct_ask(
             system_prompt,
             self.llm_provider,
             self.model,

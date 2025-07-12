@@ -2,7 +2,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from textwrap import dedent
 from typing import List
-from lib.modules import get_agent, get_llm_tool
+from lib.adapter.llm import get_llm_direct_ask
+from lib.modules import get_agent
 from lib.tools.cache_decorator import use_cache
 from lib.tools.information_search import unified_search
 from lib.utils.news import (
@@ -198,7 +199,7 @@ class NewsHelper:
     ) -> str:
         system_prompt = CRYPTO_SYSTEM_PROMPT_TEMPLATE.format(coin_name=coin_name)
         news_in_md = self.get_crypto_news(from_time, end_time, platforms)
-        ask_llm = get_llm_tool(
+        ask_llm = get_llm_direct_ask(
             system_prompt, self.llm_provider, self.model, temperature=self.temperature
         )
         return ask_llm(news_in_md)
@@ -242,7 +243,7 @@ class NewsHelper:
         news_in_md = self.get_ashare_news(
             from_time, end_time, platforms, stock_code=stock_code
         )
-        ask_llm = get_llm_tool(
+        ask_llm = get_llm_direct_ask(
             system_prompt, 
             self.llm_provider, 
             self.model, 

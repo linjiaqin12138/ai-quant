@@ -6,7 +6,7 @@ JSON修复工具
 from typing import Optional, Union
 from lib.logger import logger
 from lib.utils.string import extract_json_string
-from lib.adapter.llm import get_llm_tool
+from lib.adapter.llm import get_llm_direct_ask
 
 SYS_PROMPT = """
 你是一个专业的JSON修复专家。你的任务是修复用户提供的不完整或有问题的JSON字符串。
@@ -50,7 +50,7 @@ class JsonFixer:
         """
         self.provider = provider
         self.model = model
-        self._json_fixer = get_llm_tool(SYS_PROMPT, provider=provider, model=model, response_format="json_object")
+        self._json_fixer = get_llm_direct_ask(SYS_PROMPT, provider=provider, model=model, response_format="json_object")
 
     def fix(self, broken_json: str) -> Optional[Union[dict, list]]:
         """

@@ -1,10 +1,9 @@
-import inspect
 import json
 import traceback
-from typing import Annotated, Optional, List, Dict, Any, Callable, Union, get_args, get_origin, get_type_hints
+from typing import Optional, List, Dict, Any, Callable, Union
 
 from lib.logger import logger
-from lib.adapter.llm.interface import LlmAbstract, ChatResponse, extract_function_schema
+from lib.adapter.llm.interface import LlmAbstract, extract_function_schema
 
 class Agent:
     def __init__(self, llm: LlmAbstract):

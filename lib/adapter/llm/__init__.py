@@ -22,24 +22,23 @@ def get_llm(provider: str, model: str, **params) -> LlmAbstract:
     raise ValueError(f"Unsupported provider: {provider}")
 
 
-def get_llm_tool(
+def get_llm_direct_ask(
     system_prompt: str, provider: str, model: str, **params
 ) -> Callable[[str], str]:
     llm = get_llm(provider, model, **params)
 
-    return lambda question: llm.ask(
+    return lambda question: llm.chat(
         [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": question},
         ],
-        # tools=params.get("tools", None),
         response_format=params.get("response_format", None),
-    )
+    )['content']
 
 
 __all__ = [
     "get_llm",
-    "get_llm_tool",
+    "get_llm_direct_ask",
     "LlmParams",
     "LlmAbstract",
     "BaiChuan",

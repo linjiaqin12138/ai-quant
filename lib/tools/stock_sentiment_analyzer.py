@@ -12,7 +12,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from textwrap import dedent
 
 from jinja2 import Template
-from lib.adapter.llm import get_llm_tool
+from lib.adapter.llm import get_llm_direct_ask
 from lib.utils.string import has_json_features
 from lib.tools.json_fixer import JsonFixer
 from lib.tools.web_page_reader import WebPageReader
@@ -380,7 +380,7 @@ class StockSentimentAnalyzer:
         ):
         """初始化分析器"""
         # 创建评论提取工具
-        self.comment_extractor = get_llm_tool(
+        self.comment_extractor = get_llm_direct_ask(
             system_prompt=COMMENT_EXTRACTOR_SYS_PROMPT_TEMPLATE.format(curr_time_str=datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
             provider=provider,
             model=model,
@@ -388,7 +388,7 @@ class StockSentimentAnalyzer:
         )
         
         # 创建情绪分析工具
-        self.sentiment_analyzer = get_llm_tool(
+        self.sentiment_analyzer = get_llm_direct_ask(
             system_prompt=SENTIMENT_ANALYZER_SYS_PROMPT_TEMPLATE,
             provider=provider,
             model=model

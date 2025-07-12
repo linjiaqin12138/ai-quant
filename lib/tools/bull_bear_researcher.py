@@ -11,7 +11,8 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 from jinja2 import Template
 
-from lib.modules import get_agent, get_llm_tool
+from lib.adapter.llm import get_llm_direct_ask
+from lib.modules import get_agent
 from lib.logger import logger
 
 # HTML报告模板
@@ -588,7 +589,7 @@ class BullBearResearcher:
     def _generate_summary(self) -> str:
         """生成辩论总结"""
         # 创建专门用于总结的Agent
-        summary = get_llm_tool(
+        summary = get_llm_direct_ask(
             SUMMARY_SYS_PROMPT,
             self.provider, self.model, temperature=0.3
         )

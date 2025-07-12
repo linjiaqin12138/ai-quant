@@ -24,7 +24,7 @@ from lib.utils.string import extract_json_string
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from lib.modules import get_agent
-from lib.adapter.llm import get_llm_tool
+from lib.adapter.llm import get_llm_direct_ask
 from lib.logger import logger
 
 SYS_PROMPT = """你是一个专业的网页内容分析师，擅长从网页内容中提取用户需要的特定信息。
@@ -104,7 +104,7 @@ class WebPageReader:
         """
         self.provider = provider
         self.model = model
-        self.llm_ask = get_llm_tool(
+        self.llm_ask = get_llm_direct_ask(
             SYS_PROMPT, 
             provider, 
             model, 
