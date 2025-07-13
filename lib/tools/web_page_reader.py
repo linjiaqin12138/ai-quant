@@ -14,6 +14,7 @@ import argparse
 
 import requests
 
+from lib.adapter.apis import read_web_page_by_jina
 from lib.config import get_http_proxy
 from lib.model.error import LlmReplyInvalid
 from lib.tools.cache_decorator import use_cache
@@ -46,49 +47,8 @@ SYS_PROMPT = """你是一个专业的网页内容分析师，擅长从网页内�
 def cache_key_generator(kwargs, *args) -> str:
     """生成缓存键"""
     url = kwargs.get('url', '')
-    return f"web_page_reader:{url}"
-
-@use_cache(3600, use_db_cache=True, key_generator=cache_key_generator)
-@with_retry(
-    retry_errors=(ConnectionError, TimeoutError, OSError),
-    max_retry_times=3
-)
-def read_web_page(url: str) -> str:
-    """
-    使用Jina API读取网页内容
-    
-    Args:
-        url: 要读取的网页URL
-    
-    Returns:
-        网页内容字符串
-    """
-    # Jina Reader API端点
-    jina_url = f"https://r.jina.ai/{url}"
-    
-    # 获取代理设置
-    proxy = get_http_proxy()
-    proxies = None
-    if proxy:
-        proxies = {
-            'http': proxy,
-            'https': proxy
-        }
-    
-    # 设置请求头
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    }
-    
-    # 发送请求到Jina API
-    response = requests.get(jina_url, headers=headers, proxies=proxies, timeout=600)
-    if response.status_code == 451:
-        raise Exception("根据法律要求，无法爬取该网页内容")
-
-    response.raise_for_status()
-    
-    # 返回网页内容
-    return response.text
+    query = kwargs.get('query', '')
+    return f"web_page_reader:{url}:query:{query}"
 
 class WebPageReader:
     """网页内容读取和智能提取器"""
@@ -186,6 +146,11 @@ class WebPageReader:
         extracted_lines = lines[start_idx:end_idx]
         return '\n'.join(extracted_lines)
     
+    @use_cache(3600, use_db_cache=True, key_generator=cache_key_generator)
+    @with_retry(
+        retry_errors=(ConnectionError, TimeoutError, OSError),
+        max_retry_times=3
+    )
     def read_and_extract(self, url: str, query: str) -> str:
         """
         读取网页并提取指定内容
@@ -201,7 +166,7 @@ class WebPageReader:
         try:
             # 读取网页内容
             logger.info(f"📖 正在读取网页: {url}")
-            full_content = read_web_page(url)
+            full_content = read_web_page_by_jina(url)
 
             if not full_content.strip():
                 return "网页内容为空"

@@ -201,7 +201,8 @@ def debug_rsp(rsp: requests.Response):
 
 class LlmAbstract(abc.ABC):
     """LLM抽象基类，专注于不同provider的聊天接口适配"""
-    
+    provider: str # 提供商名称, 子类hardcode
+
     def __init__(self, model: str, **system_params):
         self.model = model
         self.params: LlmParams = system_params

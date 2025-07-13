@@ -4,7 +4,7 @@ from .openai_compatible import OpenAiApiMixin
 
 
 class SiliconFlow(OpenAiApiMixin, LlmAbstract):
-
+    provider: str = "siliconflow"
     def __init__(self, model: str = "deepseek-ai/DeepSeek-V3", **params):
         super().__init__(model, **params)
         self.api_key = params.get("api_key", get_silicon_token())

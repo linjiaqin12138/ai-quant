@@ -12,9 +12,10 @@ from textwrap import dedent
 import traceback
 
 from jinja2 import Template
+from lib.adapter.apis import read_web_page_by_jina
 from lib.modules import get_agent
 from lib.tools.information_search import unified_search
-from lib.tools.web_page_reader import read_web_page
+
 from lib.tools.ashare_stock import (
     get_comprehensive_financial_data,
     get_shareholder_changes_data,
@@ -333,7 +334,7 @@ class FundamentalAnalyzer:
                        f"股东变动数据（来源akshare）: {json.dumps(share_holder_change_data, indent=2, ensure_ascii=False)}"
         })
         agent.register_tool(unified_search)
-        agent.register_tool(read_web_page)
+        agent.register_tool(read_web_page_by_jina)
         
         logger.info(f"✅ {company_name}基本面数据分析Agent创建成功")
         logger.info(f"已注册工具: {list(agent.llm.tools.keys())}")

@@ -4,6 +4,7 @@ from .openai_compatible import OpenAiApiMixin
 
 
 class BaiChuan(OpenAiApiMixin, LlmAbstract):
+    provider: str = "baichuan"
     def _is_support_json_rsp(self) -> bool:
         return self.model in [
             "Baichuan4-Turbo",

@@ -17,6 +17,7 @@ from .openai_compatible import OpenAiRetryableError
 
 
 class G4f(LlmAbstract):
+    provider: str = "g4f"
 
     def __init__(self, model: str = "gpt-3.5-turbo", **system_params):
         super().__init__(model, **system_params)

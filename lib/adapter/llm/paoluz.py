@@ -62,6 +62,7 @@ class PaoluzAgent(OpenAiApiMixin, LlmAbstract):
     default_endpoint = "https://chatapi.nloli.xyz"
     backup_endpoint = "https://hkc3s.shamiko.uk"
     api_key = get_paoluz_token()
+    provider: str = "paoluz"
 
     def __init__(self, model: str = "gpt-3.5-turbo", **system_params: dict):
         super().__init__(model, **system_params)

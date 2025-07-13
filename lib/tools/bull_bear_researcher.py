@@ -6,17 +6,25 @@ Bull Bear Researcher Agent
 
 import os
 import re
+import json
+from pathlib import Path
 from textwrap import dedent
 import traceback
-from typing import Dict, Any, Optional, Annotated
+from typing import Dict, Any, Optional, List, TypedDict
 from datetime import datetime
 from jinja2 import Template
 
-from lib.adapter.llm import get_llm_direct_ask
+from lib.adapter.llm.interface import LlmAbstract
+from lib.adapter.vector_db import VectorDatabaseAbstract
 from lib.modules import get_agent
+from lib.tools.common import get_ohlcv_history
 from lib.tools.information_search import unified_search
-from lib.tools.web_page_reader import WebPageReader, read_web_page
+from lib.tools.web_page_reader import WebPageReader
+from lib.tools.investment_reflector import InvestmentReflector, ReflectionData, ReflectionResult
 from lib.logger import logger
+
+
+from lib.utils.number import change_rate
 
 # HTML报告模板
 HTML_TEMPLATE = """
@@ -430,6 +438,9 @@ BULL_SYS_PROMPT = dedent(
         
         参考信息：
         {context}
+
+        相似场景下的经验：
+        {past_memory}
     """
 )
 
@@ -466,6 +477,9 @@ BEAR_SYS_PROMPT = dedent(
         
         参考信息：
         {context}
+
+        相似场景下的经验：
+        {past_memory}
     """
 )
 
@@ -483,6 +497,36 @@ SUMMARY_SYS_PROMPT = dedent(
         请考虑你在类似情境下曾犯过的错误。利用这些经验教训优化你的决策，确保不断学习和提升。请以自然对话的方式呈现分析，无需特殊格式。
     """
 )
+
+class DebateHistoryItem(TypedDict):
+    round: int
+    role: str
+    content: str
+
+class DebateState(TypedDict):
+    """牛熊辩论结果的类型定义"""
+    symbol: Optional[str]
+    planned_rounds: int
+    actual_rounds: int
+    early_end: bool
+    early_end_reason: Optional[str]
+    summary: Optional[str]
+    context: str
+    success: bool
+    error_message: Optional[str]
+    debate_history: List[DebateHistoryItem]  # 可选，在某些情况下会添加
+
+class Reports(TypedDict):
+    """辩论报告的类型定义"""
+    market_research_report: str
+    sentiment_report: str
+    news_report: str
+    fundamentals_report: str
+
+class DebateRecord(TypedDict):
+    """牛熊辩论记录的类型定义"""
+    debate_result: DebateState
+    reports: Reports
 
 def _search_information(query: str, max_results: int = 10) -> str:
     """
@@ -517,42 +561,77 @@ class BullBearResearcher:
     
     def __init__(
             self,
-            provider: str = "paoluz", 
-            model: str = "deepseek-v3", 
+            symbol: str,
+            provider: str = 'paoluz',
+            model: str = 'deeepseek-v3',
+            record_folder = 'data/debate_records',
             rounds: int = 1,
-            web_page_reader: Optional[WebPageReader] = None
+            reflect_top_k: int = 3,
+            web_page_reader: Optional[WebPageReader] = None,
+            vector_db: Optional[VectorDatabaseAbstract] = None
         ):
+
         """
         初始化牛熊辩论研究员
         
         Args:
-            provider: LLM提供商
-            model: 使用的模型
+            symbol: 股票或资产的符号
+            record_folder: 记录文件夹路径
             rounds: 辩论轮数 (1-5)
             web_page_reader: 可选的网页阅读器
         """
+        self.symbol = symbol
         self.provider = provider
         self.model = model
         self.rounds = max(1, min(5, rounds))  # 确保轮数在1-5之间
-        
+        self.reflect_top_k = max(1, min(10, reflect_top_k))  # 确保反思记录数量在1-10之间
+        self.record_folder = record_folder
+        self.debate_result: DebateState = {
+            "symbol": symbol,
+            "planned_rounds": self.rounds,
+            "actual_rounds": 0,
+            "early_end": False,
+            "success": False,
+            "debate_history": [],
+            "context": ""
+        }
+
         # 创建两个Agent
         self.bull_agent = get_agent(provider, model, temperature=0.7)
         self.bear_agent = get_agent(provider, model, temperature=0.7)
+        self.decision_agent = get_agent(provider, model, temperature=0.7)
         self.web_page_reader = web_page_reader or WebPageReader(provider=provider, model=model)
-        # 为两个Agent注册工具
-
-        # 存储报告数据
+        
+        # 待添加
         self.market_research_report = ""
         self.sentiment_report = ""
         self.news_report = ""
         self.fundamentals_report = ""
-        
-        # 辩论历史
-        self.debate_history = []
-        self.past_memory_str = ""
 
+        # 创建三个反思器，分别对应三个agent
+        self.bull_reflector = InvestmentReflector(
+            provider=provider,
+            model=model,
+            index_name="bull-agent-reflections",
+            embedding_dimension=1536,
+            vector_db=vector_db
+        )
+        self.bear_reflector = InvestmentReflector(
+            provider=provider,
+            model=model,
+            index_name="bear-agent-reflections",
+            embedding_dimension=1536,
+            vector_db=vector_db
+        )
+        self.decision_reflector = InvestmentReflector(
+            provider=provider,
+            model=model,
+            index_name="decision-agent-reflections",
+            embedding_dimension=1536,
+            vector_db=vector_db
+        )
+    
         # 设置系统提示
-        self._set_system_prompts()
         self.bull_agent.register_tool(_search_information)
         self.bull_agent.register_tool(self._read_web_page)
         self.bear_agent.register_tool(_search_information)
@@ -561,10 +640,34 @@ class BullBearResearcher:
     def _set_system_prompts(self):
         """设置牛熊双方的系统提示"""
         context = self._format_context()
-        bull_prompt = BULL_SYS_PROMPT.format(context=context)
-        bear_prompt = BEAR_SYS_PROMPT.format(context=context)
+        
+        # 为每个agent搜索相似的反思记录作为参考
+        bull_reflections = ""
+        bear_reflections = ""
+
+        # 搜索多头相似反思
+        bull_similar = self.bull_reflector.search_similar_reflections(
+            situation=f"{context}",
+            top_k=self.reflect_top_k
+        )
+        if bull_similar:
+            for i, reflection in enumerate(bull_similar[:3], 1):
+                bull_reflections += f"{i}. {reflection['content']}...\n"
+        
+        # 搜索空头相似反思
+        bear_similar = self.bear_reflector.search_similar_reflections(
+            situation=context,
+            top_k=self.reflect_top_k
+        )
+        if bear_similar:
+            for i, reflection in enumerate(bear_similar[:3], 1):
+                bear_reflections += f"{i}. {reflection['content']}...\n"
+
+        bull_prompt = BULL_SYS_PROMPT.format(context=context, past_memory=bull_reflections)
+        bear_prompt = BEAR_SYS_PROMPT.format(context=context, past_memory=bear_reflections)
         self.bull_agent.set_system_prompt(bull_prompt)
         self.bear_agent.set_system_prompt(bear_prompt)
+        self.decision_agent.set_system_prompt(SUMMARY_SYS_PROMPT)
 
     def _read_web_page(self, url: str) -> str:
         """
@@ -576,14 +679,7 @@ class BullBearResearcher:
         Returns:
             网页内容
         """
-        logger.info(f"读取 {url}")
-        try:
-            content = self.web_page_reader.read_and_extract(url, "提取正文内容")
-            if not content:
-                return f"无法读取网页内容: {url}"
-            return content
-        except Exception as e:
-            return f"读取网页失败: {str(e)}"
+        return self.web_page_reader.read_and_extract(url, "提取正文内容")
     
     def add_market_research_report(self, report: str):
         """添加市场研究报告"""
@@ -605,34 +701,26 @@ class BullBearResearcher:
         self.fundamentals_report = report
         logger.info("已添加基本面报告")
     
-    def add_past_memory(self, memory: str):
-        """添加过往经验记忆"""
-        self.past_memory_str = memory
-        logger.info("已添加过往经验记忆")
-    
     def _format_debate_history(self) -> str:
          return "\n".join([
             f"第{entry['round']}轮 - {entry['role']}:\n{entry['content']}\n"
-            for entry in self.debate_history
+            for entry in self.debate_result['debate_history']
         ])
     
     def _format_context(self) -> str:
         """格式化上下文信息"""
-        context = dedent(
+        return dedent(
             f"""
                 市场研究报告：{self.market_research_report}
                 社交媒体情绪报告：{self.sentiment_report}
                 最新世界事务新闻：{self.news_report}
                 公司基本面报告：{self.fundamentals_report}
-                类似情况的反思和经验教训：{self.past_memory_str}
             """
         )
-        
-        return context
     
     def _add_history(self, round_num: int, role: str, content: str):
         """添加辩论历史"""
-        self.debate_history.append({
+        self.debate_result['debate_history'].append({
             "round": round_num,
             "role": role,
             "content": content
@@ -641,8 +729,8 @@ class BullBearResearcher:
     def _check_debate_concede(self, content: str) -> bool:
         """检查是否有认输标识"""
         return bool(re.search(r'<DEBATE_CONCEDE>.*?</DEBATE_CONCEDE>', content, re.IGNORECASE | re.DOTALL))
-
-    def start_debate(self, symbol: str) -> Dict[str, Any]:
+    
+    def start_debate(self) -> Dict[str, Any]:
         """
         开始牛熊辩论
         
@@ -653,47 +741,32 @@ class BullBearResearcher:
             辩论结果字典
         """
         logger.info(f"🎯 开始牛熊辩论，共{self.rounds}轮")
-        
-        result = {
-            "symbol": symbol,
-            "planned_rounds": self.rounds,
-            "actual_rounds": 0,
-            "early_end": False,
-            "early_end_reason": "",
-            "summary": "",
-            "success": False,
-            "error_message": ""
-        }
-        
         try:
-            # 清空之前的辩论历史
-            self.debate_history.clear()
+            # 使用symbol重新设置系统提示词，包含相似反思记录
+            self._set_system_prompts()
+            self.debate_result["context"] = self._format_context()
+            symbol = self.debate_result["symbol"]
             # 初始化Agent，添加上下文信息
             round_num = 1
-            self._set_system_prompts()
 
             logger.info(f"第{round_num}轮辩论开始...")
 
             logger.info(f"🐂 多头分析中...")
-            bull_response = self.bull_agent.ask(f"请开始发表你的观点，分析{symbol}的投资价值", tool_use=True)
+            bull_response = self.bull_agent.ask(f"请开始发表你的观点，分析投资价值", tool_use=True)
             self._add_history(round_num, "多头", bull_response)
             
             # 检查多头是否认输
             if self._check_debate_concede(bull_response):
-                result.update({
+                logger.info(f"🏁 辩论提前结束：多头分析师认输")
+                # 直接生成总结
+                self.debate_result.update({
+                    "summary": self._generate_summary(),
+                    "success": True,
                     "actual_rounds": round_num,
                     "early_end": True,
                     "early_end_reason": "多头分析师在第1轮认输"
                 })
-                logger.info(f"🏁 辩论提前结束：多头分析师认输")
-                # 直接生成总结
-                summary = self._generate_summary()
-                result.update({
-                    "summary": summary,
-                    "debate_history": self.debate_history,
-                    "success": True
-                })
-                return result
+                return self.debate_result
 
             logger.info(f"🐻 空头分析中...")
             bear_response = self.bear_agent.ask(f"请基于多头的观点进行反驳，分析{symbol}的投资风险：{bull_response}", tool_use=True)
@@ -701,20 +774,16 @@ class BullBearResearcher:
             
             # 检查空头是否认输
             if self._check_debate_concede(bear_response):
-                result.update({
+                logger.info(f"🏁 辩论提前结束：空头分析师认输")
+                # 直接生成总结
+                self.debate_result.update({
+                    "summary": self._generate_summary(),
+                    "success": True,
                     "actual_rounds": round_num,
                     "early_end": True,
                     "early_end_reason": "空头分析师在第1轮认输"
                 })
-                logger.info(f"🏁 辩论提前结束：空头分析师认输")
-                # 直接生成总结
-                summary = self._generate_summary()
-                result.update({
-                    "summary": summary,
-                    "debate_history": self.debate_history,
-                    "success": True
-                })
-                return result
+                return self.debate_result
             
             round_num += 1
 
@@ -727,12 +796,14 @@ class BullBearResearcher:
                 
                 # 检查多头是否认输
                 if self._check_debate_concede(bull_response):
-                    result.update({
+                    logger.info(f"🏁 辩论提前结束：多头分析师认输")
+                    self.debate_result.update({
+                        "summary": self._generate_summary(),
+                        "success": True,
                         "actual_rounds": round_num,
                         "early_end": True,
                         "early_end_reason": f"多头分析师在第{round_num}轮认输"
                     })
-                    logger.info(f"🏁 辩论提前结束：多头分析师认输")
                     break
 
                 logger.info(f"🐻 空头分析中...")
@@ -741,53 +812,60 @@ class BullBearResearcher:
                 
                 # 检查空头是否认输
                 if self._check_debate_concede(bear_response):
-                    result.update({
+                    logger.info(f"🏁 辩论提前结束：空头分析师认输")
+                    self.debate_result.update({
+                        "summary": self._generate_summary(),
+                        "success": True,
                         "actual_rounds": round_num,
                         "early_end": True,
                         "early_end_reason": f"空头分析师在第{round_num}轮认输"
                     })
-                    logger.info(f"🏁 辩论提前结束：空头分析师认输")
                     break
                 
                 round_num += 1
             
             # 如果没有提前结束，设置实际轮数
-            if not result["early_end"]:
-                result["actual_rounds"] = self.rounds
+            if not self.debate_result["early_end"]:
+                self.debate_result["actual_rounds"] = self.rounds
             
             # 生成总结
             logger.info("📋 生成辩论总结...")
-            summary = self._generate_summary()
-            
-            result.update({
-                "summary": summary,
-                "debate_history": self.debate_history,
+            self.debate_result.update({
+                "summary": self._generate_summary(),
                 "success": True
             })
-            
             logger.info(f"📋 辩论总结完成")
-            
+
+            logger.info(f"保存辩论记录")
+            self.save_debate_records()
         except Exception as e:
             error_msg = f"辩论过程中出错: {str(e)}"
-            result["error_message"] = error_msg
+            self.debate_result.update({
+                "error_message": error_msg
+            })
             logger.error(error_msg)
             logger.debug(f"错误详情: {traceback.format_exc()}")
         
-        return result
+        return self.debate_result
     
     def _generate_summary(self) -> str:
-        """生成辩论总结"""
+        """
+        生成辞论总结并自动保存辩论记录
+        """
         # 创建专门用于总结的Agent
-        summary = get_llm_direct_ask(
-            SUMMARY_SYS_PROMPT,
-            self.provider, self.model, temperature=0.3
-        )
         # 格式化辩论历史为文本
         debate_history_text = self._format_debate_history()
         context = self._format_context()
-        # TODO: 处理过往经验记忆
+        similar_experience = self.decision_reflector.search_similar_reflections(
+            situation=context,
+            top_k=3
+        )
         past_memory_str = ""
-        return summary(
+        if similar_experience:
+            for i, reflection in enumerate(similar_experience[:3], 1):
+                past_memory_str += f"{i}. {reflection['content']}\n"
+
+        summary = self.decision_agent.ask(
             dedent(
                 f"""
                     辩论历史：
@@ -796,12 +874,13 @@ class BullBearResearcher:
                     辩论依据:
                     {context}
 
-                    对过往错误的反思： "{past_memory_str}"
+                    对过往的反思： "{past_memory_str}"
                 """
             )
         )
+        return summary
     
-    def generate_html_report(self, analysis_result: Dict[str, Any]) -> str:
+    def generate_html_report(self) -> str:
         """
         生成HTML报告
         
@@ -812,6 +891,9 @@ class BullBearResearcher:
             HTML报告字符串
         """
         # 计算统计数据
+        analysis_result = self.debate_result
+        assert analysis_result['success']
+        
         total_exchanges = len(analysis_result["debate_history"])
         bull_exchanges = sum(1 for entry in analysis_result["debate_history"] if entry["role"] == "多头")
         bear_exchanges = sum(1 for entry in analysis_result["debate_history"] if entry["role"] == "空头")
@@ -835,7 +917,7 @@ class BullBearResearcher:
             planned_rounds=analysis_result["planned_rounds"],
             actual_rounds=analysis_result["actual_rounds"],
             early_end=analysis_result["early_end"],
-            early_end_reason=analysis_result["early_end_reason"],
+            early_end_reason=analysis_result.get('early_end_reason'),
             provider=self.provider,
             model=self.model,
             analysis_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -853,7 +935,7 @@ class BullBearResearcher:
         
         return html_content
     
-    def save_html_report(self, analysis_result: Dict[str, Any], save_folder_path: Optional[str] = None) -> str:
+    def save_html_report(self, save_folder_path: Optional[str] = None) -> str:
         """
         保存HTML报告到文件
         
@@ -871,13 +953,15 @@ class BullBearResearcher:
             os.makedirs(save_folder_path)
         
         # 生成文件名
+        analysis_result = self.debate_result
+        assert analysis_result['success']
         symbol = analysis_result["symbol"].replace("/", "_").replace("\\", "_")
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         report_filename = f"bull_bear_debate_{symbol}_{timestamp}.html"
         report_path = os.path.join(save_folder_path, report_filename)
         
         try:
-            html_content = self.generate_html_report(analysis_result)
+            html_content = self.generate_html_report()
             
             with open(report_path, 'w', encoding='utf-8') as f:
                 f.write(html_content)
@@ -890,3 +974,166 @@ class BullBearResearcher:
             error_msg = f"导出报告失败: {str(e)}"
             logger.error(error_msg)
             return ""
+    
+    def reflect(
+        self,
+        days_ago: int = 1
+    ) -> Dict[str, ReflectionResult]:
+        """
+        对三个agent的发言进行反思分析
+        
+        Args:
+            days_ago: 距离决策日期过去的天数
+            
+        Returns:
+            包含三个agent反思结果的字典
+        """
+        
+        try:
+            ohlcv_history = get_ohlcv_history(self.symbol, limit=days_ago + 1)
+            actual_return = change_rate(ohlcv_history[0].close, ohlcv_history[-1].close)
+            logger.info(f"🔍 开始对{self.symbol}的辩论进行反思分析（{days_ago}天后收益率：{actual_return:.2%}）")
+
+            # 计算历史日期
+            historical_date = ohlcv_history[0].timestamp
+            # 尝试加载历史辩论记录
+            historical_record: DebateRecord = self.load_debate_records(historical_date)
+            if historical_record is None:
+                logger.warning(f"未找到{historical_date.strftime('%Y-%m-%d')}的辩论记录")
+                return
+            reports = historical_record.get('reports')
+            self.add_fundamentals_report(reports.get('fundamentals_report', ''))
+            self.add_news_report(reports.get('news_report', ''))
+            self.add_market_research_report(reports.get('market_research_report', ''))
+            self.add_sentiment_report(reports.get('sentiment_report', ''))
+            # 使用历史记录
+            context = self._format_context()
+            self.debate_result: DebateState = historical_record['debate_result']
+            debate_history = self.debate_result["debate_history"]
+            
+            if not self.debate_result['success']:
+                logger.warning("⚠️ 历史辩论记录未成功完成，无法进行反思")
+                return
+
+            logger.info(f"📂 使用{historical_date.strftime('%Y-%m-%d')}的历史辩论记录进行反思")
+            # 1. 反思多头分析师的发言
+            logger.info("🐂 反思多头分析师的发言...")
+            bull_opinions = [entry['content'] for entry in debate_history if entry['role'] == '多头']
+            result = self.bull_reflector.reflect_on_decision(
+                ReflectionData(
+                    situation=context,
+                    analysis_opinion="\n".join(bull_opinions),
+                    days_past=days_ago,
+                    return_loss_percentage=actual_return,
+                    decision_date=historical_date
+                )
+            )
+            if result.success:
+                logger.info(f"✅ 多头分析师反思完成")
+                logger.debug(result.reflection_content)
+        
+            # 2. 反思空头分析师的发言
+            logger.info("🐻 反思空头分析师的发言...")
+            bear_opinions = [entry['content'] for entry in debate_history if entry['role'] == '空头']
+            result = self.bear_reflector.reflect_on_decision(
+                ReflectionData(
+                    situation=context,
+                    analysis_opinion="\n".join(bear_opinions),
+                    days_past=days_ago,
+                    return_loss_percentage=actual_return,
+                    decision_date=historical_date
+                )
+            )
+            if result.success:
+                logger.info("✅ 空头分析师反思完成")
+                logger.debug(result.reflection_content)
+            
+            # 3. 反思决策分析师的总结
+            logger.info("👨‍⚖️反思决策分析师的总结...")
+            result = self.decision_reflector.reflect_on_decision(
+                ReflectionData(
+                    situation=context,
+                    analysis_opinion=self.debate_result["summary"],
+                    days_past=days_ago,
+                    return_loss_percentage=actual_return,
+                    decision_date=historical_date
+                )
+            )
+            if result.success:
+                logger.info("✅ 决策分析师反思完成")
+                logger.debug(result.reflection_content)
+            
+        except Exception as e:
+            logger.error(f"反思过程中发生错误: {e}")
+            logger.debug(traceback.format_exc())
+    
+    def save_debate_records(self):
+        """
+        保存当天的辩论记录和报告到文件
+        
+        Args:
+            symbol: 分析标的
+            summary: 总结内容
+        """
+        decision_date = datetime.now()
+            
+        # 创建保存目录
+        date_str = decision_date.strftime('%Y-%m-%d')
+        save_dir = Path(f"{self.record_folder}/{date_str}")
+        save_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 构建完整的记录数据
+        record_data = {
+            "debate_result": self.debate_result,
+            "reports": {
+                "market_research_report": self.market_research_report,
+                "sentiment_report": self.sentiment_report,
+                "news_report": self.news_report,
+                "fundamentals_report": self.fundamentals_report,
+            }
+        }
+        
+        # 保存到JSON文件
+        symbol_clean = self.symbol.replace("/", "_").replace("\\", "_")
+        record_file = save_dir / f"{symbol_clean}_debate_record.json"
+        
+        try:
+            with open(record_file, 'w', encoding='utf-8') as f:
+                json.dump(record_data, f, ensure_ascii=False, indent=4)
+            
+            logger.info(f"📝 辩论记录已保存到: {record_file}")
+            
+        except Exception as e:
+            logger.error(f"保存辩论记录时发生错误: {e}")
+            logger.debug(traceback.format_exc())
+    
+    def load_debate_records(self, date: datetime) -> Optional[DebateRecord]:
+        """
+        从文件加载指定日期的辩论记录
+        
+        Args:
+            symbol: 分析标的
+            target_date: 目标日期
+            
+        Returns:
+            辩论记录数据，如果文件不存在返回None
+        """
+        date_str = date.strftime('%Y-%m-%d')
+        symbol_clean = self.symbol.replace("/", "_").replace("\\", "_")
+        record_file = Path(f"{self.record_folder}/{date_str}/{symbol_clean}_debate_record.json")
+        
+        if not record_file.exists():
+            logger.warning(f"辩论记录文件不存在: {record_file}")
+            return None
+        
+        try:
+            with open(record_file, 'r', encoding='utf-8') as f:
+                record_data = json.load(f)
+            
+            logger.info(f"📂 已加载辩论记录: {record_file}")
+            return record_data
+            
+        except Exception as e:
+            logger.error(f"加载辩论记录时发生错误: {e}")
+            logger.debug(traceback.format_exc())
+            return None
