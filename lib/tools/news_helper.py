@@ -2,7 +2,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from textwrap import dedent
 from typing import List
-from lib.adapter.llm import get_llm_direct_ask
+from lib.adapter.llm import get_llm, get_llm_direct_ask
+from lib.adapter.llm.interface import LlmAbstract
 from lib.modules import get_agent
 from lib.tools.cache_decorator import use_cache
 from lib.tools.information_search import unified_search
@@ -57,9 +58,10 @@ def cache_key_generator(kwargs: dict, *args) -> str:
     
 @dataclass
 class NewsHelper:
-    llm_provider: str = "paoluz"
-    model: str = "gpt-4o-mini"
-    temperature: float = 0.2
+    llm: LlmAbstract
+
+    def __init__(self, llm: LlmAbstract = None):
+        self.llm = llm or get_llm("paoluz", "gpt-4o-mini", temperature=0.2)
 
     @use_cache(86400, use_db_cache=True, key_generator=cache_key_generator)
     def get_global_news_report(self, from_time: datetime, end_time: datetime = datetime.now()) -> str:
@@ -83,7 +85,7 @@ class NewsHelper:
         请分析这些新闻对市场的潜在影响，回复请使用中文。
         """)
         
-        agent = get_agent(self.llm_provider, self.model)
+        agent = get_agent(llm = self.llm)
         agent.set_system_prompt(system_prompt)
         
         # 注册统一搜索工具 - 优先使用Google搜索，失败时使用DuckDuckGo
@@ -200,7 +202,8 @@ class NewsHelper:
         system_prompt = CRYPTO_SYSTEM_PROMPT_TEMPLATE.format(coin_name=coin_name)
         news_in_md = self.get_crypto_news(from_time, end_time, platforms)
         ask_llm = get_llm_direct_ask(
-            system_prompt, self.llm_provider, self.model, temperature=self.temperature
+            system_prompt,
+            llm = self.llm,
         )
         return ask_llm(news_in_md)
 
@@ -245,9 +248,7 @@ class NewsHelper:
         )
         ask_llm = get_llm_direct_ask(
             system_prompt, 
-            self.llm_provider, 
-            self.model, 
-            temperature=self.temperature
+            llm = self.llm
         )
         return ask_llm(news_in_md)
 

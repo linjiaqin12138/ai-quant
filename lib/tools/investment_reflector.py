@@ -5,29 +5,55 @@
 投资决策反思工具
 基于向量数据库的智能投资决策反思分析工具，支持多时间尺度的决策复盘和经验总结
 """
-
-import hashlib
-import json
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass, field
 from textwrap import dedent
 import traceback
 
+from lib.adapter.llm import get_llm
+from lib.adapter.llm.interface import LlmAbstract
 from lib.logger import logger
 from lib.modules.agent import get_agent
 from lib.adapter.vector_db import (
     VectorDatabaseAbstract,
     VectorRecord,
-    create_chromadb_database,
-    create_pinecone_database,
-    get_default_chromadb_config,
-    get_default_pinecone_config,
     create_default_vector_db
 )
 from lib.adapter.embedding import PaoluzEmbedding
 from lib.utils.string import random_id
 
+SYS_PROMPT = """
+你是一名资深金融分析师，负责回顾交易决策/分析，并提供全面、逐步的分析。
+你的目标是对投资决策给出详细见解，并突出改进机会，严格遵循以下指南：
+
+## 推理分析：
+对每个交易决策，判断其正确与否。正确的决策会带来收益增加，错误的决策则相反。
+分析每次成功或失误的影响因素。需考虑：
+- 市场情报
+- 技术指标
+- 技术信号
+- 价格走势分析
+- 整体市场数据分析
+- 新闻分析
+- 社交媒体与情绪分析
+- 基本面数据分析
+- 在决策过程中权衡各因素的重要性
+
+## 改进建议：
+对于任何错误的决策，提出修正建议以最大化收益。
+提供详细的改进措施清单，包括具体建议（如在某日期将决策从HOLD改为BUY等）。
+
+## 总结：
+总结从成功与失误中获得的经验教训。
+强调这些经验如何应用于未来的交易场景，并将类似情境联系起来以迁移所学知识。
+
+## 关键信息提炼：
+从总结中提炼出不超过1000个token的简明句子。
+确保该简明句子能抓住经验教训和推理的核心，便于参考。
+
+请严格遵循上述指令，确保输出内容详细、准确且可操作。
+"""
 
 @dataclass
 class ReflectionData:
@@ -73,8 +99,7 @@ class InvestmentReflector:
     
     def __init__(
         self,
-        provider: str = "paoluz",
-        model: str = "deepseek-v3",
+        llm: LlmAbstract,
         vector_db: Optional[VectorDatabaseAbstract] = None,
         embedding_service: Optional[PaoluzEmbedding] = None,
         index_name: str = "reflection-memories",
@@ -84,21 +109,19 @@ class InvestmentReflector:
         初始化投资决策反思工具
         
         Args:
-            provider: LLM提供商，默认paoluz
-            model: 模型名称，默认deepseek-v3
+            llm: LLM实例
             vector_db: 向量数据库实例，如不提供则自动创建
             embedding_service: 嵌入服务实例，如不提供则自动创建
             index_name: 向量数据库索引名称
             embedding_dimension: 嵌入向量维度
         """
-        self.provider = provider
-        self.model = model
+        self.llm = llm
         self.index_name = index_name
         self.embedding_dimension = embedding_dimension
         
         # 初始化Agent
-        self.agent = get_agent(provider, model, temperature=0.3)
-        self.agent.set_system_prompt(self._get_system_prompt())
+        self.agent = get_agent(llm=self.llm)
+        self.agent.set_system_prompt(SYS_PROMPT)
         self.vector_db = vector_db
         self.embedding_service = embedding_service
         # 初始化向量数据库
@@ -112,7 +135,7 @@ class InvestmentReflector:
         # 确保索引存在
         self._ensure_index_exists()
         
-        logger.info(f"InvestmentReflector已初始化，使用模型: {provider}/{model}")
+        logger.info(f"InvestmentReflector已初始化，使用模型: {self.llm.provider}/{self.llm.model}")
 
     def _ensure_index_exists(self):
         """确保向量数据库索引存在"""
@@ -133,40 +156,6 @@ class InvestmentReflector:
         except Exception as e:
             logger.error(f"确保索引存在时发生错误: {e}")
             raise
-    
-    def _get_system_prompt(self) -> str:
-        """获取AI反思分析的系统提示词"""
-        return dedent("""
-            你是一名资深金融分析师，负责回顾交易决策/分析，并提供全面、逐步的分析。
-            你的目标是对投资决策给出详细见解，并突出改进机会，严格遵循以下指南：
-
-            ## 推理分析：
-            对每个交易决策，判断其正确与否。正确的决策会带来收益增加，错误的决策则相反。
-            分析每次成功或失误的影响因素。需考虑：
-            - 市场情报
-            - 技术指标
-            - 技术信号
-            - 价格走势分析
-            - 整体市场数据分析
-            - 新闻分析
-            - 社交媒体与情绪分析
-            - 基本面数据分析
-            - 在决策过程中权衡各因素的重要性
-
-            ## 改进建议：
-            对于任何错误的决策，提出修正建议以最大化收益。
-            提供详细的改进措施清单，包括具体建议（如在某日期将决策从HOLD改为BUY等）。
-
-            ## 总结：
-            总结从成功与失误中获得的经验教训。
-            强调这些经验如何应用于未来的交易场景，并将类似情境联系起来以迁移所学知识。
-
-            ## 关键信息提炼：
-            从总结中提炼出不超过1000个token的简明句子。
-            确保该简明句子能抓住经验教训和推理的核心，便于参考。
-
-            请严格遵循上述指令，确保输出内容详细、准确且可操作。
-        """).strip()
     
     def reflect_on_decision(self, reflection_data: ReflectionData) -> ReflectionResult:
         """
@@ -219,7 +208,7 @@ class InvestmentReflector:
             result_desc = f"{time_scale}产生了{abs(data.return_loss_percentage):.2%}的亏损"
         else:
             result_desc = f"{time_scale}收益为零"
-        
+
         prompt = dedent(f"""
             请对以下交易决策进行深入的反思分析：
 
@@ -269,8 +258,8 @@ class InvestmentReflector:
                 "return_loss_percentage": reflection_data.return_loss_percentage,
                 "created_at": datetime.now().isoformat(),
                 "success": result.success,
-                "provider": self.provider,
-                "model": self.model,
+                "provider": self.llm.provider,
+                "model": self.llm.model,
                 "situation": reflection_data.situation,
                 "analysis_opinion": reflection_data.analysis_opinion,
                 "reflection_content": result.reflection_content  # 将反思内容存储在metadata中

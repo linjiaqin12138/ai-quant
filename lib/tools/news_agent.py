@@ -20,6 +20,7 @@ from lib.tools.information_search import unified_search
 from lib.tools.ashare_stock import get_ashare_stock_info
 from lib.tools.web_page_reader import WebPageReader
 from lib.logger import logger
+from lib.adapter.llm import get_llm, LlmAbstract
 
 # HTML报告模板
 HTML_TEMPLATE = """
@@ -385,7 +386,10 @@ HTML_TEMPLATE = """
         
         // 渲染每个工具的输出内容
         {% for tool_result in tool_results %}
-        document.getElementById('tool-content-{{ loop.index }}').innerHTML = marked.parse(`{{ tool_result.content|replace("`", "\\`") }}`);
+            {% if tool_result.success %}
+                const toolContent{{ loop.index }} = `{{ tool_result.content }}`;
+                document.getElementById('tool-content-{{ loop.index }}').innerHTML = marked.parse(toolContent{{ loop.index }});
+            {% endif %}
         {% endfor %}
     </script>
 </body>
@@ -439,14 +443,14 @@ class NewsAgent:
     
     def __init__(
             self, 
-            provider: str = "paoluz", 
-            model: str = "deepseek-v3",
+            llm: LlmAbstract = None,
             web_page_reader: Optional[WebPageReader] = None
         ):
         """初始化新闻分析器"""
-        self.news_helper = NewsHelper(llm_provider=provider, model=model)
-        self.agent = get_agent(provider, model)
-        self.web_page_reader = web_page_reader or WebPageReader(provider, model)
+        self.llm = llm or get_llm("paoluz", "deepseek-v3", temperature=0.2)
+        self.news_helper = NewsHelper(llm=self.llm)
+        self.agent = get_agent(llm=self.llm)
+        self.web_page_reader = web_page_reader or WebPageReader(llm=self.llm)
         # 记录工具调用结果
         self.tool_results = []
         

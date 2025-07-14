@@ -14,7 +14,7 @@ from typing import Dict, Any, Optional, List, TypedDict
 from datetime import datetime
 from jinja2 import Template
 
-from lib.adapter.llm.interface import LlmAbstract
+from lib.adapter.llm import LlmAbstract, get_llm
 from lib.adapter.vector_db import VectorDatabaseAbstract
 from lib.modules import get_agent
 from lib.tools.common import get_ohlcv_history
@@ -562,13 +562,18 @@ class BullBearResearcher:
     def __init__(
             self,
             symbol: str,
-            provider: str = 'paoluz',
-            model: str = 'deeepseek-v3',
+            llm: LlmAbstract,
             record_folder = 'data/debate_records',
             rounds: int = 1,
             reflect_top_k: int = 3,
             web_page_reader: Optional[WebPageReader] = None,
-            vector_db: Optional[VectorDatabaseAbstract] = None
+            vector_db: Optional[VectorDatabaseAbstract] = None,
+            bull_llm: Optional[LlmAbstract] = None,
+            bear_llm: Optional[LlmAbstract] = None,
+            decision_llm: Optional[LlmAbstract] = None,
+            bull_reflector_llm: Optional[LlmAbstract] = None,
+            bear_reflector_llm: Optional[LlmAbstract] = None,
+            decision_reflector_llm: Optional[LlmAbstract] = None
         ):
 
         """
@@ -576,13 +581,21 @@ class BullBearResearcher:
         
         Args:
             symbol: 股票或资产的符号
+            llm: 默认的LLM对象，当其他LLM参数为None时使用
             record_folder: 记录文件夹路径
             rounds: 辩论轮数 (1-5)
+            reflect_top_k: 反思记录搜索数量 (1-10)
             web_page_reader: 可选的网页阅读器
+            vector_db: 向量数据库
+            bull_llm: 多头分析师使用的LLM，为None时使用默认llm
+            bear_llm: 空头分析师使用的LLM，为None时使用默认llm
+            decision_llm: 决策分析师使用的LLM，为None时使用默认llm
+            bull_reflector_llm: 多头反思器使用的LLM，为None时使用bull_llm或默认llm
+            bear_reflector_llm: 空头反思器使用的LLM，为None时使用bear_llm或默认llm
+            decision_reflector_llm: 决策反思器使用的LLM，为None时使用decision_llm或默认llm
         """
         self.symbol = symbol
-        self.provider = provider
-        self.model = model
+        self.llm = llm or get_llm('paoluz', 'deepseek-v3')
         self.rounds = max(1, min(5, rounds))  # 确保轮数在1-5之间
         self.reflect_top_k = max(1, min(10, reflect_top_k))  # 确保反思记录数量在1-10之间
         self.record_folder = record_folder
@@ -596,36 +609,41 @@ class BullBearResearcher:
             "context": ""
         }
 
-        # 创建两个Agent
-        self.bull_agent = get_agent(provider, model, temperature=0.7)
-        self.bear_agent = get_agent(provider, model, temperature=0.7)
-        self.decision_agent = get_agent(provider, model, temperature=0.7)
-        self.web_page_reader = web_page_reader or WebPageReader(provider=provider, model=model)
+        # 确定每个agent和reflector使用的LLM
+        self.bull_llm = bull_llm or llm
+        self.bear_llm = bear_llm or llm
+        self.decision_llm = decision_llm or llm
+        self.bull_reflector_llm = bull_reflector_llm or self.bull_llm
+        self.bear_reflector_llm = bear_reflector_llm or self.bear_llm
+        self.decision_reflector_llm = decision_reflector_llm or self.decision_llm
+
+        # 创建三个Agent，使用对应的LLM
+        self.bull_agent = get_agent(llm=self.bull_llm)
+        self.bear_agent = get_agent(llm=self.bear_llm)
+        self.decision_agent = get_agent(llm=self.decision_llm)
+        self.web_page_reader = web_page_reader or WebPageReader(llm=llm)
         
-        # 待添加
+        # 添加市场研究报告、情绪报告、新闻报告和基本面报告
         self.market_research_report = ""
         self.sentiment_report = ""
         self.news_report = ""
         self.fundamentals_report = ""
 
-        # 创建三个反思器，分别对应三个agent
+        # 创建三个反思器，分别对应三个agent，使用对应的LLM
         self.bull_reflector = InvestmentReflector(
-            provider=provider,
-            model=model,
+            llm=self.bull_reflector_llm,
             index_name="bull-agent-reflections",
             embedding_dimension=1536,
             vector_db=vector_db
         )
         self.bear_reflector = InvestmentReflector(
-            provider=provider,
-            model=model,
+            llm=self.bear_reflector_llm,
             index_name="bear-agent-reflections",
             embedding_dimension=1536,
             vector_db=vector_db
         )
         self.decision_reflector = InvestmentReflector(
-            provider=provider,
-            model=model,
+            llm=self.decision_reflector_llm,
             index_name="decision-agent-reflections",
             embedding_dimension=1536,
             vector_db=vector_db
@@ -918,8 +936,8 @@ class BullBearResearcher:
             actual_rounds=analysis_result["actual_rounds"],
             early_end=analysis_result["early_end"],
             early_end_reason=analysis_result.get('early_end_reason'),
-            provider=self.provider,
-            model=self.model,
+            provider=self.llm.provider,
+            model=self.llm.model,
             analysis_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             market_research_report=self.market_research_report,
             sentiment_report=self.sentiment_report,

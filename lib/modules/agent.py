@@ -2,6 +2,7 @@ import json
 import traceback
 from typing import Optional, List, Dict, Any, Callable, Union
 
+from lib.adapter.llm import get_llm
 from lib.logger import logger
 from lib.adapter.llm.interface import LlmAbstract, extract_function_schema
 
@@ -156,17 +157,18 @@ class Agent:
             self.chat_context = []
 
 
-def get_agent(provider: str, model: str, **params) -> Agent:
+def get_agent(provider: Optional[str] = 'paoluz', model: Optional[str] = 'gpt-4o-mini', llm: Optional[LlmAbstract] = None, **params) -> Agent:
     """创建Agent实例的工厂函数
 
     Args:
-        provider: LLM提供商名称
-        model: 模型名称
+        provider: 可选的LLLM提供商名称
+        model: 可选的模型名称
+        llm: 可选的LLM实例
         **params: 其他参数
 
     Returns:
         Agent实例
     """
-    from lib.adapter.llm import get_llm
-    llm = get_llm(provider, model, **params)
+    if llm is None:
+        llm = get_llm(provider, model, **params)
     return Agent(llm)

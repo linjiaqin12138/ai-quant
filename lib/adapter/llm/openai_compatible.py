@@ -6,7 +6,7 @@ import requests
 from lib.config import API_MAX_RETRY_TIMES
 from lib.logger import logger
 from lib.utils.decorators import with_retry
-from lib.utils.object import pretty_output, remove_none
+from lib.utils.object import remove_none
 from .interface import ChatResponse, debug_req, debug_rsp
 
 
@@ -165,6 +165,5 @@ class OpenAiApiMixin:
             )
 
         raise OpenAiRetryableError(f"{self.model} failed with error: {response.text}")
-
 
 __all__ = ["OpenAiApiMixin", "OpenAiRetryableError"]

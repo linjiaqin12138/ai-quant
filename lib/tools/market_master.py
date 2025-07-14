@@ -17,7 +17,8 @@ from lib.utils.candle_pattern import detect_candle_patterns
 from lib.utils.indicators import (
     calculate_indicators
 )
-from lib.adapter.llm import get_llm_direct_ask
+from lib.adapter.llm import get_llm, get_llm_direct_ask
+from lib.adapter.llm.interface import LlmAbstract
 from .news_helper import NewsHelper
 from .ashare_stock import get_ashare_stock_info
 
@@ -507,6 +508,7 @@ class MarketMaster:
 
     def __init__(
         self,
+        llm: LlmAbstract = None,
         risk_prefer: str = "风险厌恶型",
         strategy_prefer: str = "中长期投资",
         use_indicators: SupportIndicators = [
@@ -519,23 +521,18 @@ class MarketMaster:
         ],
         detect_ohlcv_pattern: bool = True,
         use_crypto_future_info: bool = True,
-        llm_provider: str = "paoluz",
-        model: str = "deepseek-v3",
-        temperature: float = 0.2,
         news_helper: NewsHelper = None,
         msg_logger: Optional[NotificationLogger] = None,
     ):
+        self.llm = llm or get_llm("paoluz", "deepseek-v3", temperature=0.2)
         self.risk_prefer = risk_prefer
         self.strategy_prefer = strategy_prefer
         self.use_indicators = use_indicators
         self.detect_ohlcv_pattern = detect_ohlcv_pattern
         self.use_crypto_future_info = use_crypto_future_info
-        self.llm_provider = llm_provider
-        self.model = model
-        self.temperature = temperature
         self.msg_logger = msg_logger
         self.binance_exchange = BinanceExchange(future_mode=True)
-        self.news_helper = news_helper or NewsHelper()
+        self.news_helper = news_helper or NewsHelper(llm=self.llm)
 
     def give_trade_adevice(self, ctx: TradeContext) -> AgentAdvice:
         return (
@@ -563,25 +560,25 @@ class MarketMaster:
             format_binance_future_info(
                 global_long_short_account=self.binance_exchange.get_u_base_global_long_short_account_ratio(
                     future_symbol, "15m", hours_ago(1)
-                )[
+                )(
                     -1
-                ][
+                )(
                     "longShortRatio"
-                ],
+                ),
                 top_long_short_account=self.binance_exchange.get_u_base_top_long_short_account_ratio(
                     future_symbol, "15m", hours_ago(1)
-                )[
+                )(
                     -1
-                ][
+                )(
                     "longShortRatio"
-                ],
+                ),
                 top_long_short_amount=self.binance_exchange.get_u_base_top_long_short_ratio(
                     future_symbol, "15m", hours_ago(1)
-                )[
+                )(
                     -1
-                ][
+                )(
                     "longShortRatio"
-                ],
+                ),
                 future_rate=self.binance_exchange.get_latest_futures_price_info(
                     future_symbol
                 )["lastFundingRate"],
@@ -608,11 +605,10 @@ class MarketMaster:
         )
         if self.msg_logger:
             self.msg_logger.msg(user_prompt)
+        
         llm_ask = get_llm_direct_ask(
             system_prompt,
-            self.llm_provider,
-            self.model,
-            temperature=self.temperature,
+            llm = self.llm,
             response_format='json_object'
         )
 
@@ -663,11 +659,10 @@ class MarketMaster:
         )
         if self.msg_logger:
             self.msg_logger.msg(user_prompt)
+        
         llm_ask = get_llm_direct_ask(
             system_prompt,
-            self.llm_provider,
-            self.model,
-            temperature=self.temperature,
+            llm = self.llm,
             response_format='json_object'
         )
 

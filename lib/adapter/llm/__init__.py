@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, Optional
 from .baichuan import BaiChuan
 from .g4f import G4f
 from .paoluz import PaoluzAgent
@@ -23,13 +23,20 @@ def get_llm(provider: str, model: str, **params) -> LlmAbstract:
 
 
 def get_llm_direct_ask(
-    system_prompt: str, provider: str, model: str, **params
+    system_prompt: Optional[str] = None, 
+    provider: Optional[str] = 'paoluz', 
+    model: Optional[str] = 'gpt-4o-mini', 
+    llm: Optional[LlmAbstract] = None,
+    **params
 ) -> Callable[[str], str]:
-    llm = get_llm(provider, model, **params)
-
+    llm = llm or get_llm(provider, model, **params)
+    context = []
+    if system_prompt:
+        context.append({"role": "system", "content": system_prompt})
+    
     return lambda question: llm.chat(
+        context + 
         [
-            {"role": "system", "content": system_prompt},
             {"role": "user", "content": question},
         ],
         response_format=params.get("response_format", None),
@@ -44,5 +51,5 @@ __all__ = [
     "BaiChuan",
     "PaoluzAgent",
     "G4f",
-    "SiliconFlow",
+    "OpenAICompatible",
 ]

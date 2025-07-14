@@ -6,7 +6,8 @@ JSON修复工具
 from typing import Optional, Union
 from lib.logger import logger
 from lib.utils.string import extract_json_string
-from lib.adapter.llm import get_llm_direct_ask
+from lib.adapter.llm import get_llm, get_llm_direct_ask
+from lib.adapter.llm.interface import LlmAbstract
 
 SYS_PROMPT = """
 你是一个专业的JSON修复专家。你的任务是修复用户提供的不完整或有问题的JSON字符串。
@@ -40,17 +41,19 @@ SYS_PROMPT = """
 class JsonFixer:
     """JSON修复器，使用大模型修复有问题的JSON字符串"""
     
-    def __init__(self, provider: str = 'paoluz', model: str = 'gpt-4o-mini'):
+    def __init__(self, llm: LlmAbstract = None):
         """
         初始化JSON修复器
         
         Args:
-            provider: LLM提供商
-            model: 使用的模型
+            llm: LLM实例
         """
-        self.provider = provider
-        self.model = model
-        self._json_fixer = get_llm_direct_ask(SYS_PROMPT, provider=provider, model=model, response_format="json_object")
+        llm or get_llm('paoluz', 'gpt-4o-mini', temperature=0.2)
+        self._json_fixer = get_llm_direct_ask(
+            SYS_PROMPT, 
+            llm = llm or get_llm('paoluz', 'gpt-4o-mini', temperature=0.2),
+            response_format="json_object"
+        )
 
     def fix(self, broken_json: str) -> Optional[Union[dict, list]]:
         """

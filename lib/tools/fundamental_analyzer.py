@@ -13,6 +13,7 @@ import traceback
 
 from jinja2 import Template
 from lib.adapter.apis import read_web_page_by_jina
+from lib.adapter.llm.interface import LlmAbstract
 from lib.modules import get_agent
 from lib.tools.information_search import unified_search
 
@@ -293,18 +294,19 @@ FUNDAMENTAL_ANALYZER_SYSTEM_PROMPT = """你是一个专业的基本面分析师�
 class FundamentalAnalyzer:
     """上市公司基本面数据分析器"""
     
-    def __init__(self, provider: str = "paoluz", model: str = "deepseek-v3"):
+    def __init__(self, llm: LlmAbstract):
         """
         初始化基本面分析器
         
         Args:
-            provider: LLM提供商
-            model: 使用的模型
+            llm: LLM实例
         """
-        self.provider = provider
-        self.model = model
-    
-    def create_fundamental_agent(self, stock_info: dict, stock_code: str = ""):
+        self.agent = get_agent(llm = llm)
+        self.agent.register_tool(unified_search)
+        self.agent.register_tool(read_web_page_by_jina)
+        logger.info(f"已注册工具: {list(self.agent.tools.keys())}")
+
+    def _init_fundamental_agent_context(self, stock_info: dict, stock_code: str = ""):
         """
         创建基本面数据分析Agent
         
@@ -316,7 +318,6 @@ class FundamentalAnalyzer:
             配置好的Agent实例
         """
         # 创建Agent实例
-        agent = get_agent(self.provider, self.model)
         company_name = stock_info.get("stock_name", "未知公司")
         # 设置系统提示
         system_prompt = FUNDAMENTAL_ANALYZER_SYSTEM_PROMPT.format(
@@ -324,24 +325,17 @@ class FundamentalAnalyzer:
             stock_code=stock_code,
             business=stock_info.get("stock_business", "未知行业")
         )
-        agent.set_system_prompt(system_prompt)
+        self.agent.set_system_prompt(system_prompt)
         # 调用工具获取financial_data和股东变动数据，直接喂给大模型
         financial_data = get_comprehensive_financial_data(stock_code)
         share_holder_change_data = get_shareholder_changes_data(stock_code)
-        agent.chat_context.append({
+        self.agent.chat_context.append({
             "role": "user",
             "content": f"财务数据（来源akshare）: {json.dumps(financial_data, indent=2, ensure_ascii=False)}"
                        f"股东变动数据（来源akshare）: {json.dumps(share_holder_change_data, indent=2, ensure_ascii=False)}"
         })
-        agent.register_tool(unified_search)
-        agent.register_tool(read_web_page_by_jina)
-        
-        logger.info(f"✅ {company_name}基本面数据分析Agent创建成功")
-        logger.info(f"已注册工具: {list(agent.llm.tools.keys())}")
-        
-        return agent
     
-    def generate_analysis_prompt(self, company_name: str, stock_code: str) -> str:
+    def _generate_analysis_prompt(self, company_name: str, stock_code: str) -> str:
         """
         生成基本面分析提示
         
@@ -533,14 +527,14 @@ class FundamentalAnalyzer:
             logger.info(f"开始分析{company_name}（{symbol}）的基本面数据")
             
             # 创建Agent
-            agent = self.create_fundamental_agent(result['stock_info'], symbol)
+            self._init_fundamental_agent_context(result['stock_info'], symbol)
             
             # 生成分析提示
-            analysis_prompt = self.generate_analysis_prompt(company_name, symbol)
+            analysis_prompt = self._generate_analysis_prompt(company_name, symbol)
             
             # 执行分析
             logger.info("正在使用AI Agent分析基本面数据...")
-            response = agent.ask(analysis_prompt, tool_use=True)
+            response = self.agent.ask(analysis_prompt, tool_use=True)
             
             result["success"] = True
             result["analysis_report"] = response
@@ -584,7 +578,7 @@ class FundamentalAnalyzer:
         )
         
         return html_content
-    
+
     def save_html_report(self, analysis_result: Dict[str, Any], save_folder_path: Optional[str] = None) -> Optional[str]:
         """
         保存HTML基本面分析报告到文件

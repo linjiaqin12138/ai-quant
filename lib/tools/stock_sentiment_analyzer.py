@@ -12,7 +12,8 @@ from typing import List, Dict, Any, Optional, Tuple
 from textwrap import dedent
 
 from jinja2 import Template
-from lib.adapter.llm import get_llm_direct_ask
+from lib.adapter.llm import get_llm, get_llm_direct_ask
+from lib.adapter.llm.interface import LlmAbstract
 from lib.utils.string import has_json_features
 from lib.tools.json_fixer import JsonFixer
 from lib.tools.web_page_reader import WebPageReader
@@ -373,30 +374,29 @@ class StockSentimentAnalyzer:
     
     def __init__(
             self, 
-            provider: str = "paoluz",
-            model: str = "deepseek-v3",
+            llm: LlmAbstract = None,
             web_page_reader: Optional[WebPageReader] = None,
             json_fixer: Optional[JsonFixer] = None
         ):
         """初始化分析器"""
+        self.llm = llm or get_llm("paoluz", "deepseek-v3", temperature=0.2)
+        
         # 创建评论提取工具
         self.comment_extractor = get_llm_direct_ask(
             system_prompt=COMMENT_EXTRACTOR_SYS_PROMPT_TEMPLATE.format(curr_time_str=datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
-            provider=provider,
-            model=model,
+            llm = self.llm,
             response_format="json_object"
         )
         
         # 创建情绪分析工具
         self.sentiment_analyzer = get_llm_direct_ask(
             system_prompt=SENTIMENT_ANALYZER_SYS_PROMPT_TEMPLATE,
-            provider=provider,
-            model=model
+            llm = self.llm
         )
 
-        self.web_page_reader = web_page_reader or WebPageReader(provider=provider, model=model)
+        self.web_page_reader = web_page_reader or WebPageReader(llm=self.llm)
         # Fix Json Tool
-        self.fix_json_tool = json_fixer.fix if json_fixer else JsonFixer(provider=provider, model=model).fix
+        self.fix_json_tool = json_fixer.fix if json_fixer else JsonFixer(llm=self.llm).fix
     
     def _validate_comment_schema(self, comment: Any) -> bool:
         """

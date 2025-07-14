@@ -5,16 +5,13 @@
 """
 
 import json
-import os
 from datetime import datetime
-from typing import List, Dict, Any, Optional, Annotated
-from dataclasses import dataclass
-from textwrap import dedent
+from typing import List, Dict, Any, Annotated
 import traceback
 
 from jinja2 import Template
 from lib.model import Ohlcv
-from lib.modules.trade import ashare, crypto
+from lib.tools.common import get_ohlcv_history
 from lib.tools.ashare_stock import get_ashare_stock_info
 from lib.tools.market_master import (
     format_ohlcv_list, 
@@ -24,6 +21,8 @@ from lib.tools.market_master import (
 from lib.utils.indicators import calculate_indicators
 from lib.modules import get_agent
 from lib.logger import logger
+from lib.adapter.llm import get_llm
+from lib.adapter.llm.interface import LlmAbstract
 
 # HTML报告模板
 HTML_TEMPLATE = """
@@ -548,22 +547,20 @@ MARKET_ANALYST_PROMPT = """
 class MarketAnalyst:
     """智能市场分析师"""
     
-    def __init__(self, provider: str = "paoluz", model: str = "deepseek-v3", ohlcv_days: int = 50):
+    def __init__(self, llm: LlmAbstract = None, ohlcv_days: int = 50):
         """
         初始化市场分析师
         
         Args:
-            provider: LLM提供商
-            model: 使用的模型
+            llm: LLM实例
             ohlcv_days: 获取OHLCV数据的天数
         """
-        self.provider = provider
-        self.model = model
+        self.llm = llm or get_llm("paoluz", "deepseek-v3", temperature=0.2)
         self.ohlcv_days = ohlcv_days
         self.current_symbol = ""
         
         # 创建Agent
-        self.agent = get_agent(provider, model, temperature=0.2)
+        self.agent = get_agent(llm=self.llm)
         self.agent.register_tool(self.get_ohlcv_data)
         self.agent.register_tool(self.calculate_technical_indicators)
         self.agent.register_tool(self.detect_candlestick_patterns)
@@ -576,12 +573,7 @@ class MarketAnalyst:
 
     def _get_ohlcv_history(self) -> List[Ohlcv]:
         """获取OHLCV历史数据"""
-        if self._is_crypto:
-            history = crypto.get_ohlcv_history(self.current_symbol, "1d", limit=self.ohlcv_days)
-        else:
-            history = ashare.get_ohlcv_history(self.current_symbol, "1d", limit=self.ohlcv_days)
-        
-        return history.data[-self.ohlcv_days:]
+        return get_ohlcv_history(self.current_symbol, frame="1d", limit=self.ohlcv_days)
     
     def _get_symbol_basic_info(self) -> Dict[str, Any]:
         if self._is_crypto:

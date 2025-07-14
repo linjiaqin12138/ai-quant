@@ -21,7 +21,8 @@ from lib.tools.cache_decorator import use_cache
 from lib.utils.decorators import with_retry
 from lib.utils.string import extract_json_string
 
-from lib.adapter.llm import get_llm_direct_ask
+from lib.adapter.llm import get_llm, get_llm_direct_ask
+from lib.adapter.llm.interface import LlmAbstract
 from lib.logger import logger
 
 SYS_PROMPT = """你是一个专业的网页内容分析师，擅长从网页内容中提取用户需要的特定信息。
@@ -53,21 +54,17 @@ def cache_key_generator(kwargs, *args) -> str:
 class WebPageReader:
     """网页内容读取和智能提取器"""
     
-    def __init__(self, provider: str = "paoluz", model: str = "deepseek-v3"):
+    def __init__(self, llm: LlmAbstract = None):
         """
         初始化网页阅读器
         
         Args:
-            provider: LLM提供商
-            model: 使用的模型
+            llm: LLM实例
         """
-        self.provider = provider
-        self.model = model
+        self.llm = llm or get_llm("paoluz", "deepseek-v3", temperature=0.1)
         self.llm_ask = get_llm_direct_ask(
             SYS_PROMPT, 
-            provider, 
-            model, 
-            temperature=0.1,
+            llm=self.llm,
             response_format='json_object'
         )
 
