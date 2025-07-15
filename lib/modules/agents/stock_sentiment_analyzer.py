@@ -16,7 +16,7 @@ from lib.adapter.llm import get_llm, get_llm_direct_ask
 from lib.adapter.llm.interface import LlmAbstract
 from lib.utils.string import has_json_features
 from lib.tools.json_fixer import JsonFixer
-from lib.tools.web_page_reader import WebPageReader
+from lib.modules.agents.web_page_reader import WebPageReader
 from lib.tools.ashare_stock import get_ashare_stock_info, determine_exchange
 from lib.logger import logger
 from lib.utils.string import extract_json_string

@@ -19,7 +19,7 @@ from lib.adapter.vector_db import VectorDatabaseAbstract
 from lib.modules import get_agent
 from lib.tools.common import get_ohlcv_history
 from lib.tools.information_search import unified_search
-from lib.tools.web_page_reader import WebPageReader
+from lib.modules.agents.web_page_reader import WebPageReader
 from lib.tools.investment_reflector import InvestmentReflector, ReflectionData, ReflectionResult
 from lib.logger import logger
 

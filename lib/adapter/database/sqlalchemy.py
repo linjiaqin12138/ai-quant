@@ -1,6 +1,7 @@
 from typing import Dict
 from sqlalchemy import MetaData, create_engine
 from sqlalchemy import Table, Text, Column, Enum, String, DateTime, DECIMAL, BigInteger
+from sqlalchemy.dialects.mysql import MEDIUMTEXT
 
 from lib.model import CryptoHistoryFrame
 from lib.config import get_database_uri, get_create_table
@@ -51,7 +52,7 @@ events = Table(
     "events",
     metadata_obj,
     Column("key", String(512), primary_key=True),
-    Column("context", Text),
+    Column("context", Text if get_database_uri().startswith("sqlite") else MEDIUMTEXT(), nullable=True),
     Column("type", Enum("string", "json"), default="string"),
 )
 

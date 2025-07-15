@@ -18,7 +18,7 @@ from lib.utils.news import render_news_in_markdown_group_by_platform
 from lib.tools.news_helper import NewsHelper
 from lib.tools.information_search import unified_search
 from lib.tools.ashare_stock import get_ashare_stock_info
-from lib.tools.web_page_reader import WebPageReader
+from lib.modules.agents.web_page_reader import WebPageReader
 from lib.logger import logger
 from lib.adapter.llm import get_llm, LlmAbstract
 

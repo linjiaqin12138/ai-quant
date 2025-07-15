@@ -87,6 +87,9 @@ class PaoluzAgent(OpenAiApiMixin, LlmAbstract):
         )
         return rsp.json().get("data")
 
+    def _is_support_json_rsp(self):
+        return True
+    
     def chat(
         self, 
         messages: List[Dict[str, Any]], 

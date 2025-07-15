@@ -15,6 +15,7 @@ from jinja2 import Template
 from lib.adapter.apis import read_web_page_by_jina
 from lib.adapter.llm.interface import LlmAbstract
 from lib.modules import get_agent
+from lib.tools.cache_decorator import use_cache
 from lib.tools.information_search import unified_search
 
 from lib.tools.ashare_stock import (
@@ -503,6 +504,7 @@ class FundamentalAnalyzer:
         6. 如果某些信息无法获取/未提供，就不需要在报告中写出，也不要在报告中指出未提供
         """)
     
+    @use_cache(ttl_seconds=86400 * 7, use_db_cache=True)
     def analyze_fundamental_data(self, symbol: str = "") -> Dict[str, Any]:
         """
         分析指定公司的基本面数据
@@ -620,15 +622,3 @@ class FundamentalAnalyzer:
         except Exception as e:
             logger.error(f"保存HTML报告失败: {str(e)}")
             return None
-
-        """
-        保存基本面分析报告到文件（HTML格式）
-        
-        Args:
-            analysis_result: 分析结果
-            save_folder_path: 保存文件夹路径，如果为None则使用当前目录
-            
-        Returns:
-            报告文件路径，如果保存失败返回None
-        """
-        return self.save_html_report(analysis_result, save_folder_path)
