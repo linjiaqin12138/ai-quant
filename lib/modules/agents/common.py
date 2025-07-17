@@ -1,3 +1,4 @@
+from typing import Any, Dict, Optional, TypedDict
 from lib.modules.trade.ashare import ashare
 from lib.modules.trade.crypto import crypto
 
@@ -9,3 +10,4 @@ def get_ohlcv_history(symbol: str, limit=int, frame = '1d'):
         return crypto.get_ohlcv_history(symbol, frame, limit=limit).data
     else:
         return ashare.get_ohlcv_history(symbol, frame, limit=limit).data
+    

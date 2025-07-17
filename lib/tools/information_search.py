@@ -1,5 +1,9 @@
 from datetime import datetime
-from typing import List
+import json
+from typing import Any, Dict, List
+import re
+from datetime import datetime
+
 import httplib2
 
 from duckduckgo_search import DDGS
@@ -14,20 +18,8 @@ from lib.utils.string import hash_str
 from lib.utils.decorators import with_retry
 from lib.logger import logger
 
-def duckduckgo_search(query: str, max_results: int = 10, region: str = "us-en", time_limit: str = None) -> List[NewsInfo]:
-    """
-    使用DuckDuckGo搜索新闻信息
-    
-    Args:
-        query: 搜索关键词
-        max_results: 最大结果数量，默认10
-        region: 搜索区域，默认us-en
-        time_limit: 时间限制，默认w(一周)，可选值: d(一天), w(一周), m(一个月), y(一年)
-    
-    Returns:
-        NewsInfo对象数组
-    """
-    
+def ddg_search_base(query: str, max_results: int = 10, region: str = "us-en", time_limit: str = None) -> Dict[str, Any]:
+    """重构临时函数"""
     # 获取代理设置
     proxy = get_http_proxy()
     ddgs_kwargs = {}
@@ -46,50 +38,57 @@ def duckduckgo_search(query: str, max_results: int = 10, region: str = "us-en", 
             max_results=max_results
         ))
         logger.debug("DuckDuckGo搜索结果数量: %d", len(results))
+        return results
 
-        # 将结果转换为NewsInfo对象数组
-        news_infos = []
-        for result in results:
-            # 生成唯一的news_id
-            news_id = hash_str(f"{result.get('url', '')}{result.get('title', '')}")
-
-            # 解析时间戳
-            date_str = result.get('date', '')
-            timestamp = None
-            if date_str:
-                # 尝试解析日期字符串
-                timestamp = parse_datetime_string(date_str)
-            
-            # 如果解析失败或没有日期，使用当前时间
-            if timestamp is None:
-                timestamp = datetime.now()
-            
-            # 创建NewsInfo对象
-            news_info = NewsInfo(
-                news_id=news_id,
-                title=result.get('title', ''),
-                timestamp=timestamp,
-                url=result.get('url', ''),
-                platform="ddgo",
-                description=result.get('body', '')
-            )
-            news_infos.append(news_info)
-        
-        return news_infos
-
-def google_search(query: str, max_results: int = 10, region: str = "us-en", time_limit: str =  None) -> List[NewsInfo]:
+def duckduckgo_search(query: str, max_results: int = 10, region: str = "us-en", time_limit: str = None) -> List[NewsInfo]:
     """
-    使用Google Custom Search API搜索新闻信息
+    使用DuckDuckGo搜索新闻信息
     
     Args:
         query: 搜索关键词
         max_results: 最大结果数量，默认10
-        region: 搜索区域，默认us-en (格式如us-en, cn-zh等)
+        region: 搜索区域，默认us-en
         time_limit: 时间限制，默认w(一周)，可选值: d(一天), w(一周), m(一个月), y(一年)
     
     Returns:
         NewsInfo对象数组
     """
+    
+    # 获取代理设置
+    results = ddg_search_base(query, max_results, region, time_limit)
+    # 将结果转换为NewsInfo对象数组
+    news_infos = []
+    for result in results:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        # 生成唯一的news_id
+        news_id = hash_str(f"{result.get('url', '')}{result.get('title', '')}")
+
+        # 解析时间戳
+        date_str = result.get('date', '')
+        timestamp = None
+        if date_str:
+            # 尝试解析日期字符串
+            timestamp = parse_datetime_string(date_str)
+        
+        # 如果解析失败或没有日期，使用当前时间
+        if timestamp is None:
+            timestamp = datetime.now()
+        
+        # 创建NewsInfo对象
+        news_info = NewsInfo(
+            news_id=news_id,
+            title=result.get('title', ''),
+            timestamp=timestamp,
+            url=result.get('url', ''),
+            platform="ddgo",
+            description=result.get('body', '')
+        )
+        news_infos.append(news_info)
+    
+    return news_infos
+
+def google_search_base(query: str, max_results: int = 10, region: str = "us-en", time_limit: str =  None) -> Dict[str, Any]:
+    """临时重构时抽象出来的公共函数"""
     api_key = get_google_api_key()
     cse_id = get_google_cse_id()
     
@@ -159,34 +158,47 @@ def google_search(query: str, max_results: int = 10, region: str = "us-en", time
             # 如果只有语言代码
             search_params['hl'] = region.lower()
             search_params['lr'] = f'lang_{region.lower()}'
+
+    return service.cse().list(**search_params).execute()
+    
+
+def google_search(query: str, max_results: int = 10, region: str = "us-en", time_limit: str =  None) -> List[NewsInfo]:
+    """
+    使用Google Custom Search API搜索新闻信息
+    
+    Args:
+        query: 搜索关键词
+        max_results: 最大结果数量，默认10
+        region: 搜索区域，默认us-en (格式如us-en, cn-zh等)
+        time_limit: 时间限制，默认w(一周)，可选值: d(一天), w(一周), m(一个月), y(一年)
+    
+    Returns:
+        NewsInfo对象数组
+    """
     
     # 执行搜索
     try:
-        result = service.cse().list(**search_params).execute()
-        
-        # 将结果转换为NewsInfo对象数组
+        result = google_search_base(query, max_results, region, time_limit)
         news_infos = []
         items = result.get('items', [])
         logger.debug(f"Google搜索结果: {result}")
         logger.debug(f"Google搜索结果数量: {len(items)}")   
         for item in items:
-            # 生成唯一的news_id
             news_id = hash_str(f"{item.get('link', '')}{item.get('title', '')}")
-            
-            # 解析时间戳
-            timestamp = datetime.now()  # Google搜索结果通常没有精确时间戳
-            
-            # 创建NewsInfo对象
+            snippet = item.get('snippet', '')
+            timestamp = parse_datetime_string(snippet)
+            if not timestamp:
+                logger.warning(f"无法获取新闻时间戳: {snippet}")
+                continue
             news_info = NewsInfo(
                 news_id=news_id,
                 title=item.get('title', ''),
                 timestamp=timestamp,
                 url=item.get('link', ''),
-                platform="google",
-                description=item.get('snippet', '')
+                platform="google search",
+                description=snippet
             )
             news_infos.append(news_info)
-        
         return news_infos
         
     except HttpError as e:
@@ -204,7 +216,7 @@ def unified_search(query: str, max_results: int = 10, region: str = "zh-cn", tim
         query: 搜索关键词
         max_results: 最大结果数量，默认10
         region: 搜索区域, 如en-us
-        time_limit: 时间限制，默认w(一周)
+        time_limit: 时间限制(d/w/m/y)
     
     Returns:
         NewsInfo对象数组

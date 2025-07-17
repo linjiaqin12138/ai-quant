@@ -17,10 +17,10 @@ from jinja2 import Template
 from lib.adapter.llm import LlmAbstract, get_llm
 from lib.adapter.vector_db import VectorDatabaseAbstract
 from lib.modules import get_agent
-from lib.tools.common import get_ohlcv_history
+from lib.modules.agents.common import get_ohlcv_history
 from lib.tools.information_search import unified_search
 from lib.modules.agents.web_page_reader import WebPageReader
-from lib.tools.investment_reflector import InvestmentReflector, ReflectionData, ReflectionResult
+from lib.modules.agents.investment_reflector import InvestmentReflector, ReflectionData, ReflectionResult
 from lib.logger import logger
 
 

@@ -1,6 +1,6 @@
-import traceback
+
 import akshare as ak
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Literal, TypedDict
 import pandas as pd
 from datetime import datetime, timedelta
 
@@ -10,6 +10,13 @@ from lib.tools.cache_decorator import use_cache
 from lib.logger import create_logger
 
 logger = create_logger('lib.tools.ashare_stock')
+
+AShareStockInfo = TypedDict('AShareStockInfo', {
+    'stock_type': Literal["ETF", "股票"],
+    'stock_name': str,
+    'stock_business': str,
+    'exchange': str,
+})
 
 def determine_exchange(stock_symbol: str) -> str:
     """
@@ -52,11 +59,11 @@ def get_fund_list() -> pd.DataFrame:
 
 
 @use_cache(86400 * 30, use_db_cache=True)
-def get_ashare_stock_info(symbol: str) -> dict:
+def get_ashare_stock_info(symbol: str) -> AShareStockInfo:
     """
     获取A股股票或ETF的基本信息，使用二级缓存
     """
-    result = {}
+    result: AShareStockInfo = {}
     if is_etf(symbol):
         df = get_fund_list()  # 使用缓存的基金列表
         result["stock_type"] = "ETF"
@@ -67,6 +74,7 @@ def get_ashare_stock_info(symbol: str) -> dict:
         result["stock_type"] = "股票"
         result["stock_name"] = df["value"].loc[df["item"] == "股票简称"].iloc[0]
         result["stock_business"] = df["value"].loc[df["item"] == "行业"].iloc[0]
+        result["exchange"] = determine_exchange(symbol)
     return result
 
 

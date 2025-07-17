@@ -15,7 +15,7 @@ from jinja2 import Template
 
 from lib.modules import get_agent
 from lib.utils.news import render_news_in_markdown_group_by_platform
-from lib.tools.news_helper import NewsHelper
+from lib.modules.agents.news_helper import NewsSummaryer
 from lib.tools.information_search import unified_search
 from lib.tools.ashare_stock import get_ashare_stock_info
 from lib.modules.agents.web_page_reader import WebPageReader
@@ -448,7 +448,7 @@ class NewsAgent:
         ):
         """初始化新闻分析器"""
         self.llm = llm or get_llm("paoluz", "deepseek-v3", temperature=0.2)
-        self.news_helper = NewsHelper(llm=self.llm)
+        self.news_helper = NewsSummaryer(llm=self.llm)
         self.agent = get_agent(llm=self.llm)
         self.web_page_reader = web_page_reader or WebPageReader(llm=self.llm)
         # 记录工具调用结果
@@ -598,11 +598,11 @@ class NewsAgent:
         from_time_dt = self.parse_time_str(from_time)
         now = datetime.now()
         time_diff = now - from_time_dt
-        if time_diff.days >= 365:
-            time_limit = 'y'
-        elif time_diff.days >= 30:
-            time_limit = 'm'  # month
+        if time_diff.days >= 30:
+            time_limit = 'y'  # month
         elif time_diff.days >= 7:
+            time_limit = 'm'  # week
+        elif time_diff.days >= 1:
             time_limit = 'w'  # week
         else:
             time_limit = 'd'  # day
@@ -627,7 +627,7 @@ class NewsAgent:
         Returns:
             全球新闻和宏观经济信息报告
         """
-        return self.news_helper.get_global_news_report(
+        return self.news_helper.get_daily_global_news_report(
             from_time=self.parse_time_str(from_time)
         )
     

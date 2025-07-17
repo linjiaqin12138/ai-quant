@@ -601,7 +601,7 @@ class TraderAgent:
             反思结果字典，如果没有找到历史记录则返回None
         """
         try:
-            from lib.tools.common import get_ohlcv_history
+            from lib.modules.agents.common import get_ohlcv_history
             from lib.utils.number import change_rate
             
             # 获取历史价格数据

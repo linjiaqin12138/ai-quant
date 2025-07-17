@@ -11,9 +11,9 @@ import traceback
 
 from jinja2 import Template
 from lib.model import Ohlcv
-from lib.tools.common import get_ohlcv_history
+from lib.modules.agents.common import get_ohlcv_history
 from lib.tools.ashare_stock import get_ashare_stock_info
-from lib.tools.market_master import (
+from lib.modules.agents.market_master import (
     format_ohlcv_list, 
     format_indicators, 
     format_ohlcv_pattern

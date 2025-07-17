@@ -19,8 +19,8 @@ from lib.utils.indicators import (
 )
 from lib.adapter.llm import get_llm, get_llm_direct_ask
 from lib.adapter.llm.interface import LlmAbstract
-from .news_helper import NewsHelper
-from .ashare_stock import get_ashare_stock_info
+from .news_helper import NewsSummaryer
+from lib.tools.ashare_stock import get_ashare_stock_info
 
 CRYPTO_SYSTEM_PROMPT_TEMPLATE = """
 你是一位经验丰富的加密货币交易专家，擅长分析市场数据、技术指标和新闻信息，现在是一个新的交易日，并按照以下过程对{coin_name}进行技术分析
@@ -521,7 +521,7 @@ class MarketMaster:
         ],
         detect_ohlcv_pattern: bool = True,
         use_crypto_future_info: bool = True,
-        news_helper: NewsHelper = None,
+        news_helper: NewsSummaryer = None,
         msg_logger: Optional[NotificationLogger] = None,
     ):
         self.llm = llm or get_llm("paoluz", "deepseek-v3", temperature=0.2)
@@ -532,7 +532,7 @@ class MarketMaster:
         self.use_crypto_future_info = use_crypto_future_info
         self.msg_logger = msg_logger
         self.binance_exchange = BinanceExchange(future_mode=True)
-        self.news_helper = news_helper or NewsHelper(llm=self.llm)
+        self.news_helper = news_helper or NewsSummaryer(llm=self.llm)
 
     def give_trade_adevice(self, ctx: TradeContext) -> AgentAdvice:
         return (
@@ -560,25 +560,13 @@ class MarketMaster:
             format_binance_future_info(
                 global_long_short_account=self.binance_exchange.get_u_base_global_long_short_account_ratio(
                     future_symbol, "15m", hours_ago(1)
-                )(
-                    -1
-                )(
-                    "longShortRatio"
-                ),
+                )[-1]["longShortRatio"],
                 top_long_short_account=self.binance_exchange.get_u_base_top_long_short_account_ratio(
                     future_symbol, "15m", hours_ago(1)
-                )(
-                    -1
-                )(
-                    "longShortRatio"
-                ),
+                )[-1]["longShortRatio"],
                 top_long_short_amount=self.binance_exchange.get_u_base_top_long_short_ratio(
                     future_symbol, "15m", hours_ago(1)
-                )(
-                    -1
-                )(
-                    "longShortRatio"
-                ),
+                )[-1]["longShortRatio"],
                 future_rate=self.binance_exchange.get_latest_futures_price_info(
                     future_symbol
                 )["lastFundingRate"],

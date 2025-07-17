@@ -13,7 +13,7 @@ from lib.utils.news import (
     render_news_in_markdown_group_by_platform,
 )
 from lib.modules.news_proxy import news_proxy
-from .ashare_stock import get_ashare_stock_info, get_stock_news
+from lib.tools.ashare_stock import get_ashare_stock_info, get_stock_news
 
 CRYPTO_SYSTEM_PROMPT_TEMPLATE = """
 你是一位资深的加密货币新闻分析师，擅长总结和分析加密货币新闻。
@@ -57,18 +57,18 @@ def cache_key_generator(kwargs: dict, *args) -> str:
     return f"global_news_report:{date_str}"
     
 @dataclass
-class NewsHelper:
+class NewsSummaryer:
     llm: LlmAbstract
 
     def __init__(self, llm: LlmAbstract = None):
         self.llm = llm or get_llm("paoluz", "gpt-4o-mini", temperature=0.2)
 
     @use_cache(86400, use_db_cache=True, key_generator=cache_key_generator)
-    def get_global_news_report(self, from_time: datetime, end_time: datetime = datetime.now()) -> str:
+    def get_daily_global_news_report(self, from_time: datetime) -> str:
         """
         获取全球新闻和宏观经济信息
         """
-        time_desc = f"从{from_time.strftime('%Y年%m月%d日 %H:%M')}到{end_time.strftime('%Y年%m月%d日 %H:%M')}"
+        time_desc = f"从{from_time.strftime('%Y年%m月%d日 %H:%M')}到现在"
 
         # 统一的系统提示词，支持加密货币和A股市场
         system_prompt = dedent(f"""
@@ -93,35 +93,36 @@ class NewsHelper:
 
         # 构建搜索提示
         prompt = f"""
-        请使用工具搜索以下关键词的最新新闻，获取{time_desc}的信息：
+        请根据{time_desc}的时间范围，智能生成相关的搜索关键词来获取最新的市场新闻。不要只使用下面的示例关键词，而是要根据当前市场热点和时事动态来生成更有针对性的搜索词。
 
-        **全球宏观经济搜索关键词：**
-        1. "global economy macroeconomic indicators inflation central bank policy" (全球经济宏观指标)
-        2. "federal reserve ECB interest rates monetary policy" (央行政策利率)
-        3. "geopolitical events market impact trade war" (地缘政治市场影响)
-        4. "economic data GDP unemployment inflation CPI" (经济数据指标)
+        **搜索策略建议（仅供参考，请根据实际情况调整）：**
         
-        **加密货币市场搜索关键词：**
-        5. "bitcoin cryptocurrency market regulation policy" (比特币加密货币市场)
-        6. "ethereum DeFi blockchain technology adoption" (以太坊区块链技术)
-        7. "crypto exchange regulation institutional investment" (加密货币监管机构投资)
+        **全球宏观经济领域：**
+        - 可以搜索：美联储最新政策、欧央行利率决定、通胀数据CPI、GDP增长等
+        - 根据当前时间节点，关注即将公布的重要经济数据
         
-        **A股和中国市场搜索关键词：**
-        8. "China stock market A-shares policy regulation" (中国股市A股政策)
-        9. "Chinese economy GDP manufacturing PMI data" (中国经济数据)
-        10. "China technology sector semiconductor policy" (中国科技板块政策)
+        **加密货币市场：**
+        - 可以搜索：比特币价格走势、以太坊升级、加密货币监管、机构投资等
+        - 关注最新的监管动态和技术发展
         
-        **全球市场和大宗商品搜索关键词：**
-        11. "US stock market volatility earnings reports" (美股市场波动)
-        12. "oil gold commodity prices inflation hedge" (石油黄金商品价格)
-        13. "global supply chain disruption energy crisis" (全球供应链能源危机)
+        **A股和中国市场：**
+        - 可以搜索：中国股市政策、科技板块、新能源汽车、房地产政策等
+        - 关注政府最新政策和行业发展动态
         
-        搜索时请使用以下参数：
-        - time_limit: "w"/"d"/"m"/"y"（分别代表一周/一天/一个月/一年）
-        - max_results: 8 - 10
-        - region: "zh-cn"
-        
-        搜索完成后，请分析这些新闻信息并参考一下模板提供一份报告：
+        **全球市场和大宗商品：**
+        - 可以搜索：美股财报、石油价格、黄金走势、地缘政治等
+        - 关注主要商品价格和国际形势变化
+
+        **重要要求：**
+        1. 请自主生成8-12个具有时效性和针对性的搜索关键词
+        2. 优先搜索与当前市场热点相关的内容
+        3. 根据初步搜索结果，动态调整后续搜索策略
+        4. 每次搜索使用以下参数：
+           - time_limit: "d" 或 "w"（优先使用"d"获取最新信息）
+           - max_results: 8-10
+           - region: "zh-cn"
+
+        搜索完成后，请分析这些新闻信息并提供一份报告：
         
         ## 📊 市场分析报告
         
@@ -167,7 +168,19 @@ class NewsHelper:
         - **政策会议**：央行会议、重要政策发布时间
         - **财报季**：重要公司财报发布时间
         
-        请确保所有信息都基于搜索到的最新新闻数据，并保持客观和专业的分析态度。如果某个领域的搜索结果较少，请在分析中说明并基于一般市场知识提供补充分析。
+        ### 📚 信息来源
+        本报告中的所有信息均来自以下具体新闻文章（请列出所有引用的具体文章链接）：
+        - [在此列出所有引用的具体新闻文章标题和链接]
+        
+        **关键信息来源标注要求：**
+        1. **必须使用搜索结果中的具体文章URL**，而不是网站首页链接
+        2. **每条重要信息都要用 [文章标题](具体文章URL) 格式标注来源**
+        3. **示例格式**：根据 [美联储宣布维持利率不变，市场预期下次会议或加息](https://www.example.com/fed-rate-decision-2024-07-17) 的报道...
+        4. **如果同一信息有多个来源，选择最权威或最新的文章链接**
+        5. **在信息来源章节中，按类别整理所有引用的文章链接**
+        6. **确保每个链接都是可访问的具体新闻文章页面**
+
+        **如果搜索结果中没有提供具体的文章链接，请在报告中明确说明："部分信息来源无法提供具体链接"**
         """
         
         response = agent.ask(prompt, tool_use=True)
@@ -253,4 +266,4 @@ class NewsHelper:
         return ask_llm(news_in_md)
 
 
-__all__ = ["NewsHelper"]
+__all__ = ["NewsSummaryer"]

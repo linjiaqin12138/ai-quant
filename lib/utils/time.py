@@ -83,6 +83,18 @@ def parse_datetime_string(date_string: str) -> Optional[datetime]:
                 return parser(match)
             except (ValueError, AttributeError):
                 continue
+    
+    # 匹配 '3 days ago', '1 day ago', '1 hour ago', '15 minutes ago' 等
+    match = re.match(r"(\d+)\s+(day|hour|minute)s?\s+ago", date_string, re.IGNORECASE)
+    if match:
+        num = int(match.group(1))
+        unit = match.group(2).lower()
+        if unit == 'day':
+            return days_ago(num)
+        elif unit == 'hour':
+            return hours_ago(num)
+        elif unit == 'minute':
+            return minutes_ago(num)
 
     return None
 

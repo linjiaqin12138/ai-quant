@@ -527,7 +527,7 @@ class StockSentimentAnalyzer:
         return retryable_extract()
     
     @with_retry((LlmReplyInvalid,), LLM_RETRY_TIME)
-    def analyze_sentiment(self, stock_symbol: str, stock_name: str, all_comments: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _analyze_sentiment(self, stock_symbol: str, stock_name: str, all_comments: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         分析市场情绪
         
@@ -681,7 +681,7 @@ class StockSentimentAnalyzer:
                 logger.warning(f"没有评论数据，无法进行情绪分析: {stock_symbol}")
                 return result
             # 5. 分析市场情绪
-            sentiment_result = self.analyze_sentiment(stock_symbol, stock_name, all_comments)
+            sentiment_result = self._analyze_sentiment(stock_symbol, stock_name, all_comments)
             result['analysis_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             result['sentiment_score'] = sentiment_result['score']
             result['sentiment_level'] = sentiment_result['level']

@@ -1,10 +1,23 @@
 import json
 import traceback
-from typing import Optional, List, Dict, Any, Callable, Union
+from typing import Optional, List, Dict, Any, Callable, TypedDict, Union
 
+from lib.utils.function import extract_function_schema
 from lib.adapter.llm import get_llm
 from lib.logger import logger
-from lib.adapter.llm.interface import LlmAbstract, extract_function_schema
+from lib.adapter.llm.interface import LlmAbstract
+import inspect
+
+ToolResult = TypedDict(
+    'ToolResult',
+    {
+        "tool_name": str,
+        "parameters": Dict[str, Any],
+        "success": bool,
+        "content": str,
+        "error_message": Optional[str]
+    }
+)
 
 class Agent:
     def __init__(self, llm: LlmAbstract):
@@ -12,23 +25,40 @@ class Agent:
         self.chat_context = []
         self.tools = {}  # 注册的工具函数
         self.tool_schemas = []  # 工具的schema定义
+        self.tool_call_results: List[ToolResult] = []
 
-    def register_tool(self, func: Callable) -> Dict[str, Any]:
+    def register_tool(self, func: Callable):
         """注册工具函数"""
-        tool_schema = extract_function_schema(func)
+        # 检查函数返回值类型
+        sig = inspect.signature(func)
+        return_annotation = sig.return_annotation
+        
+        if return_annotation != inspect.Signature.empty:
+            if return_annotation not in [str, dict]:
+                logger.warning(f"Tool '{func.__name__}' return type is {return_annotation}, expected str or dict. "
+                              f"The result will be converted to string in execute_tool method.")
+        else:
+            logger.warning(f"Tool '{func.__name__}' has no return type annotation, "
+                          f"please ensure it returns a string or dict, or the result will be converted to string.")
+        
         self.tools[func.__name__] = func
         self.tool_schemas.append({
             "type": "function",
-            "function": tool_schema
+            "function": extract_function_schema(func)
         })
         logger.debug(f"Tool registered: {func.__name__}")
-        return tool_schema
 
     def execute_tool(self, tool_call: Dict[str, Any]) -> str:
         """执行工具调用"""
         function_name = tool_call["function"]["name"]
         arguments = tool_call["function"]["arguments"]
-        
+        tool_call_result: ToolResult = {
+            "tool_name": function_name,
+            "parameters": arguments,
+            "success": False,
+            "content": "",
+            "error_message": None
+        }
         if function_name not in self.tools:
             return f"Error: Tool '{function_name}' not found"
         
@@ -43,13 +73,22 @@ class Agent:
             result = self.tools[function_name](**args)
             
             # 确保返回字符串
-            if isinstance(result, str):
-                return result
-            else:
-                return json.dumps(result, ensure_ascii=False)
+            if not isinstance(result, str):
+                if not isinstance(result, (dict, list)):
+                    logger.warning(f"Tool '{function_name}' returned a non-string type: {type(result)}, converting to string.")
+                result = json.dumps(result, ensure_ascii=False)
+            
+            tool_call_result.update({
+                "success": True,
+                "content": result
+            })
+            return result
         except Exception as e:
             logger.error(f"Error executing tool {function_name}: {str(e)}")
+            tool_call_result["error_message"] = str(e)
             return f"Error executing tool {function_name}: {str(e)}"
+        finally:
+            self.tool_call_results.append(tool_call_result)
 
     def ask(self, question: str, tool_use: Union[bool, List[str]] = False, json_response: Optional[bool] = False) -> str:
         """发送问题并获取回答
@@ -150,11 +189,12 @@ class Agent:
     def set_system_prompt(self, prompt: str):
         self.chat_context = [{"role": "system", "content": prompt}]
 
-    def clear(self):
+    def clear_context(self):
         if self.chat_context and self.chat_context[0]["role"] == "system":
             self.chat_context = self.chat_context[:1]
         else:
             self.chat_context = []
+        self.tool_call_results.clear()
 
 
 def get_agent(provider: Optional[str] = 'paoluz', model: Optional[str] = 'gpt-4o-mini', llm: Optional[LlmAbstract] = None, **params) -> Agent:

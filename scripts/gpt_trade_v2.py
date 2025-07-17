@@ -1,14 +1,14 @@
 from datetime import datetime
 from enum import Enum
 import json
-from typing import List, Literal, Optional
+from typing import List, Optional
 from dataclasses import asdict, dataclass 
 
 import typer
 
 from lib.model.common import Ohlcv, Order
-from lib.tools.market_master import MarketMaster, TradeContext, TradeLog
-from lib.tools.news_helper import NewsHelper
+from lib.modules.agents.market_master import MarketMaster, TradeContext, TradeLog
+from lib.modules.agents.news_helper import NewsSummaryer
 from lib.modules.strategy.strategyv2 import StrategyBase
 from lib.utils.time import dt_to_ts
 
@@ -69,7 +69,7 @@ class GptStrategy(StrategyBase):
             llm_provider=self.advice_model_provider,
             model=self.advice_model,
             temperature=self.advice_model_temperature,
-            news_helper=NewsHelper(
+            news_helper=NewsSummaryer(
                 llm_provider=self.news_summary_model_provider,
                 model=self.news_summary_model,
             ),

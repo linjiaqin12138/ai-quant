@@ -7,23 +7,27 @@
 import json
 import os
 from datetime import datetime
-from typing import Optional, Dict, Any
-from textwrap import dedent
+from typing import List, Optional, Dict, Any, TypedDict
+from textwrap import dedent, indent
 import traceback
 
 from jinja2 import Template
+
+from lib.utils.string import escape_text_for_jinja2_temperate
 from lib.adapter.apis import read_web_page_by_jina
 from lib.adapter.llm.interface import LlmAbstract
 from lib.modules import get_agent
+from lib.modules.agents.web_page_reader import WebPageReader
 from lib.tools.cache_decorator import use_cache
 from lib.tools.information_search import unified_search
-
 from lib.tools.ashare_stock import (
     get_comprehensive_financial_data,
     get_shareholder_changes_data,
-    get_ashare_stock_info
+    get_ashare_stock_info,
+    AShareStockInfo
 )
 from lib.logger import logger
+from lib.utils.news import news_list_to_markdown, render_news_in_markdown_group_by_platform
 
 # HTML报告模板
 HTML_TEMPLATE = """
@@ -207,6 +211,44 @@ HTML_TEMPLATE = """
             border-top: 1px solid #ecf0f1;
             padding-top: 20px;
         }
+        /* 工具调用结果样式 */
+        .tool-section {
+            background-color: #f9f9ff;
+            border: 1px solid #d1e7dd;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+        .tool-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .tool-name {
+            font-weight: bold;
+            color: #333;
+        }
+        .tool-status {
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.9em;
+        }
+        .status-success {
+            background-color: #d1e7dd;
+            color: #155724;
+        }
+        .status-error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .error-message {
+            color: #721c24;
+            background-color: #f8d7da;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
@@ -218,21 +260,34 @@ HTML_TEMPLATE = """
             <strong>公司名称:</strong> {{ company_name }}<br>
             <strong>股票代码:</strong> {{ stock_code }}<br>
             <strong>所属行业:</strong> {{ business }}<br>
-            <strong>股票类型:</strong> {{ stock_type }}<br>
-            <strong>分析时间:</strong> {{ analysis_time }}<br>
         </div>
-        
-        <div class="data-source">
-            <strong>📋 数据来源说明:</strong><br>
-            • 财务数据来源: akshare接口<br>
-            • 数据获取时间: {{ analysis_time }}<br>
-            • 分析工具: AI基本面分析Agent<br>
-        </div>
-        
+
         <div class="analysis-report">
             <h3>🤖 AI基本面分析报告</h3>
             <div class="analysis-content" id="analysis-content"></div>
         </div>
+        
+        <h2>🔧 工具调用详情</h2>
+        {% for tool_result in tool_results %}
+        <div class="tool-section">
+            <div class="tool-header">
+                <span class="tool-name">🛠️ {{ tool_result.tool_name }}</span>
+                <span class="tool-status {{ 'status-success' if tool_result.success else 'status-error' }}">
+                    {{ '✅ 成功' if tool_result.success else '❌ 失败' }}
+                </span>
+            </div>
+            <p><strong>调用参数:</strong> {{ tool_result.parameters }}</p>
+            {% if tool_result.success %}
+                <div class="tool-content" id="tool-content-{{ loop.index }}">
+                    <!-- 工具输出内容将通过JavaScript渲染 -->
+                </div>
+            {% else %}
+                <div class="error-message">
+                    <strong>错误信息:</strong> {{ tool_result.error_message }}
+                </div>
+            {% endif %}
+        </div>
+        {% endfor %}
         
         <div class="warning-box">
             <strong>⚠️ 重要声明:</strong><br>
@@ -243,7 +298,7 @@ HTML_TEMPLATE = """
         </div>
         
         <div class="footer">
-            <p>报告生成时间: {{ current_time }}</p>
+            <p>报告生成时间: {{ analysis_time }}</p>
             <p>由基本面数据分析Agent自动生成</p>
         </div>
     </div>
@@ -258,26 +313,53 @@ HTML_TEMPLATE = """
         });
         
         // 获取原始markdown内容并渲染
-        const markdownContent = `{{ escaped_content }}`;
+        const markdownContent = `{{ escaped_content | escape }}`;
         const htmlContent = marked.parse(markdownContent);
         document.getElementById('analysis-content').innerHTML = htmlContent;
+        
+        // 渲染工具调用结果
+        {% for tool_result in tool_results %}
+        {% if tool_result.success %}
+        (function() {
+            const content = `{{ tool_result.content | escape }}`.trim();
+            const html = marked.parse(content);
+            document.getElementById('tool-content-{{ loop.index }}').innerHTML = html;
+        })();
+        {% endif %}
+        {% endfor %}
     </script>
 </body>
 </html>
 """
 
 # 系统提示模板
-FUNDAMENTAL_ANALYZER_SYSTEM_PROMPT = """你是一个专业的基本面分析师，专门分析上市公司的基本面数据。
+FUNDAMENTAL_ANALYZER_SYSTEM_PROMPT = """
+你是一个专业的基本面分析师，专门分析上市公司的基本面数据。
 
 你的任务是：
-1. 使用akshare工具获取{company_name}（股票代码：{stock_code}，行业：{business}）的最新财务数据和股东变动数据
+1. 分析某上市公司的最新财务数据和股东变动数据
 2. 综合分析资产负债表、利润表、现金流量表和股东结构变化
-3. 搜索相关的基本面新闻、分析报告和行业动态
+3. **必须使用搜索工具**获取相关的基本面新闻、分析报告和行业动态
 4. 提供专业的基本面健康度评估和投资价值分析
 
-请使用以下工具：
-- unified_search: 搜索相关基本面新闻、行业分析和公司研报
-- read_web_page: 读取具体网页内容
+**重要：你必须使用以下工具来补充和验证分析**：
+- _search_information: 搜索相关基本面新闻、行业分析和公司研报
+- _read_web_page: 读取搜索结果中的分析文章链接正文
+
+**必须执行的搜索策略**：
+1. 搜索公司最新财务报告解读和分析
+2. 搜索行业分析和公司竞争地位信息
+3. 搜索公司估值分析和投资建议
+4. 搜索股东变动和治理结构相关信息
+5. 搜索行业发展趋势和政策影响
+
+**搜索关键词示例**：
+    - "<公司名> 2024年 财务报告 解读"
+    - "<公司名> 基本面分析 投资价值"
+    - "<公司名> 股东变动 增减持"
+    - "<公司名> 行业地位 竞争优势"
+    - "<公司名> 估值分析 PE PB"
+    - "<公司名> 同行业对比 市场份额"
 
 基本面分析时请重点关注：
 - 财务健康度分析（资产负债结构、偿债能力、营运能力、盈利能力）
@@ -288,224 +370,241 @@ FUNDAMENTAL_ANALYZER_SYSTEM_PROMPT = """你是一个专业的基本面分析师�
 - 估值水平分析（PE、PB、PEG等估值指标）
 - 行业地位和竞争优势分析
 - 与同行业公司对比分析
-- **重要：在分析报告中必须标注每个数据的来源和时间**
 
-请用中文回复，提供详细的基本面分析报告。"""
+**报告要求**：
+1. 必须使用搜索工具获取补充信息，不要直接说"数据未提供"
+2. 所有数值都要具体标注，标注所有数据的来源和时间
+3. 如果通过搜索仍无法获取某些信息，直接省略相关章节，不要说明未提供
+4. 充分利用股东变动数据进行治理分析
+5. 报告结构要完整，但只写有内容的章节
+
+请用中文回复，提供详细的基本面分析报告，参考以下结构：
+
+---
+## <公司>(<股票代码>)基本面分析报告
+
+### 1. 公司基本信息
+- 公司名称和行业
+- 主营业务和商业模式
+- 行业地位和市场份额
+
+### 2. 财务健康度分析
+#### 2.1 资产负债表分析
+- 总资产规模: [具体数值]
+- 资产结构分析（流动资产、固定资产占比）
+- 负债结构分析（流动负债、长期负债）
+- 所有者权益分析
+- 财务比率分析（资产负债率、流动比率、速动比率）
+
+#### 2.2 利润表分析
+- 营业收入及增长趋势: [具体数值和增长率]
+- 盈利能力分析（毛利率、净利率、ROE、ROA）
+- 成本控制能力
+- 盈利质量评估
+
+#### 2.3 现金流量表分析
+- 经营活动现金流: [具体数值]
+- 投资活动现金流分析
+- 筹资活动现金流分析
+- 现金流质量评估（现金流与净利润匹配度）
+
+### 3. 股东结构与治理分析
+#### 3.1 股东结构分析
+- 前十大股东持股情况
+- 股权集中度分析
+- 机构投资者持股比例
+
+#### 3.2 股东变动分析
+- 近期大股东增减持情况
+- 机构投资者进出动态
+- 股东变动对公司治理的影响
+- 股东变动的原因分析
+
+#### 3.3 公司治理评估
+- 股权结构的合理性
+- 治理结构的透明度
+- 管理层稳定性
+
+### 4. 成长性分析
+#### 4.1 历史成长性
+- 收入增长趋势（3-5年）
+- 利润增长趋势
+- ROE变化趋势
+- 市场份额变化
+
+#### 4.2 成长质量评估
+- 成长的可持续性
+- 成长驱动因素分析
+- 与行业增长对比
+
+#### 4.3 未来成长预期
+- 基于基本面的成长预测
+- 主要成长风险因素
+
+### 5. 估值分析
+#### 5.1 估值水平
+- PE估值（当前PE、历史PE区间）
+- PB估值
+- PEG估值（如适用）
+- EV/EBITDA等其他估值指标
+
+#### 5.2 估值合理性
+- 与历史估值对比
+- 与同行业公司估值对比
+- 基于DCF的内在价值评估（如可行）
+
+### 6. 行业与竞争分析
+#### 6.1 行业基本面
+- 行业发展趋势
+- 行业景气度
+- 政策环境影响
+
+#### 6.2 竞争地位分析
+- 在行业中的地位
+- 核心竞争优势
+- 与主要竞争对手对比
+
+### 7. 风险评估
+#### 7.1 财务风险
+- 主要财务风险点
+- 偿债能力风险
+- 现金流风险
+
+#### 7.2 经营风险
+- 行业风险
+- 竞争风险
+- 政策风险
+- 其他特定风险
+
+#### 7.3 治理风险
+- 股东结构风险
+- 管理层风险
+- 信息披露风险
+
+### 8. 投资价值评估
+#### 8.1 投资亮点
+- 主要投资价值点
+- 核心竞争优势
+- 成长潜力
+
+#### 8.2 投资建议
+- 基于基本面的投资建议
+- 目标价格区间（如可评估）
+- 投资时机建议
+- 适合的投资者类型
+
+#### 8.3 关键监控指标
+- 需要持续关注的财务指标
+- 需要跟踪的经营指标
+- 重要的市场和政策变化
+
+---
+
+**开始分析前，请先执行以下搜索任务**：
+1. 搜索公司最新财务报告和分析师解读
+2. 搜索行业分析和竞争对手信息
+3. 搜索公司估值分析和投资建议
+4. 根据搜索结果进行深入分析
+
+记住：每个章节的数据都要标注来源和时间，如果某个章节缺乏信息就直接省略，不要说明未提供。
+"""
 
 class FundamentalAnalyzer:
     """上市公司基本面数据分析器"""
     
-    def __init__(self, llm: LlmAbstract):
+    def __init__(
+            self, 
+            llm: LlmAbstract, 
+            web_page_reader: Optional[WebPageReader] = None
+        ):
         """
         初始化基本面分析器
         
         Args:
             llm: LLM实例
         """
-        self.agent = get_agent(llm = llm)
-        self.agent.register_tool(unified_search)
-        self.agent.register_tool(read_web_page_by_jina)
-        logger.info(f"已注册工具: {list(self.agent.tools.keys())}")
+        self._agent = get_agent(llm = llm)
+        self._web_page_reader = web_page_reader
+        if not web_page_reader:
+            self._web_page_reader = WebPageReader(llm)
 
-    def _init_fundamental_agent_context(self, stock_info: dict, stock_code: str = ""):
+        self._agent.register_tool(self._search_information)
+        self._agent.register_tool(self._read_web_page)
+        logger.info(f"已注册工具: {list(self._agent.tools.keys())}")
+
+        # 开始分析之后才会有值，开始分析前清空
+        self._stock_code: str = ""
+        self._stock_info: Optional[AShareStockInfo] = None
+        self._report_result: Optional[str] = None
+
+    def _search_information(self, query: str) -> str:
         """
-        创建基本面数据分析Agent
+        使用搜索引擎搜索过去一年时间范围内的10条相关信息
+
+        Args:
+            query: 搜索关键词
+
+        Returns:
+            返回搜索结果的Markdown格式字符串
+        """
+        return render_news_in_markdown_group_by_platform(
+            {
+                "搜索结果": unified_search(
+                    query, 
+                    10, 
+                    region="zh-cn", 
+                    time_limit="y"
+                )
+            }
+        )
+    def _read_web_page(self, url: str) -> Optional[str]:
+        """
+        读取网页内容
         
         Args:
-            stock_info: 股票信息字典(行业、股票名称)
-            stock_code: 股票代码
+            url: 网页URL
             
         Returns:
-            配置好的Agent实例
+            网页正文内容
         """
-        # 创建Agent实例
-        company_name = stock_info.get("stock_name", "未知公司")
+        return self._web_page_reader.read_and_extract(url, "提取正文")
+        
+    def _init_analyzing(self, symbol: str = ""):
+        """根据要分析的symbol初始化类的属性"""
+        self._stock_code = symbol
+        self._stock_info = get_ashare_stock_info(symbol)
+        company_name = self._stock_info["stock_name"]
         # 设置系统提示
         system_prompt = FUNDAMENTAL_ANALYZER_SYSTEM_PROMPT.format(
             company_name=company_name,
-            stock_code=stock_code,
-            business=stock_info.get("stock_business", "未知行业")
+            stock_code=self._stock_code,
+            business=self._stock_info["stock_business"]
         )
-        self.agent.set_system_prompt(system_prompt)
-        # 调用工具获取financial_data和股东变动数据，直接喂给大模型
-        financial_data = get_comprehensive_financial_data(stock_code)
-        share_holder_change_data = get_shareholder_changes_data(stock_code)
-        self.agent.chat_context.append({
-            "role": "user",
-            "content": f"财务数据（来源akshare）: {json.dumps(financial_data, indent=2, ensure_ascii=False)}"
-                       f"股东变动数据（来源akshare）: {json.dumps(share_holder_change_data, indent=2, ensure_ascii=False)}"
-        })
+        self._agent.set_system_prompt(system_prompt)
+        self._report_result = None
     
-    def _generate_analysis_prompt(self, company_name: str, stock_code: str) -> str:
-        """
-        生成基本面分析提示
-        
-        Args:
-            company_name: 公司名称
-            stock_code: 股票代码
-            
-        Returns:
-            分析提示文本
-        """
+    def _generate_user_prompt(self) -> str:
+        company_name = self._stock_info["stock_name"]
+        stock_code = self._stock_code
+
+        financial_data = get_comprehensive_financial_data(self._stock_code)
+        share_holder_change_data = get_shareholder_changes_data(self._stock_code)
+
         return dedent(f"""
         请帮我全面分析{company_name}（股票代码：{stock_code}）的最新基本面数据。
 
-        使用unified_search工具搜索相关的基本面分析和新闻，如：
-           - "{company_name} {stock_code} 基本面分析"
-           - "{company_name} 财务报告 解读"
-           - "{company_name} 股东变动 增减持"
-           - "{company_name} 行业地位 竞争优势"
-           - "{company_name} 估值分析"
+        财务数据（来源akshare）:
+        ```json
+        {indent(json.dumps(financial_data, indent=2, ensure_ascii=False), " " * 8)}
+        ```
 
-        如果搜索结果中有具体的分析文章链接，使用read_web_page工具读取详细内容
-
-        最后提供综合基本面分析报告，参考以下结构模板进行适当调整：
-
-        ## {company_name}（{stock_code}）基本面分析报告
-
-        ### 1. 公司基本信息
-        - 公司名称和行业
-        - 主营业务和商业模式
-        - 行业地位和市场份额
-
-        ### 2. 财务健康度分析
-        #### 2.1 资产负债表分析
-        - 总资产规模: [具体数值]
-        - 资产结构分析（流动资产、固定资产占比）
-        - 负债结构分析（流动负债、长期负债）
-        - 所有者权益分析
-        - 财务比率分析（资产负债率、流动比率、速动比率）
-
-        #### 2.2 利润表分析
-        - 营业收入及增长趋势: [具体数值和增长率]
-        - 盈利能力分析（毛利率、净利率、ROE、ROA）
-        - 成本控制能力
-        - 盈利质量评估
-
-        #### 2.3 现金流量表分析
-        - 经营活动现金流: [具体数值]
-        - 投资活动现金流分析
-        - 筹资活动现金流分析
-        - 现金流质量评估（现金流与净利润匹配度）
-
-        **数据来源**: akshare财务数据接口，报告期
-
-        ### 3. 股东结构与治理分析
-        #### 3.1 股东结构分析
-        - 前十大股东持股情况
-        - 股权集中度分析
-        - 机构投资者持股比例
-
-        #### 3.2 股东变动分析
-        - 近期大股东增减持情况
-        - 机构投资者进出动态
-        - 股东变动对公司治理的影响
-        - 股东变动的原因分析
-
-        #### 3.3 公司治理评估
-        - 股权结构的合理性
-        - 治理结构的透明度
-        - 管理层稳定性
-
-        **数据来源**: akshare股东变动数据，报告期
-
-        ### 4. 成长性分析
-        #### 4.1 历史成长性
-        - 收入增长趋势（3-5年）
-        - 利润增长趋势
-        - ROE变化趋势
-        - 市场份额变化
-
-        #### 4.2 成长质量评估
-        - 成长的可持续性
-        - 成长驱动因素分析
-        - 与行业增长对比
-
-        #### 4.3 未来成长预期
-        - 基于基本面的成长预测
-        - 主要成长风险因素
-
-        ### 5. 估值分析
-        #### 5.1 估值水平
-        - PE估值（当前PE、历史PE区间）
-        - PB估值
-        - PEG估值（如适用）
-        - EV/EBITDA等其他估值指标
-
-        #### 5.2 估值合理性
-        - 与历史估值对比
-        - 与同行业公司估值对比
-        - 基于DCF的内在价值评估（如可行）
-
-        ### 6. 行业与竞争分析
-        #### 6.1 行业基本面
-        - 行业发展趋势
-        - 行业景气度
-        - 政策环境影响
-
-        #### 6.2 竞争地位分析
-        - 在行业中的地位
-        - 核心竞争优势
-        - 与主要竞争对手对比
-        - **对比数据来源**: [标注数据来源]
-
-        ### 7. 风险评估
-        #### 7.1 财务风险
-        - 主要财务风险点
-        - 偿债能力风险
-        - 现金流风险
-
-        #### 7.2 经营风险
-        - 行业风险
-        - 竞争风险
-        - 政策风险
-        - 其他特定风险
-
-        #### 7.3 治理风险
-        - 股东结构风险
-        - 管理层风险
-        - 信息披露风险
-
-        ### 8. 投资价值评估
-        #### 8.1 投资亮点
-        - 主要投资价值点
-        - 核心竞争优势
-        - 成长潜力
-
-        #### 8.2 投资建议
-        - 基于基本面的投资建议
-        - 目标价格区间（如可评估）
-        - 投资时机建议
-        - 适合的投资者类型
-
-        #### 8.3 关键监控指标
-        - 需要持续关注的财务指标
-        - 需要跟踪的经营指标
-        - 重要的市场和政策变化
-
-        ### 9. 数据来源汇总
-        - akshare财务数据接口
-        - akshare股东变动数据接口  
-        - 相关新闻和分析文章链接
-        - 数据获取时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-
-        **重要说明**: 
-        - 所有财务和股东数据来源于akshare接口
-        - 分析基于最新可获得的数据
-        - 请结合最新的市场环境和行业趋势进行判断
-        - 投资有风险，决策需谨慎
-
-        请确保：
-        1. 所有数值都要具体标注（不要使用[具体数值]这样的占位符）
-        2. 计算所有提及的财务比率和估值指标
-        3. 充分利用股东变动数据进行治理分析
-        4. 提供具体的分析结论和投资建议
-        5. 标注所有数据的来源和时间
-        6. 如果某些信息无法获取/未提供，就不需要在报告中写出，也不要在报告中指出未提供
+        股东变动数据（来源akshare）: 
+        ```json
+        {indent(json.dumps(share_holder_change_data, indent=2, ensure_ascii=False), " " * 8)}
+        ```
         """)
     
-    @use_cache(ttl_seconds=86400 * 7, use_db_cache=True)
-    def analyze_fundamental_data(self, symbol: str = "") -> Dict[str, Any]:
+    def analyze_fundamental_data(self, symbol: str = "") -> str:
         """
         分析指定公司的基本面数据
         
@@ -513,112 +612,48 @@ class FundamentalAnalyzer:
             symbol: 股票代码
             
         Returns:
-            分析结果字典
+            分析结果字符串
         """
-        result = {
-            "success": False,
-            "symbol": symbol,
-            "analysis_time": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        }
+
+        # 初始化Agent
+        self._init_analyzing(symbol)
+
+        logger.info(f"开始分析{self._stock_info['stock_name']}({symbol})的基本面数据")
+
+        # 执行分析
+        logger.info("正在使用AI Agent分析基本面数据...")
+        prompt = self._generate_user_prompt()
+        result = self._agent.ask(prompt, tool_use=True)
         
-        try:
-            # 获取股票基本信息
-            result['stock_info'] = get_ashare_stock_info(symbol)
-            company_name = result['stock_info'].get("stock_name", "未知公司")
-            
-            logger.info(f"开始分析{company_name}（{symbol}）的基本面数据")
-            
-            # 创建Agent
-            self._init_fundamental_agent_context(result['stock_info'], symbol)
-            
-            # 生成分析提示
-            analysis_prompt = self._generate_analysis_prompt(company_name, symbol)
-            
-            # 执行分析
-            logger.info("正在使用AI Agent分析基本面数据...")
-            response = self.agent.ask(analysis_prompt, tool_use=True)
-            
-            result["success"] = True
-            result["analysis_report"] = response
-            
-            logger.info(f"✅ {company_name}基本面分析完成")
-            
-        except Exception as e:
-            logger.error(f"分析过程中发生错误: {str(e)}")
-            logger.debug(f"错误详情: {traceback.format_exc()}")
+        # 保存分析结果用于后续生成HTML报告
+        self._report_result = result
         
+        logger.info(f"✅ {self._stock_info['stock_name']}基本面分析完成")
         return result
-    
-    def generate_html_report(self, analysis_result: Dict[str, Any]) -> str:
+
+    def generate_html_report(self) -> str:
         """
         生成HTML基本面分析报告
-        
-        Args:
-            analysis_result: 分析结果
-            
-        Returns:
-            HTML报告字符串
         """
-        stock_code = analysis_result["symbol"]
-        company_name = analysis_result["stock_info"].get("stock_name", "未知公司")
-        business = analysis_result["stock_info"].get("stock_business", "未知行业")
+        error_msg = "请先调用analyze_fundamental_data方法获取分析结果"
+        assert self._stock_info is not None, error_msg
+        assert self._report_result is not None, error_msg
         
-        # 预处理markdown内容，转义特殊字符
-        markdown_content = analysis_result["analysis_report"]
-        # 替换反引号和反斜杠
-        escaped_content = markdown_content.replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
-        
-        # 渲染HTML内容
-        html_content = Template(HTML_TEMPLATE).render(
-            company_name=company_name,
-            stock_code=stock_code,
-            business=business,
-            stock_type=analysis_result["stock_info"].get("stock_type", "未知"),
-            analysis_time=analysis_result["analysis_time"],
-            escaped_content=escaped_content,
-            current_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        )
-        
-        return html_content
+        self._agent.tool_call_results
+        tools_results = self._agent.tool_call_results.copy()
+        for tool_result in tools_results:
+            # 确保工具调用结果的content字段存在
+            if tool_result["success"]:
+                tool_result["content"] = escape_text_for_jinja2_temperate(tool_result["content"])
+            if not tool_result["success"]:
+                tool_result["error_message"] = escape_text_for_jinja2_temperate(tool_result.get("error_message", ""))
 
-    def save_html_report(self, analysis_result: Dict[str, Any], save_folder_path: Optional[str] = None) -> Optional[str]:
-        """
-        保存HTML基本面分析报告到文件
-        
-        Args:
-            analysis_result: 分析结果
-            save_folder_path: 保存文件夹路径，如果为None则使用当前目录
-            
-        Returns:
-            报告文件路径，如果保存失败返回None
-        """
-        if not analysis_result.get("success"):
-            logger.error("分析结果不成功，无法保存报告")
-            return None
-        
-        if save_folder_path is None:
-            save_folder_path = os.getcwd()
-        
-        if not os.path.exists(save_folder_path):
-            os.makedirs(save_folder_path)
-        
-        # 生成文件名
-        company_name = analysis_result["stock_info"].get("stock_name", "未知公司")
-        stock_code = analysis_result["symbol"]
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        safe_company_name = company_name.replace(" ", "_").replace("/", "_")
-        report_filename = f"{safe_company_name}_{stock_code}_fundamental_analysis_{timestamp}.html"
-        report_path = os.path.join(save_folder_path, report_filename)
-        
-        try:
-            html_content = self.generate_html_report(analysis_result)
-            
-            with open(report_path, 'w', encoding='utf-8') as f:
-                f.write(html_content)
-            
-            logger.info(f"💾 基本面分析HTML报告已保存到: {report_path}")
-            return report_path
-            
-        except Exception as e:
-            logger.error(f"保存HTML报告失败: {str(e)}")
-            return None
+        # 渲染HTML内容
+        return Template(HTML_TEMPLATE).render(
+            company_name=self._stock_info["stock_name"],
+            stock_code=self._stock_code,
+            business=self._stock_info["stock_business"],
+            analysis_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            escaped_content=escape_text_for_jinja2_temperate(self._report_result),
+            tool_results=tools_results
+        )
