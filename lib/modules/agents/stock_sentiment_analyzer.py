@@ -4,24 +4,21 @@
 通过分析雪球和股吧评论区数据，生成0-100的情绪评分和对应等级
 """
 
-import os
 import re
 from datetime import datetime
 import traceback
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, TypedDict
 from textwrap import dedent
 
 from jinja2 import Template
 from lib.adapter.llm import get_llm, get_llm_direct_ask
 from lib.adapter.llm.interface import LlmAbstract
-from lib.utils.string import has_json_features
-from lib.tools.json_fixer import JsonFixer
-from lib.modules.agents.web_page_reader import WebPageReader
 from lib.tools.ashare_stock import get_ashare_stock_info, determine_exchange
 from lib.logger import logger
-from lib.utils.string import extract_json_string
 from lib.utils.decorators import with_retry
+from lib.utils.string import escape_text_for_jinja2_temperate
 from lib.model.error import LlmReplyInvalid
+from lib.modules.agents.comment_extractor_agent import CommentExtractorAgent, CommentItem
 
 # HTML报告模板
 HTML_TEMPLATE = """
@@ -30,7 +27,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>股票市场情绪分析报告 - {{ stock_symbol }}</title>
+    <title>股票市场情绪分析报告 - {{ symbol }}</title>
     <script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/lib/marked.umd.js"></script>
     <style>
         body {
@@ -237,12 +234,10 @@ HTML_TEMPLATE = """
         <h1>📊 股票市场情绪分析报告</h1>
         
         <div class="info-box">
-            <strong>股票代码:</strong> {{ stock_symbol }}<br>
-            <strong>股票名称:</strong> {{ stock_name }}<br>
-            <strong>股票类型:</strong> {{ stock_type }}<br>
-            <strong>所属行业:</strong> {{ stock_business }}<br>
+            <strong>股票代码:</strong> {{ symbol }}<br>
+            <strong>股票名称:</strong> {{ symbol_name }}<br>
+            <strong>所属行业:</strong> {{ symbol_business }}<br>
             <strong>交易所:</strong> {{ exchange }}<br>
-            <strong>分析时间:</strong> {{ analysis_time }}<br>
             <strong>总评论数:</strong> {{ total_comments }} 条<br>
             <strong>分析页面:</strong> {{ url_results_count }} 个
         </div>
@@ -263,7 +258,7 @@ HTML_TEMPLATE = """
         <div class="url-section">
             <h3>平台 {{ loop.index }}: {{ url_result.platform }}</h3>
             <p><strong>URL:</strong> <a href="{{ url_result.url }}" target="_blank">{{ url_result.url }}</a></p>
-            <p><strong>评论数量:</strong> {{ url_result.comments_count }} 条</p>
+            <p><strong>评论数量:</strong> {{ url_result.comments | length }} 条</p>
             
             <h4>评论内容:</h4>
             {% if url_result.comments %}
@@ -287,7 +282,6 @@ HTML_TEMPLATE = """
         {% endfor %}
         
         <div style="text-align: center; margin-top: 30px; color: #7f8c8d; font-size: 0.9em;">
-            <p>报告生成时间: {{ current_time }}</p>
             <p>由股票市场情绪分析Agent自动生成</p>
             <p>⚠️ 本报告仅供参考，不构成投资建议</p>
         </div>
@@ -303,7 +297,7 @@ HTML_TEMPLATE = """
         });
         
         // 获取原始markdown内容并渲染
-        const markdownContent = `{{ escaped_content }}`;
+        const markdownContent = `{{ markdown_content }}`;
         const htmlContent = marked.parse(markdownContent);
         document.getElementById('analysis-content').innerHTML = htmlContent;
     </script>
@@ -369,171 +363,125 @@ SENTIMENT_ANALYZER_SYS_PROMPT_TEMPLATE = """
 
 LLM_RETRY_TIME = 1
 
+UrlResult = TypedDict("UrlResult", {
+    "success": bool,
+    "url": str,
+    "error_message": Optional[str],
+    "comments": List[CommentItem]
+})
+
 class StockSentimentAnalyzer:
     """股票市场情绪分析器"""
     
     def __init__(
             self, 
             llm: LlmAbstract = None,
-            web_page_reader: Optional[WebPageReader] = None,
-            json_fixer: Optional[JsonFixer] = None
+            comment_agent: Optional[CommentExtractorAgent] = None,
         ):
         """初始化分析器"""
         self.llm = llm or get_llm("paoluz", "deepseek-v3", temperature=0.2)
-        
-        # 创建评论提取工具
-        self.comment_extractor = get_llm_direct_ask(
-            system_prompt=COMMENT_EXTRACTOR_SYS_PROMPT_TEMPLATE.format(curr_time_str=datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
-            llm = self.llm,
-            response_format="json_object"
-        )
-        
+        # 评论提取Agent
+        self.comment_agent = comment_agent or CommentExtractorAgent(llm=self.llm)
         # 创建情绪分析工具
         self.sentiment_analyzer = get_llm_direct_ask(
             system_prompt=SENTIMENT_ANALYZER_SYS_PROMPT_TEMPLATE,
             llm = self.llm
         )
+        # 开始分析之后才会有值，开始分析前清空
+        self._current_symbol = None
+        self._current_symbol_name = ""
+        self._symbol_business_name = ""
+        self._analysis_report = ""
+        self._score = -1
+        self._level = ""
+        self._url_results: List[UrlResult] = []
 
-        self.web_page_reader = web_page_reader or WebPageReader(llm=self.llm)
-        # Fix Json Tool
-        self.fix_json_tool = json_fixer.fix if json_fixer else JsonFixer(llm=self.llm).fix
-    
-    def _validate_comment_schema(self, comment: Any) -> bool:
-        """
-        验证评论数据的schema是否符合要求
-        
-        Args:
-            comment: 评论数据对象
-            
-        Returns:
-            bool: 是否符合schema要求
-        """
-        if not isinstance(comment, dict):
-            return False
-        
-        # 检查必需字段
-        required_fields = ['author', 'time', 'content']
-        for field in required_fields:
-            if field not in comment:
-                return False
-            if not isinstance(comment[field], str):
-                return False
-            if not comment[field].strip():  # 不能为空字符串
-                return False
-        
-        # 检查可选的数值字段
-        optional_numeric_fields = ['likes', 'replies']
-        for field in optional_numeric_fields:
-            if field in comment:
-                if not isinstance(comment[field], (int, float)):
-                    # 尝试转换为数值
-                    try:
-                        comment[field] = int(comment[field])
-                    except (ValueError, TypeError):
-                        comment[field] = 0
-        
-        return True
-    
-    def build_ashare_stock_dicussion_urls(self, stock_symbol: str, exchange: str) -> List[str]:
+    def _build_ashare_stock_dicussion_urls(self) -> List[str]:
         """
         构建股票页面URL
         
         Args:
-            stock_symbol: 股票代码
+            symbol: 股票代码
             exchange: 交易所代码(SH/SZ)
             
         Returns:
             URL列表
         """
         urls = []
-        
+        exchange = determine_exchange(self._current_symbol)
         # 雪球URL - 需要加上交易所前缀
-        xueqiu_symbol = f"{exchange}{stock_symbol}"
+        xueqiu_symbol = f"{exchange}{self._current_symbol}"
         xueqiu_url = f"https://xueqiu.com/S/{xueqiu_symbol}"
         urls.append(xueqiu_url)
         
         # 东方财富股吧URL
-        guba_url = f"https://guba.eastmoney.com/list,{stock_symbol}.html"
+        guba_url = f"https://guba.eastmoney.com/list,{self._current_symbol}.html"
         urls.append(guba_url)
         
         return urls
     
-    def _filter_valid_comments(self, json_list: list) -> list:
-        # 验证每条评论的schema
-        valid_comments = []
-        invalid_comments = []
-        for comment in json_list:
-            if self._validate_comment_schema(comment):
-                valid_comments.append(comment)
-            else:
-                invalid_comments.append(comment)
-                logger.warning("发现%d条不符合schema的评论数据, 如%r", len(invalid_comments), invalid_comments[0])
-        if not valid_comments:
-            logger.warning("没有有效的评论数据")
-        return valid_comments
+    def _fetch_all_comments(self):
+        urls = self._build_ashare_stock_dicussion_urls() 
+        logger.info(f"构建URL: {urls}")
+        all_comments = []
+        self._url_results = []
+        for url in urls:
+            try:
+                logger.info(f"爬取页面: {url}")
+                comments = self.comment_agent.extract_comments_from_url(url)
+                
+                self._url_results.append({
+                    "success": True,
+                    "url": url,
+                    "comments": comments
+                })
+                
+                all_comments.extend(comments)
+                logger.info(f"从 {url} 获取到 {len(comments)} 条评论")
+            except Exception as e:
+                logger.error(f"爬取页面 {url} 失败: {e}")
+                logger.debug(f"错误详情: {traceback.format_exc()}")
+                self._url_results.append({
+                    "success": False,
+                    "url": url,
+                    "error_message": str(e)
+                })
 
-    def extract_comments_from_url(self, url: str) -> Tuple[str, List[Dict[str, Any]]]:
+        return all_comments
+
+    def _format_comments_for_analysis(self, comments: List[Dict[str, Any]], max_comments: int = 100) -> str:
         """
-        从单个URL提取评论
+        准备评论数据供分析使用
         
         Args:
-            url: 页面URL
+            comments: 评论列表
+            max_comments: 最大评论数量
             
         Returns:
-            Tuple[原始响应, 评论列表]
+            格式化的评论字符串
         """
-        # 直接调用read_page_content获取页面内容
-        logger.info(f"正在获取页面内容: {url}")
-        page_content = self.web_page_reader.read_and_extract(url, '提取评论区')
         
-        # 使用LLM分析页面内容并提取评论, 截取前15000个字符以避免过长
+        # 按点赞数排序，取前max_comments条
+        sorted_comments = sorted(comments, key=lambda x: x.get('likes', 0), reverse=True)
+        selected_comments = sorted_comments[:max_comments]
         
-        prompt = dedent(f"""
-            请分析以下页面内容，提取其中的评论区信息：
+        comment_strings = []
+        for i, comment in enumerate(selected_comments, 1):
+            comment_str = dedent(
+                f"""
+                    {i}. [{comment.get('author', '匿名用户')}] {comment.get('time', '未知时间')}
+                    内容: {comment.get('content', '评论内容缺失')}
+                    点赞: {comment.get('likes', 0)} | 回复: {comment.get('replies', 0)}
+                """)
+            comment_strings.append(comment_str)
+        
+        return "\n".join(comment_strings)
 
-            页面URL: {url}
-            页面内容: {page_content[:15000]}
-
-            请提取所有评论并按JSON格式返回。
-        """)
-        
-        @with_retry((LlmReplyInvalid,), LLM_RETRY_TIME)
-        def retryable_extract():
-            logger.info(f"开始分析页面: {url}")
-            response = self.comment_extractor(prompt)
-            logger.info("分析页面内容完成：%s...%s", response[:1], response[-1:])
-            logger.debug("完整分析结果: %s", response)
-            
-            json_or_none = extract_json_string(response)
-            logger.debug("提取到的JSON对象: %r", json_or_none)
-            if json_or_none and isinstance(json_or_none, list):
-                # 验证每条评论的schema
-                return response, self._filter_valid_comments(json_or_none)
-            else:
-                logger.warning("大模型JSON响应错误")
-                # 尝试使用大模型修复JSON
-                if has_json_features(response) and json_or_none is None:
-                    logger.info("检测到JSON特征字符，尝试使用大模型修复")
-                    fixed_json = self.fix_json_tool(response)
-                    if fixed_json and isinstance(fixed_json, list):
-                        return response, self._filter_valid_comments(fixed_json)
-                    else:
-                        logger.warning("大模型修复JSON失败 %s", fixed_json)
-                else:
-                    logger.error("响应中未检测到JSON特征字符")
-                
-                raise LlmReplyInvalid("未找到JSON格式的评论数据", response)
-        
-        return retryable_extract()
-    
-    @with_retry((LlmReplyInvalid,), LLM_RETRY_TIME)
-    def _analyze_sentiment(self, stock_symbol: str, stock_name: str, all_comments: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _analyze_core(self, all_comments: List[Dict[str, Any]]) -> str:
         """
         分析市场情绪
         
         Args:
-            stock_symbol: 股票代码
-            stock_name: 股票名称
             all_comments: 所有评论数据
             
         Returns:
@@ -542,17 +490,17 @@ class StockSentimentAnalyzer:
         assert len(all_comments) > 0, "评论数据不能为空"
         
         # 准备评论数据
-        comments_summary = self._prepare_comments_for_analysis(all_comments)
+        comments_summary = self._format_comments_for_analysis(all_comments)
         
         prompt = dedent(f"""
-            请分析以下股票 {stock_name}({stock_symbol}) 的评论数据，评估当前市场情绪：
+            请分析以下股票 {self._current_symbol_name}({self._current_symbol}) 的评论数据，评估当前市场情绪：
 
             评论数据统计：
             - 总评论数: {len(all_comments)}
             - 总点赞数: {sum(comment.get('likes', 0) for comment in all_comments)}
             - 总回复数: {sum(comment.get('replies', 0) for comment in all_comments)}
 
-            评论内容示例：
+            评论内容：
             {comments_summary}
 
             请从以下维度进行分析：
@@ -564,7 +512,7 @@ class StockSentimentAnalyzer:
             最后给出0-100的情绪评分和对应等级，并用XML标签标注。
         """)
         
-        logger.info(f"开始分析股票 {stock_symbol} 的市场情绪")
+        logger.info(f"开始分析股票 {self._current_symbol_name} 的市场情绪")
         response = self.sentiment_analyzer(prompt)
         logger.info("完成情绪分析")
         
@@ -576,140 +524,58 @@ class StockSentimentAnalyzer:
             logger.error("情绪分析结果中未找到评分或等级信息")
             raise LlmReplyInvalid("情绪分析结果格式错误", response)
         
-        score = int(score_match.group(1)) if score_match else 50
-        level = level_match.group(1) if level_match else "中等"
-        
-        return {
-            "score": score,
-            "level": level,
-            "report": response,
-            "raw_response": response
-        }
+        self._score = int(score_match.group(1))
+        self._level = level_match.group(1)
+        self._analysis_report = response
+        return response
     
-    def _prepare_comments_for_analysis(self, comments: List[Dict[str, Any]], max_comments: int = 20) -> str:
-        """
-        准备评论数据供分析使用
-        
-        Args:
-            comments: 评论列表
-            max_comments: 最大评论数量
-            
-        Returns:
-            格式化的评论字符串
-        """
-        if not comments:
-            return "无评论数据"
-        
-        
-        # 按点赞数排序，取前max_comments条
-        sorted_comments = sorted(comments, key=lambda x: x.get('likes', 0), reverse=True)
-        selected_comments = sorted_comments[:max_comments]
-        
-        comment_strings = []
-        for i, comment in enumerate(selected_comments, 1):
-            comment_str = f"""
-{i}. [{comment.get('author', '匿名用户')}] {comment.get('time', '未知时间')}
-内容: {comment.get('content', '评论内容缺失')}
-点赞: {comment.get('likes', 0)} | 回复: {comment.get('replies', 0)}
-"""
-            comment_strings.append(comment_str)
-        
-        return "\n".join(comment_strings)
-    
-    def analyze_stock_sentiment(self, stock_symbol: str) -> Dict[str, Any]:
+
+    def _init_analyzing(self, symbol: str):
+        self._current_symbol = symbol
+        # 1. 获取股票基本信息
+        stock_info = get_ashare_stock_info(symbol)
+        self._current_symbol_name = stock_info["stock_name"]
+        self._symbol_business_name = stock_info["stock_business"]
+        self._analysis_report = ""
+        self._level = ""
+        self._score = -1
+        self._url_results = []
+
+    def analyze_stock_sentiment(self, symbol: str) -> str:
         """
         分析股票市场情绪
         
         Args:
-            stock_symbol: 股票代码
+            symbol: 股票代码
             
         Returns:
             完整的分析结果
         """
-        result = { "success": False, 'stock_symbol': stock_symbol }
-        try:
-            logger.info(f"开始分析股票 {stock_symbol} 的市场情绪")
+        self._init_analyzing(symbol)
 
-            # 1. 获取股票基本信息
-            stock_info = get_ashare_stock_info(stock_symbol)
-            stock_name = stock_info.get('stock_name', '未知股票')
-            result["stock_info"] = stock_info
-            result["stock_name"] = stock_name
-            logger.info(f"获取到股票信息: {stock_name}")
-
-            # 2. 判断交易所
-            exchange = determine_exchange(stock_symbol)
-            result["exchange"] = exchange
-            logger.info(f"判断交易所: {exchange}")
+        all_comments = self._fetch_all_comments()
+        if not all_comments:
+            return "没有评论数据，无法进行情绪分析"
+ 
+        # 5. 分析市场情绪
+        sentiment_result = self._analyze_core(all_comments)
         
-            # 3. 构建URL
-            urls = self.build_ashare_stock_dicussion_urls(stock_symbol, exchange)
-            logger.info(f"构建URL: {urls}")
-        
-            # 4. 爬取评论
-            all_comments = []
-            url_results = []
-            for url in urls:
-                try:
-                    logger.info(f"爬取页面: {url}")
-                    raw_response, comments = self.extract_comments_from_url(url)
-                    
-                    url_results.append({
-                        "success": True,
-                        "url": url,
-                        "comments_count": len(comments),
-                        "comments": comments,
-                        "raw_response": raw_response
-                    })
-                    
-                    all_comments.extend(comments)
-                    logger.info(f"从 {url} 获取到 {len(comments)} 条评论")
-                    
-                except Exception as e:
-                    logger.error(f"爬取页面 {url} 失败: {e}")
-                    logger.debug(f"错误详情: {traceback.format_exc()}")
-                    url_results.append({
-                        "success": False,
-                        "url": url,
-                    })
-            result["urls"] = urls
-            result["url_results"] = url_results
-            result["all_comments"] = all_comments
-            result["total_comments"] = len(all_comments)
+        logger.info(f"完成情绪分析: - 评分: {self._score} - 等级: {self._level}")
+    
+        return sentiment_result
 
-            if not all_comments:
-                logger.warning(f"没有评论数据，无法进行情绪分析: {stock_symbol}")
-                return result
-            # 5. 分析市场情绪
-            sentiment_result = self._analyze_sentiment(stock_symbol, stock_name, all_comments)
-            result['analysis_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            result['sentiment_score'] = sentiment_result['score']
-            result['sentiment_level'] = sentiment_result['level']
-            result['sentiment_report'] = sentiment_result['report']
-            
-            logger.info(f"完成情绪分析: {stock_symbol} - 评分: {sentiment_result['score']} - 等级: {sentiment_result['level']}")
-            result["success"] = True
 
-        except Exception as e:
-            logger.error(f"分析股票 {stock_symbol} 情绪失败: {e}")
-            logger.debug(f"错误详情: {traceback.format_exc()}")
-            
-        return result
-
-    def generate_html_report(self, analysis_result: Dict[str, Any]) -> str:
+    def generate_html_report(self) -> str:
         """
         生成HTML报告
-        
-        Args:
-            analysis_result: 分析结果
             
         Returns:
             HTML报告字符串
         """
         
-        stock_symbol = analysis_result["stock_symbol"]
+        assert self._analysis_report, "请先调用analyze_stock_sentiment方法进行情绪分析"
         # 根据情绪评分确定颜色
-        score = analysis_result["sentiment_score"]
+        score = self._score
         if score <= 20:
             sentiment_color = "#d32f2f"  # 红色 - 极度恐慌
         elif score <= 40:
@@ -722,61 +588,26 @@ class StockSentimentAnalyzer:
             sentiment_color = "#1976d2"  # 蓝色 - 极度贪婪
         
         # 预处理markdown内容，转义特殊字符
-        markdown_content = analysis_result["sentiment_report"]
-        escaped_content = markdown_content.replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
         
-        # 处理URL结果，添加平台信息
-        processed_url_results = []
-        for url_result in analysis_result["url_results"]:
-            platform = "雪球" if "xueqiu.com" in url_result["url"] else "股吧" if "guba.eastmoney.com" in url_result["url"] else "其他平台"
-            processed_url_result = url_result.copy()
-            processed_url_result["platform"] = platform
-            processed_url_results.append(processed_url_result)
+        markdown_content = escape_text_for_jinja2_temperate(self._analysis_report)
         
+        total_comments = 0
+        for url_result in self._url_results:
+            if url_result["success"]:
+                total_comments += len(url_result["comments"])
         # 渲染HTML内容
         html_content = Template(HTML_TEMPLATE).render(
-            stock_symbol=stock_symbol,
-            stock_name=analysis_result["stock_name"],
-            stock_type=analysis_result["stock_info"].get("stock_type", "未知"),
-            stock_business=analysis_result["stock_info"].get("stock_business", "未知"),
-            exchange=analysis_result["exchange"],
-            analysis_time=analysis_result["analysis_time"],
-            total_comments=analysis_result["total_comments"],
-            url_results_count=len(analysis_result["url_results"]),
-            sentiment_score=analysis_result["sentiment_score"],
-            sentiment_level=analysis_result["sentiment_level"],
+            symbol=self._current_symbol,
+            symbol_name=self._current_symbol_name,
+            symbol_business=self._symbol_business_name,
+            exchange=determine_exchange(self._current_symbol),
+            total_comments=total_comments,
+            url_results_count=len(self._url_results),
+            sentiment_score=self._score,
+            sentiment_level=self._level,
             sentiment_color=sentiment_color,
-            escaped_content=escaped_content,
-            url_results=processed_url_results,
-            current_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            markdown_content=markdown_content,
+            url_results=self._url_results
         )
         
         return html_content
-    
-    def save_html_report(self, analysis_result: Dict[str, Any], save_folder_path: Optional[str] = None) -> str:
-        """
-        保存HTML报告到指定文件夹
-        
-        Args:
-            analysis_result: 分析结果
-            save_folder_path: 保存文件夹路径，如果为None则使用当前目录
-            
-        Returns:
-            HTML文件路径
-        """
-        if save_folder_path is None:
-            save_folder_path = os.getcwd()
-        
-        if not os.path.exists(save_folder_path):
-            os.makedirs(save_folder_path)
-        
-        file_name = f"{analysis_result['stock_symbol']}_sentiment_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
-        file_path = os.path.join(save_folder_path, file_name)
-        
-        html_content = self.generate_html_report(analysis_result)
-        
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(html_content)
-        
-        logger.info(f"HTML报告已保存到: {file_path}")
-        return file_path

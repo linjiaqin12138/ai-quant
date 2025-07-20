@@ -24,6 +24,7 @@ from lib.utils.string import extract_json_string
 from lib.adapter.llm import get_llm, get_llm_direct_ask
 from lib.adapter.llm.interface import LlmAbstract
 from lib.logger import logger
+import re
 
 SYS_PROMPT = """你是一个专业的网页内容分析师，擅长从网页内容中提取用户需要的特定信息。
 
@@ -45,11 +46,12 @@ SYS_PROMPT = """你是一个专业的网页内容分析师，擅长从网页内�
 返回：{"start_line": 15, "end_line": 89, "reason": "文章正文内容，从标题后开始到参考资料前结束"}
 """
 
-def cache_key_generator(kwargs, *args) -> str:
+def cache_key_generator(kwargs, meta) -> str:
     """生成缓存键"""
     url = kwargs.get('url', '')
-    query = kwargs.get('query', '')
-    return f"web_page_reader:{url}:query:{query}"
+    query = kwargs.get('query') or meta.get('requirement', '')
+    function = meta.get('function', '')
+    return f"{function}:{url}:query:{query}"
 
 class WebPageReader:
     """网页内容读取和智能提取器"""
@@ -61,15 +63,10 @@ class WebPageReader:
         Args:
             llm: LLM实例
         """
-        self.llm = llm or get_llm("paoluz", "deepseek-v3", temperature=0.1)
-        self.llm_ask = get_llm_direct_ask(
-            SYS_PROMPT, 
-            llm=self.llm,
-            response_format='json_object'
-        )
+        self._llm = llm or get_llm("paoluz", "deepseek-v3", temperature=0.1)
 
     @with_retry((LlmReplyInvalid,), max_retry_times=1)
-    def analyze_content_range(self, content: str, query: str) -> Tuple[int, int]:
+    def _analyze_content_range(self, content: str, query: str) -> Tuple[int, int]:
         """
         分析内容并返回指定query对应的行范围
         
@@ -103,7 +100,12 @@ class WebPageReader:
         )
         
         # 调用Agent分析
-        response = self.llm_ask(prompt)
+        _llm_ask = get_llm_direct_ask(
+            SYS_PROMPT, 
+            llm=self._llm,
+            response_format='json_object'
+        )
+        response = _llm_ask(prompt)
         logger.debug(f"LLM分析响应: {response}")
         result = extract_json_string(response)
         if not result or "start_line" not in result or "end_line" not in result:
@@ -116,7 +118,7 @@ class WebPageReader:
         return start_line, end_line
 
     
-    def extract_content_by_range(self, content: str, start_line: int, end_line: int) -> str:
+    def _extract_content_by_range(self, content: str, start_line: int, end_line: int) -> str:
         """
         根据行范围提取内容
         
@@ -160,27 +162,66 @@ class WebPageReader:
             包含提取结果的字典
         """
         
-        try:
-            # 读取网页内容
-            logger.info(f"📖 正在读取网页: {url}")
-            full_content = read_web_page_by_jina(url)
+        # 读取网页内容
+        logger.info(f"📖 正在读取网页: {url}")
+        full_content = read_web_page_by_jina(url)
 
-            if not full_content.strip():
-                return "网页内容为空"
+        if not full_content.strip():
+            return "网页内容为空"
+        
+        logger.info(f"✅ 网页读取成功，内容长度: {len(full_content)} 字符")
+        
+        # 分析内容范围
+        logger.info(f"🔍 正在分析内容，查找: {query}")
+        start_line, end_line = self._analyze_content_range(full_content, query)
+        
+        # 提取指定范围的内容
+        extracted_content = self._extract_content_by_range(full_content, start_line, end_line)
+        logger.info(f"✅ 提取成功，行范围: [{start_line}, {end_line}]")
+        return extracted_content
+
+    @use_cache(3600, use_db_cache=True, key_generator=cache_key_generator)
+    @with_retry(
+        retry_errors=(ConnectionError, TimeoutError, OSError),
+        max_retry_times=3
+    ) 
+    def read_and_summary(self, url: str, requirement: str = "提取并以Markdown输出网页中正文内容") -> str:
+        """
+        读取网页并根据要求进行总结
+        
+        Args:
+            url: 网页URL
             
-            logger.info(f"✅ 网页读取成功，内容长度: {len(full_content)} 字符")
+        Returns:
+            根据要求进行总结的字符串
+        """
+        # 读取网页内容
+        logger.info(f"📖 正在读取网页: {url}")
+        full_content = read_web_page_by_jina(url)
+
+        if not full_content.strip():
+            return "网页内容为空"
+        
+        logger.info(f"✅ 网页读取成功，内容长度: {len(full_content)} 字符")
+        
+        # 使用LLM生成摘要
+        logger.info("🔍 正在生成网页摘要")
+        _llm_ask = get_llm_direct_ask(llm=self._llm)
+        prompt = dedent(
+            f"""
+            请根据以下网页内容，生成一个简洁的摘要，内容应符合以下要求：
+            - {requirement}
             
-            # 分析内容范围
-            logger.info(f"🔍 正在分析内容，查找: {query}")
-            start_line, end_line = self.analyze_content_range(full_content, query)
-            
-            # 提取指定范围的内容
-            extracted_content = self.extract_content_by_range(full_content, start_line, end_line)
-            logger.info(f"✅ 提取成功，行范围: [{start_line}, {end_line}]")
-            return extracted_content
-            
-        except Exception as e:
-            error_msg = f"处理失败: {str(e)}"
-            logger.error(error_msg)
-            logger.debug(f"错误详情: {traceback.format_exc()}")
-            return error_msg
+            网页内容：
+            ```
+            {full_content}
+            ```
+            """
+        )
+        response_text = _llm_ask(prompt)
+        # 如果返回内容以```markdown开头，以```结尾，去掉包裹
+        match = re.match(r"^```markdown\s*([\s\S]*?)\s*```$", response_text.strip())
+        if match:
+            response_text = match.group(1).strip()
+        return response_text.strip()
+        

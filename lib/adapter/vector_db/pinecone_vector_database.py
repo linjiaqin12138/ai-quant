@@ -4,9 +4,8 @@
 import time
 from typing import List, Dict, Any, Optional
 from pinecone import Pinecone, ServerlessSpec
-from pinecone.exceptions import PineconeException
+from pinecone.exceptions import NotFoundException
 
-from lib.config import get_pinecone_api_key
 from .vector_database_base import (
     VectorDatabaseAbstract,
     VectorRecord,
@@ -17,11 +16,10 @@ from .vector_database_base import (
     IndexStats
 )
 
-
 class PineconeVectorDatabase(VectorDatabaseAbstract):
     """基于Pinecone的向量数据库实现"""
     
-    def __init__(self, api_key: str = "", environment: str = "us-east-1-aws"):
+    def __init__(self, api_key: str = "", environment: Dict[str, str] = {"cloud": "aws", "region": "us-east-1"}):
         """
         初始化Pinecone客户端
         
@@ -29,7 +27,7 @@ class PineconeVectorDatabase(VectorDatabaseAbstract):
             api_key: Pinecone API密钥
             environment: Pinecone环境（云区域）
         """
-        self.api_key = api_key or get_pinecone_api_key()
+        self.api_key = api_key
         self.environment = environment
         self.pc = Pinecone(api_key=self.api_key)
         self._index_cache = {}  # 缓存已连接的索引
@@ -53,38 +51,27 @@ class PineconeVectorDatabase(VectorDatabaseAbstract):
         Returns:
             bool: 是否创建成功
         """
-        try:
-            # 默认使用Serverless规格
-            spec = ServerlessSpec(
-                cloud=kwargs.get('cloud', 'aws'),
-                region=kwargs.get('region', 'us-east-1')
-            )
-            
-            self.pc.create_index(
-                name=name,
-                dimension=dimension,
-                metric=metric,
-                spec=spec
-            )
-            
-            # 等待索引创建完成
-            timeout = kwargs.get('timeout', 60)
-            start_time = time.time()
-            
-            while time.time() - start_time < timeout:
-                try:
-                    index_info = self.pc.describe_index(name)
-                    if index_info.status['ready']:
-                        return True
-                    time.sleep(2)
-                except PineconeException:
-                    time.sleep(2)
-            
-            return False
-            
-        except Exception as e:
-            print(f"创建索引失败: {str(e)}")
-            return False
+        # 默认使用Serverless规格
+        spec = ServerlessSpec(**self.environment)
+        
+        self.pc.create_index(
+            name=name,
+            dimension=dimension,
+            metric=metric,
+            spec=spec
+        )
+        
+        # 等待索引创建完成
+        timeout = kwargs.get('timeout', 60)
+        start_time = time.time()
+        
+        while time.time() - start_time < timeout:
+            index_info = self.pc.describe_index(name)
+            if index_info.status['ready']:
+                return True
+            time.sleep(2)
+        
+        return False
     
     def delete_index(self, name: str) -> bool:
         """
@@ -96,15 +83,11 @@ class PineconeVectorDatabase(VectorDatabaseAbstract):
         Returns:
             bool: 是否删除成功
         """
-        try:
-            self.pc.delete_index(name)
-            # 清理缓存
-            if name in self._index_cache:
-                del self._index_cache[name]
-            return True
-        except Exception as e:
-            print(f"删除索引失败: {str(e)}")
-            return False
+        self.pc.delete_index(name)
+        # 清理缓存
+        if name in self._index_cache:
+            del self._index_cache[name]
+        return True
     
     def list_indexes(self) -> List[str]:
         """
@@ -113,13 +96,9 @@ class PineconeVectorDatabase(VectorDatabaseAbstract):
         Returns:
             List[str]: 索引名称列表
         """
-        try:
-            indexes = self.pc.list_indexes()
-            return [index.name for index in indexes]
-        except Exception as e:
-            print(f"列出索引失败: {str(e)}")
-            return []
-    
+        indexes = self.pc.list_indexes()
+        return [index.name for index in indexes]
+       
     def describe_index(self, name: str) -> Dict[str, Any]:
         """
         获取索引详细信息
@@ -339,14 +318,10 @@ class PineconeVectorDatabase(VectorDatabaseAbstract):
             index.update(**update_data, namespace=namespace)
             
             return True
-            
-        except Exception as e:
-            # 只有在not found的情况下才返回False，其它错误要raise
-            if "not found" in str(e).lower():
-                return False
-            else:
-                raise
         
+        except NotFoundException:
+            # 如果向量不存在，返回False
+            return False
     
     def delete_all(self, index_name: str, namespace: str = "") -> bool:
         """
@@ -363,9 +338,6 @@ class PineconeVectorDatabase(VectorDatabaseAbstract):
             index = self._get_index(index_name)
             index.delete(delete_all=True, namespace=namespace)
             return True
-        except Exception as e:
-            # 只有在not found的情况下才返回False，其它错误要raise
-            if "not found" in str(e).lower():
-                return False
-            else:
-                raise
+        except NotFoundException:
+            # 如果向量不存在，返回False
+            return False

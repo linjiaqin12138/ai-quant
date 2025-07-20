@@ -6,23 +6,18 @@
 
 import json
 from datetime import datetime
-from typing import List, Dict, Any, Annotated
-import traceback
+from typing import List, Dict, Annotated
 
 from jinja2 import Template
 from lib.model import Ohlcv
-from lib.modules.agents.common import get_ohlcv_history
+from lib.modules.agents.common import format_indicators, format_ohlcv_list, format_ohlcv_pattern, get_ohlcv_history
 from lib.tools.ashare_stock import get_ashare_stock_info
-from lib.modules.agents.market_master import (
-    format_ohlcv_list, 
-    format_indicators, 
-    format_ohlcv_pattern
-)
 from lib.utils.indicators import calculate_indicators
 from lib.modules import get_agent
 from lib.logger import logger
 from lib.adapter.llm import get_llm
 from lib.adapter.llm.interface import LlmAbstract
+from lib.utils.string import escape_text_for_jinja2_temperate
 
 # HTML报告模板
 HTML_TEMPLATE = """
@@ -43,7 +38,7 @@ HTML_TEMPLATE = """
             background-color: #f5f5f5;
         }
         .container {
-            max-width: 1400px;
+            max-width: 1200px;
             margin: 0 auto;
             background-color: white;
             padding: 30px;
@@ -90,6 +85,7 @@ HTML_TEMPLATE = """
         .info-value {
             color: #34495e;
             flex: 1;
+            word-break: break-all;
         }
         .chart-container {
             background-color: white;
@@ -241,11 +237,7 @@ HTML_TEMPLATE = """
             </div>
             <div class="info-item">
                 <span class="info-label">名称:</span>
-                <span class="info-value">{{ stock_name }}</span>
-            </div>
-            <div class="info-item">
-                <span class="info-label">市场:</span>
-                <span class="info-value">{{ market_type }}</span>
+                <span class="info-value">{{ symbol_name }}</span>
             </div>
             <div class="info-item">
                 <span class="info-label">分析时间:</span>
@@ -291,7 +283,6 @@ HTML_TEMPLATE = """
         </div>
         
         <div class="footer">
-            <p>报告生成时间: {{ current_time }}</p>
             <p>由智能市场分析Agent自动生成</p>
             <p>⚠️ 本报告仅供参考，不构成投资建议</p>
         </div>
@@ -307,7 +298,7 @@ HTML_TEMPLATE = """
         });
         
         // 渲染AI分析内容
-        const markdownContent = `{{ escaped_analysis_content }}`;
+        const markdownContent = `{{ markdown_report }}`;
         const htmlContent = marked.parse(markdownContent);
         document.getElementById('analysis-content').innerHTML = htmlContent;
         
@@ -336,7 +327,8 @@ HTML_TEMPLATE = """
             const dates = ohlcvData.map(item => item.date);
             const volumes = ohlcvData.map(item => item.volume);
             
-            const smaData = alignIndicatorData(indicatorsData.sma || [], dates.length);
+            const sma20Data = alignIndicatorData(indicatorsData.sma20 || [], dates.length);
+            const sma5Data = alignIndicatorData(indicatorsData.sma5 || [], dates.length);
             const bollUpperData = alignIndicatorData(indicatorsData.boll_upper || [], dates.length);
             const bollMiddleData = alignIndicatorData(indicatorsData.boll_middle || [], dates.length);
             const bollLowerData = alignIndicatorData(indicatorsData.boll_lower || [], dates.length);
@@ -345,7 +337,7 @@ HTML_TEMPLATE = """
                 title: { text: '{{ symbol }} K线图', left: 'center' },
                 tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
                 legend: {
-                    data: ['K线', 'SMA', '布林上轨', '布林中轨', '布林下轨', '成交量'],
+                    data: ['K线', 'SMA 5', 'SMA 20',  '布林上轨', '布林中轨', '布林下轨', '成交量'],
                     top: 30
                 },
                 grid: [
@@ -384,8 +376,13 @@ HTML_TEMPLATE = """
                         }
                     },
                     {
-                        name: 'SMA', type: 'line', data: smaData, smooth: true,
+                        name: 'SMA 20', type: 'line', data: sma20Data, smooth: true,
                         lineStyle: { opacity: 0.8, color: '#3498db', width: 2 },
+                        symbol: 'none', connectNulls: false
+                    },
+                    {
+                        name: 'SMA 5', type: 'line', data: sma5Data, smooth: true,
+                        lineStyle: { opacity: 0.8, color: '#4398db', width: 2 },
                         symbol: 'none', connectNulls: false
                     },
                     {
@@ -504,19 +501,13 @@ MARKET_ANALYST_PROMPT = """
 你是一位经验丰富的技术分析专家，擅长分析股票和加密货币市场。你的任务是根据用户的请求，自主选择合适的工具进行深入的技术分析。
 
 ## 可用工具说明
-
-1. **get_symbol_basic_info()**: 获取股票或加密货币的基本信息
-2. **get_ohlcv_data()**: 获取OHLCV历史数据
-3. **calculate_technical_indicators(indicators, max_length)**: 计算技术指标
-4. **detect_candlestick_patterns()**: 检测K线形态
+1. **calculate_technical_indicators(indicators, max_length)**: 计算技术指标
 
 ## 分析原则
 
-1. **数据充足性**: 首先确保获取足够的历史数据（强烈建议40-50天）来支持所有技术指标的准确计算
-2. **循序渐进**: 先获取基本信息，再获取充足的价格数据，然后选择合适的技术指标
-3. **工具选择**: 根据市场情况和分析目标，选择最相关的指标组合（建议4-6个指标）
-4. **综合分析**: 结合价格走势、技术指标和K线形态进行综合判断
-5. **风险评估**: 务必评估当前市场风险，给出明确的风险提示
+1. **工具选择**: 根据市场情况和分析目标，选择最相关的指标组合（建议4-6个指标）
+2. **综合分析**: 结合价格走势、技术指标和K线形态进行综合判断
+3. **风险评估**: 务必评估当前市场风险，给出明确的风险提示
 
 ## 输出要求
 
@@ -525,7 +516,6 @@ MARKET_ANALYST_PROMPT = """
     - 关键支撑和阻力位
     - 技术指标解读
     - K线形态分析（如果检测到）
-    - 市场情绪评估
     - 风险评估
 
 2. 给出明确的交易建议：
@@ -555,119 +545,74 @@ class MarketAnalyst:
             llm: LLM实例
             ohlcv_days: 获取OHLCV数据的天数
         """
-        self.llm = llm or get_llm("paoluz", "deepseek-v3", temperature=0.2)
-        self.ohlcv_days = ohlcv_days
-        self.current_symbol = ""
+        self._llm = llm or get_llm("paoluz", "deepseek-v3", temperature=0.2)
+        self._ohlcv_days = ohlcv_days
         
         # 创建Agent
-        self.agent = get_agent(llm=self.llm)
-        self.agent.register_tool(self.get_ohlcv_data)
-        self.agent.register_tool(self.calculate_technical_indicators)
-        self.agent.register_tool(self.detect_candlestick_patterns)
-        logger.info("已注册4个分析工具")
-        self.agent.set_system_prompt(MARKET_ANALYST_PROMPT)
+        self._agent = get_agent(llm=self._llm)
+        self._agent.register_tool(self.calculate_technical_indicators)
+        logger.info("已注册技术指标计算工具")
+        self._agent.set_system_prompt(MARKET_ANALYST_PROMPT)
+        
+        # 开始分析之后才会有值，开始分析前清空
+        self._current_symbol = ""
+        self._analysis_result = ""
+        self._analysis_time = ""
+        self._user_request = ""
+        self._current_symbol_name = ""
+        self._ohlcv_list = []
+        self._use_indicators = ""
+        self._indicators_result = ""
 
-    @property
-    def _is_crypto(self) -> bool:
-        return "USDT" in self.current_symbol.upper()
-
-    def _get_ohlcv_history(self) -> List[Ohlcv]:
-        """获取OHLCV历史数据"""
-        return get_ohlcv_history(self.current_symbol, frame="1d", limit=self.ohlcv_days)
+    def _init_analyzing(self, symbol: str, user_req: str):
+        """根据要分析的symbol初始化类的属性"""
+        self._current_symbol = symbol
+        self._user_request = user_req
+        self._analysis_result = None
+        self._use_indicators = ""
+        self._indicators_result = ""
+        self._analysis_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self._current_symbol_name = self._get_symbol_name()
+        self._ohlcv_list = get_ohlcv_history(self._current_symbol, frame="1d", limit=self._ohlcv_days)
     
-    def _get_symbol_basic_info(self) -> Dict[str, Any]:
-        if self._is_crypto:
-            info = {
-                "symbol": self.current_symbol,
-                "name": self.current_symbol.replace("USDT", "").replace("/", ""),
-                "market": "crypto",
-            }
+    def _get_symbol_name(self) -> str:
+        if "USDT" in self._current_symbol.upper():
+            return self._current_symbol.replace("USDT", "").replace("/", "")
         else:
-            stock_info = get_ashare_stock_info(self.current_symbol)
-            info = {
-                "symbol": self.current_symbol,
-                "name": stock_info.get("stock_name", "未知"),
-                "business": stock_info.get("stock_business", "未知"),
-                "market": "ashare",
-            }
-        return info 
+            stock_info = get_ashare_stock_info(self._current_symbol)
+            return stock_info["stock_name"]
     
-    def get_ohlcv_data(
-        self,
-    ) -> str:
-        """获取股票或加密货币的OHLCV数据"""
-        try:
-            ohlcv_list = self._get_ohlcv_history()
-            if not ohlcv_list:
-                return f"❌ 无法获取{self.current_symbol}的OHLCV数据"
-            
-            formatted_data = format_ohlcv_list(ohlcv_list)
-            logger.info(f"成功获取{self.current_symbol}的{len(ohlcv_list)}天OHLCV数据")
-            return formatted_data
-            
-        except Exception as e:
-            logger.error(f"获取OHLCV数据失败: {e}")
-            return f"❌ 获取{self.current_symbol}的OHLCV数据失败: {str(e)}"
-
     def calculate_technical_indicators(
         self,
         indicators: Annotated[str, "技术指标列表，用逗号分隔，可选：sma,rsi,boll,macd,stoch,atr,vwma"] = "sma,rsi,boll,macd",
         max_length: Annotated[int, "返回最近多少个数据点，默认20"] = 20
     ) -> str:
         """计算技术指标"""
-        try:
-            if not self.current_symbol:
-                return "❌ 请先调用get_ohlcv_data获取数据"
-            
-            ohlcv_list = self._get_ohlcv_history()
-            if not ohlcv_list:
-                return f"❌ 无法获取{self.current_symbol}的历史数据"
-            
-            indicator_list = [ind.strip() for ind in indicators.split(",")]
-            result = format_indicators(ohlcv_list, indicator_list, max_length)
-            logger.info(f"成功计算{self.current_symbol}的技术指标: {indicator_list}")
-            return result
-            
-        except Exception as e:
-            logger.error(f"计算技术指标失败: {e}")
-            return f"❌ 计算技术指标失败: {str(e)}"
+        self._use_indicators = indicators
+        indicator_list = [ind.strip() for ind in indicators.split(",")]
+        result = format_indicators(self._ohlcv_list, indicator_list, max_length)
+        logger.info(f"成功计算{self._current_symbol}的技术指标: {indicator_list}")
+        self._indicators_result = result
+        return result
 
-    def detect_candlestick_patterns(self) -> str:
-        """检测K线形态"""
-        try:
-            ohlcv_list = self._get_ohlcv_history()
-            if not ohlcv_list or len(ohlcv_list) < 5:
-                return f"❌ 数据不足，无法检测K线形态（需要至少5个数据点）"
+    def _build_user_prompt(self) -> str:
+        prompt = ""
+        if self._user_request:
+            prompt = f"请对{self._current_symbol_name}进行技术分析，并满足用户需求：{self._user_request}"
+        else:
+            prompt = f"请对{self._current_symbol_name}进行全面的技术分析，包括趋势分析、技术指标分析、K线形态分析，并给出交易建议。"
 
-            patterns = format_ohlcv_pattern(ohlcv_list)
-            if patterns:
-                logger.info(f"成功检测{self.current_symbol}的K线形态")
-                return patterns
-            else:
-                return f"📊 {self.current_symbol}未检测到明显的K线形态"
-                
-        except Exception as e:
-            logger.error(f"检测K线形态失败: {e}")
-            return f"❌ 检测K线形态失败: {str(e)}"
+        prompt += f"\n\n过去{len(self._ohlcv_list)}天的OHLCV数据如下:\n\n"
+        prompt += format_ohlcv_list(self._ohlcv_list)
 
-    def get_symbol_basic_info_str(self) -> str:
-        """获取股票基本信息"""
-        try:
-            info = self._get_symbol_basic_info()
-            
-            result = f"📈 {info['name']}({self.current_symbol}) 基本信息:\n"
-            result += f"• 市场: {info['market']}\n"
-            if 'business' in info:
-                result += f"• 行业: {info['business']}\n"
+        prompt += "\n\n检测到的K线形态：\n\n"
+        prompt += format_ohlcv_pattern(self._ohlcv_list)
+
+        prompt += "\n\n请继续使用calculate_technical_indicators工具计算必要的技术指标，并给出详细的分析报告。"
     
-            logger.info(f"成功获取{self.current_symbol}的基本信息")
-            return result
-            
-        except Exception as e:
-            logger.error(f"获取股票基本信息失败: {e}")
-            return f"❌ 获取{self.current_symbol}基本信息失败: {str(e)}"
-    
-    def analyze_stock_market(self, symbol: str, user_request: str = None) -> Dict[str, Any]:
+        return prompt
+
+    def analyze_stock_market(self, symbol: str, user_request: str = None) -> str:
         """
         分析股票市场并生成完整报告
         
@@ -676,36 +621,17 @@ class MarketAnalyst:
             user_request: 用户的具体分析需求
         
         Returns:
-            完整的分析结果
+            分析结果字符串
         """
-        self.current_symbol = symbol
-        result = {
-            "symbol": self.current_symbol,
-            "analysis_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "success": False
-        }
-        
-        try:
-            logger.info(f"开始分析{symbol}，用户需求：{user_request or '全面技术分析'}")
-            # AI分析
-            if user_request:
-                request = f"请对{symbol}进行技术分析，并满足用户需求：{user_request}"
-            else:
-                request = f"请对{symbol}进行全面的技术分析，包括趋势分析、技术指标分析、K线形态分析，并给出交易建议。"
-            request += f"\n{self.get_symbol_basic_info_str()}\n"
+        logger.info(f"开始针对{symbol}进行技术分析")
+        self._init_analyzing(symbol, user_request)
+        prompt = self._build_user_prompt()
 
-            result["analysis_result"] = self.agent.ask(request, tool_use=True)
-            result["success"] = True
-            logger.info(f"分析完成：{symbol}")
-            
-        except Exception as e:
-            logger.error(f"分析失败：{e}")
-            logger.debug(f"错误详情：{traceback.format_exc()}")
-            result["error"] = str(e)
+        self._analysis_result = self._agent.ask(prompt, tool_use=True)
         
-        return result
+        return self._analysis_result
     
-    def _prepare_chart_data(self, ohlcv_list: List[Ohlcv]) -> List[Dict]:
+    def _build_ohlcv_chart_data(self, ohlcv_list: List[Ohlcv]) -> List[Dict]:
         """准备图表数据"""
         chart_data = []
         for ohlcv in ohlcv_list:
@@ -719,79 +645,52 @@ class MarketAnalyst:
             })
         return chart_data
     
-    def _parse_indicators_for_chart(self, ohlcv_list: List[Ohlcv]) -> Dict:
+    def _build_indicators_char_data(self, ohlcv_list: List[Ohlcv]) -> Dict:
         """解析技术指标数据用于图表显示"""
         indicators_data = {}
         
-        try:
-            indicator_results = calculate_indicators(
-                ohlcv_list=ohlcv_list, 
-                use_indicators=["sma", "rsi", "macd", "boll"]
-            )
-            
-            if indicator_results.sma20:
-                indicators_data["sma"] = indicator_results.sma20.sma
-            
-            if indicator_results.rsi:
-                indicators_data["rsi"] = indicator_results.rsi.rsi
-            
-            if indicator_results.macd:
-                indicators_data["macd"] = indicator_results.macd.macd
-                indicators_data["signal"] = indicator_results.macd.macdsignal
-                indicators_data["histogram"] = indicator_results.macd.macdhist
-            
-            if indicator_results.boll:
-                indicators_data["boll_upper"] = indicator_results.boll.upperband
-                indicators_data["boll_middle"] = indicator_results.boll.middleband
-                indicators_data["boll_lower"] = indicator_results.boll.lowerband
-            
-        except Exception as e:
-            logger.error(f"解析技术指标失败: {e}")
+        indicator_results = calculate_indicators(
+            ohlcv_list=ohlcv_list, 
+            use_indicators=["sma", "rsi", "macd", "boll"]
+        )
+        
+        if indicator_results.sma20:
+            indicators_data["sma20"] = indicator_results.sma20.sma
+            indicators_data["sma5"] = indicator_results.sma5.sma
+        
+        if indicator_results.rsi:
+            indicators_data["rsi"] = indicator_results.rsi.rsi
+        
+        if indicator_results.macd:
+            indicators_data["macd"] = indicator_results.macd.macd
+            indicators_data["signal"] = indicator_results.macd.macdsignal
+            indicators_data["histogram"] = indicator_results.macd.macdhist
+        
+        if indicator_results.boll:
+            indicators_data["boll_upper"] = indicator_results.boll.upperband
+            indicators_data["boll_middle"] = indicator_results.boll.middleband
+            indicators_data["boll_lower"] = indicator_results.boll.lowerband
         
         return indicators_data
     
-    def generate_html_report(self, analysis_result: Dict[str, Any]) -> str:
+    def generate_html_report(self) -> str:
         """生成HTML报告"""
-        if not analysis_result["success"]:
-            return f"<html><body><h1>分析失败</h1><p>{analysis_result.get('error', '未知错误')}</p></body></html>"
-        
-        # 转义markdown内容
-        markdown_content = analysis_result["analysis_result"]
-        escaped_content = markdown_content.replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
-        
-        basic_info_dict = self._get_symbol_basic_info()
-        # 获取历史数据
-        ohlcv_list = self._get_ohlcv_history() or []
+        error_msg = "请先调用analyze_stock_market方法获取分析结果"
+        assert self._analysis_result is not None, error_msg
+    
         # 渲染HTML内容
         html_content = Template(HTML_TEMPLATE).render(
-            symbol=self.current_symbol,
-            stock_name=basic_info_dict['name'],
-            market_type=basic_info_dict['market'],
-            analysis_time=analysis_result["analysis_time"],
-            data_days=self.ohlcv_days,
-            indicators_used="SMA, RSI, MACD, 布林带",
-            escaped_analysis_content=escaped_content,
-            raw_ohlcv_data=format_ohlcv_list(ohlcv_list) or "",
-            raw_indicators_data=format_indicators(ohlcv_list, ["sma", "rsi", "macd", "boll"], 20) or "",
-            raw_patterns_data=format_ohlcv_pattern(ohlcv_list) or "",
-            ohlcv_data_json=json.dumps(self._prepare_chart_data(ohlcv_list)),
-            indicators_data_json=json.dumps(self._parse_indicators_for_chart(ohlcv_list)),
-            current_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            symbol=self._current_symbol,
+            symbol_name=self._current_symbol_name,
+            analysis_time=self._analysis_time,
+            data_days=self._ohlcv_days,
+            indicators_used=self._use_indicators,
+            markdown_report=escape_text_for_jinja2_temperate(self._analysis_result),
+            raw_ohlcv_data=format_ohlcv_list(self._ohlcv_list) or "",
+            raw_indicators_data=self._indicators_result or "",
+            raw_patterns_data=format_ohlcv_pattern(self._ohlcv_list) or "",
+            ohlcv_data_json=json.dumps(self._build_ohlcv_chart_data(self._ohlcv_list)),
+            indicators_data_json=json.dumps(self._build_indicators_char_data(self._ohlcv_list))
         )
         
         return html_content
-    
-    def save_html_report(self, analysis_result: Dict[str, Any], output_file: str = None) -> str:
-        """保存HTML报告"""
-        if output_file is None:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            clean_symbol = analysis_result["symbol"].replace("/", "")
-            output_file = f"smart_market_analysis_{clean_symbol}_{timestamp}.html"
-        
-        html_content = self.generate_html_report(analysis_result)
-        
-        with open(output_file, "w", encoding="utf-8") as f:
-            f.write(html_content)
-        
-        logger.info(f"HTML报告已保存到: {output_file}")
-        return output_file

@@ -79,15 +79,18 @@ def get_ashare_stock_info(symbol: str) -> AShareStockInfo:
 
 
 # 不适用数据库 Data too long for column 'context' at row 1
-@use_cache(600)
-def get_stock_news(symbol: str, time_limit: str = None) -> List[NewsInfo]:
+@use_cache(
+    86400, 
+    use_db_cache=True,
+    serializer=lambda l: [x.to_dict() for x in l],
+    deserializer=lambda l: [NewsInfo.from_dict(x) for x in l],
+)
+def get_stock_news(symbol: str) -> List[NewsInfo]:
     """
     获取A股股票的新闻数据，使用数据库缓存
     
     Args:
         symbol: 股票代码
-        time_limit: 时间限制，可选值: 'd'(一天), 'w'(一周), 'm'(一个月), 'y'(一年)。
-                   如果为None，返回所有新闻
     
     Returns:
         NewsInfo对象列表，按时间倒序排列
@@ -95,20 +98,6 @@ def get_stock_news(symbol: str, time_limit: str = None) -> List[NewsInfo]:
     # 从 akshare 获取数据
     news_df = ak.stock_news_em(symbol=symbol)
     news_df["发布时间"] = pd.to_datetime(news_df["发布时间"])
-    
-    # 根据time_limit过滤新闻
-    if time_limit:
-        current_time = datetime.now()
-        time_limit_map = {
-            'd': timedelta(days=1),
-            'w': timedelta(weeks=1), 
-            'm': timedelta(days=30),
-            'y': timedelta(days=365)
-        }
-        
-        if time_limit in time_limit_map:
-            cutoff_time = current_time - time_limit_map[time_limit]
-            news_df = news_df[news_df["发布时间"] >= cutoff_time]
     
     news_info_list: List[NewsInfo] = []
 
@@ -124,6 +113,24 @@ def get_stock_news(symbol: str, time_limit: str = None) -> List[NewsInfo]:
         news_info_list.append(news_info)
 
     return news_info_list
+
+def get_stock_news_during(symbol: str, from_time: datetime, end_time: datetime = datetime.now()) -> List[NewsInfo]:
+    """
+    获取指定时间范围内的A股股票新闻数据
+    
+    Args:
+        symbol: 股票代码
+        from_time: 起始时间
+        end_time: 结束时间
+    
+    Returns:
+        NewsInfo对象列表，按时间倒序排列
+    """
+    news_list = get_stock_news(symbol)
+    return [
+        news for news in news_list 
+        if from_time <= news.timestamp <= end_time
+    ]
 
 
 @use_cache(86400 * 7, use_db_cache=True)

@@ -20,8 +20,6 @@ from .pinecone_vector_database import PineconeVectorDatabase
 from .chromadb_vector_database import ChromaDBVectorDatabase
 
 from .vector_database_factory import (
-    VectorDatabaseFactory,
-    VectorDatabaseType,
     create_pinecone_database,
     create_chromadb_database,
     get_default_pinecone_config,
@@ -44,8 +42,6 @@ __all__ = [
     'ChromaDBVectorDatabase',
     
     # 工厂类和工具函数
-    'VectorDatabaseFactory',
-    'VectorDatabaseType',
     'create_pinecone_database',
     'create_chromadb_database',
     'get_default_pinecone_config',

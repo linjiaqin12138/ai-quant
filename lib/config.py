@@ -69,9 +69,44 @@ def get_http_proxy() -> str:
     return os.environ.get("PROXY")
 
 
-def get_pinecone_api_key() -> str:
-    """获取Pinecone API Key"""
-    return os.environ.get("PINECONE_API_KEY")
+def get_default_pinecone_config() -> Dict[str, str]:
+    """
+    获取默认的Pinecone配置
+    
+    Returns:
+        Dict[str, Any]: 默认配置
+    """
+    
+    config = {}
+    # 从环境变量获取API密钥
+    api_key = os.getenv("PINECONE_API_KEY")
+    if api_key:
+        config["api_key"] = api_key
+    
+    # 从环境变量获取环境
+    config["environment"] = {
+        "cloud": os.getenv("PINECONE_CLOUD", "aws"),
+        "region": os.getenv("PINECONE_REGION", "us-east-1")
+    }
+    
+    return config
+
+
+def get_default_chromadb_config() -> Dict[str, str]:
+    """
+    获取默认的ChromaDB配置
+    
+    Returns:
+        Dict[str, str]: 默认配置
+    """
+    
+    config = {
+        "path": os.getenv("CHROMADB_PATH", "./chroma_db"),
+        "host": os.getenv("CHROMADB_HOST"),
+        "port": int(os.getenv("CHROMADB_PORT", "8000")) if os.getenv("CHROMADB_PORT") else None
+    }
+    
+    return config
 
 
 API_MAX_RETRY_TIMES = int(os.environ.get("API_MAX_RETRY_TIMES") or 5)

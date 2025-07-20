@@ -7,7 +7,7 @@ from dataclasses import asdict, dataclass
 import typer
 
 from lib.model.common import Ohlcv, Order
-from lib.modules.agents.market_master import MarketMaster, TradeContext, TradeLog
+from lib.modules.agents.market_master import SimpleTraderAgent, TradeContext, TradeLog
 from lib.modules.agents.news_helper import NewsSummaryer
 from lib.modules.strategy.strategyv2 import StrategyBase
 from lib.utils.time import dt_to_ts
@@ -63,7 +63,7 @@ class GptStrategy(StrategyBase):
         self.state.append('operations', operations)
 
     def _prepare(self):
-        self.market_master = MarketMaster(
+        self.market_master = SimpleTraderAgent(
             risk_prefer=self.risk_prefer,
             strategy_prefer=self.strategy_prefer,
             llm_provider=self.advice_model_provider,

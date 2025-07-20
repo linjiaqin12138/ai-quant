@@ -59,7 +59,6 @@ def duckduckgo_search(query: str, max_results: int = 10, region: str = "us-en", 
     # 将结果转换为NewsInfo对象数组
     news_infos = []
     for result in results:
-        print(json.dumps(result, indent=2, ensure_ascii=False))
         # 生成唯一的news_id
         news_id = hash_str(f"{result.get('url', '')}{result.get('title', '')}")
 

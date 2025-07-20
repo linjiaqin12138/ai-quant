@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional, Union, Tuple
+from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -44,8 +44,17 @@ class DeleteResponse:
 
 
 @dataclass
+
 class IndexStats:
-    """索引统计信息数据类"""
+    """
+    索引统计信息数据类
+
+    Attributes:
+        total_vector_count (int): 向量总数，表示索引中存储的向量数量。
+        dimension (int): 向量维度，表示每个向量的特征维数。
+        index_fullness (float): 索引填充度，表示索引的使用率或占用比例，范围通常为0到1。
+        namespaces (Dict[str, Dict[str, Any]]): 命名空间信息，键为命名空间名称，值为该命名空间的详细统计信息字典。
+    """
     total_vector_count: int
     dimension: int
     index_fullness: float

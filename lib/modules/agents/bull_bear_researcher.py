@@ -20,7 +20,7 @@ from lib.modules import get_agent
 from lib.modules.agents.common import get_ohlcv_history
 from lib.tools.information_search import unified_search
 from lib.modules.agents.web_page_reader import WebPageReader
-from lib.modules.agents.investment_reflector import InvestmentReflector, ReflectionData, ReflectionResult
+from lib.modules.agents.reflector import InvestmentReflector, ReflectionData, ReflectionResult
 from lib.logger import logger
 
 

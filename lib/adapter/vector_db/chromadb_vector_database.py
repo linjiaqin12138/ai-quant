@@ -57,27 +57,12 @@ class ChromaDBVectorDatabase(VectorDatabaseAbstract):
         
         self._collections_cache = {}  # 缓存已获取的集合
     
-    def _get_collection(self, name: str, dimension: int = None):
+    def _get_collection(self, name: str):
         """获取或创建集合（ChromaDB中的索引概念）"""
         if name in self._collections_cache:
             return self._collections_cache[name]
-        
-        try:
-            # 尝试获取现有集合
-            collection = self.client.get_collection(name)
-        except Exception:
-            # 集合不存在，创建新集合
-            if dimension is None:
-                raise ValueError(f"集合 {name} 不存在且未指定维度")
-            
-            # ChromaDB不需要显式指定维度，会自动从向量推断
-            collection = self.client.create_collection(
-                name=name,
-                metadata={"dimension": dimension}
-            )
-        
-        self._collections_cache[name] = collection
-        return collection
+        self._collections_cache[name] = self.client.get_collection(name)
+        return self._collections_cache[name]
     
     def create_index(self, name: str, dimension: int, metric: str = "cosine", **kwargs) -> bool:
         """
@@ -92,39 +77,26 @@ class ChromaDBVectorDatabase(VectorDatabaseAbstract):
         Returns:
             bool: 是否创建成功
         """
-        try:
-            # 检查集合是否已存在
-            try:
-                existing_collection = self.client.get_collection(name)
-                print(f"集合 {name} 已存在")
-                return True
-            except Exception:
-                pass
-            
-            # 映射距离度量方式
-            distance_function = "cosine"  # ChromaDB默认使用cosine
-            if metric == "euclidean":
-                distance_function = "l2"
-            elif metric == "dotproduct":
-                distance_function = "ip"  # inner product
-            
-            # 创建集合
-            collection = self.client.create_collection(
-                name=name,
-                metadata={
-                    "dimension": dimension,
-                    "metric": metric,
-                    "distance_function": distance_function
-                }
-            )
-            
-            # 缓存集合
-            self._collections_cache[name] = collection
-            return True
-            
-        except Exception as e:
-            print(f"创建索引失败: {str(e)}")
-            return False
+        # 映射距离度量方式
+        distance_function = "cosine"  # ChromaDB默认使用cosine
+        if metric == "euclidean":
+            distance_function = "l2"
+        elif metric == "dotproduct":
+            distance_function = "ip"  # inner product
+        
+        # 创建集合
+        collection = self.client.create_collection(
+            name=name,
+            metadata={
+                "dimension": dimension,
+                "metric": metric,
+                "distance_function": distance_function
+            }
+        )
+        
+        # 缓存集合
+        self._collections_cache[name] = collection
+        return True
     
     def delete_index(self, name: str) -> bool:
         """
@@ -136,15 +108,11 @@ class ChromaDBVectorDatabase(VectorDatabaseAbstract):
         Returns:
             bool: 是否删除成功
         """
-        try:
-            self.client.delete_collection(name)
-            # 清理缓存
-            if name in self._collections_cache:
-                del self._collections_cache[name]
-            return True
-        except Exception as e:
-            print(f"删除索引失败: {str(e)}")
-            return False
+        self.client.delete_collection(name)
+        # 清理缓存
+        if name in self._collections_cache:
+            del self._collections_cache[name]
+        return True
     
     def list_indexes(self) -> List[str]:
         """
@@ -153,12 +121,8 @@ class ChromaDBVectorDatabase(VectorDatabaseAbstract):
         Returns:
             List[str]: 索引名称列表
         """
-        try:
-            collections = self.client.list_collections()
-            return [collection.name for collection in collections]
-        except Exception as e:
-            print(f"列出索引失败: {str(e)}")
-            return []
+        collections = self.client.list_collections()
+        return [collection.name for collection in collections]
     
     def describe_index(self, name: str) -> Dict[str, Any]:
         """
@@ -170,25 +134,21 @@ class ChromaDBVectorDatabase(VectorDatabaseAbstract):
         Returns:
             Dict[str, Any]: 索引信息
         """
-        try:
-            collection = self.client.get_collection(name)
-            
-            # 获取集合统计信息
-            count = collection.count()
-            metadata = collection.metadata or {}
-            
-            return {
-                'name': collection.name,
-                'id': collection.id,
-                'count': count,
-                'dimension': metadata.get('dimension', 'unknown'),
-                'metric': metadata.get('metric', 'cosine'),
-                'distance_function': metadata.get('distance_function', 'cosine'),
-                'metadata': metadata
-            }
-        except Exception as e:
-            print(f"获取索引信息失败: {str(e)}")
-            return {}
+        collection = self.client.get_collection(name)
+        
+        # 获取集合统计信息
+        count = collection.count()
+        metadata = collection.metadata or {}
+        
+        return {
+            'name': collection.name,
+            'id': collection.id,
+            'count': count,
+            'dimension': metadata.get('dimension', 'unknown'),
+            'metric': metadata.get('metric', 'cosine'),
+            'distance_function': metadata.get('distance_function', 'cosine'),
+            'metadata': metadata
+        }
     
     def upsert(self, 
                index_name: str, 
@@ -205,52 +165,47 @@ class ChromaDBVectorDatabase(VectorDatabaseAbstract):
         Returns:
             UpsertResponse: 插入响应
         """
-        try:
-            collection = self._get_collection(index_name)
+        collection = self._get_collection(index_name)
+        
+        # 准备数据
+        ids = []
+        embeddings = []
+        metadatas = []
+        documents = []
+        
+        for vector in vectors:
+            ids.append(vector.id)
+            embeddings.append(vector.values)
             
-            # 准备数据
-            ids = []
-            embeddings = []
-            metadatas = []
-            documents = []
+            # 处理元数据，添加命名空间信息
+            metadata = vector.metadata.copy()
+            if namespace:
+                metadata['namespace'] = namespace
             
-            for vector in vectors:
-                ids.append(vector.id)
-                embeddings.append(vector.values)
-                
-                # 处理元数据，添加命名空间信息
-                metadata = vector.metadata.copy()
-                if namespace:
-                    metadata['namespace'] = namespace
-                
-                # ChromaDB要求metadata的值必须是基本类型
-                filtered_metadata = {}
-                for k, v in metadata.items():
-                    if isinstance(v, (str, int, float, bool)):
-                        filtered_metadata[k] = v
-                    else:
-                        filtered_metadata[k] = str(v)
-                
-                metadatas.append(filtered_metadata)
-                
-                # 使用文本内容作为document，如果没有则使用ID
-                documents.append(
-                    metadata.get('text', metadata.get('content', vector.id))
-                )
+            # ChromaDB要求metadata的值必须是基本类型
+            filtered_metadata = {}
+            for k, v in metadata.items():
+                if isinstance(v, (str, int, float, bool)):
+                    filtered_metadata[k] = v
+                else:
+                    filtered_metadata[k] = str(v)
             
-            # 执行插入/更新
-            collection.upsert(
-                ids=ids,
-                embeddings=embeddings,
-                metadatas=metadatas,
-                documents=documents
+            metadatas.append(filtered_metadata)
+            
+            # 使用文本内容作为document，如果没有则使用ID
+            documents.append(
+                metadata.get('text', metadata.get('content', vector.id))
             )
-            
-            return UpsertResponse(upserted_count=len(vectors))
-            
-        except Exception as e:
-            print(f"插入向量失败: {str(e)}")
-            return UpsertResponse(upserted_count=0)
+        
+        # 执行插入/更新
+        collection.upsert(
+            ids=ids,
+            embeddings=embeddings,
+            metadatas=metadatas,
+            documents=documents
+        )
+        
+        return UpsertResponse(upserted_count=len(vectors))
     
     def query(self, 
               index_name: str, 
@@ -275,52 +230,47 @@ class ChromaDBVectorDatabase(VectorDatabaseAbstract):
         Returns:
             QueryResponse: 查询响应
         """
-        try:
-            collection = self._get_collection(index_name)
-            
-            # 构建查询条件
-            where_clause = {}
-            if namespace:
-                where_clause['namespace'] = namespace
-            
-            if filter_dict:
-                where_clause.update(filter_dict)
-            
-            # 执行查询
-            results = collection.query(
-                query_embeddings=[vector],
-                n_results=top_k,
-                where=where_clause if where_clause else None,
-                include=['distances', 'metadatas', 'documents'] + 
-                       (['embeddings'] if include_values else [])
-            )
-            
-            # 转换查询结果
-            matches = []
-            if results['ids'] and results['ids'][0]:
-                for i, doc_id in enumerate(results['ids'][0]):
-                    # ChromaDB返回距离，需要转换为相似度分数
-                    distance = results['distances'][0][i]
-                    # 对于cosine距离，相似度 = 1 - distance
-                    # 对于其他距离度量，可能需要不同的转换
-                    score = 1.0 - distance if distance <= 1.0 else 1.0 / (1.0 + distance)
-                    
-                    query_result = QueryResult(
-                        id=doc_id,
-                        score=score,
-                        values=results['embeddings'][0][i] if include_values and 'embeddings' in results else None,
-                        metadata=results['metadatas'][0][i] if include_metadata and 'metadatas' in results else {}
-                    )
-                    matches.append(query_result)
-            
-            return QueryResponse(
-                matches=matches,
-                namespace=namespace
-            )
-            
-        except Exception as e:
-            print(f"查询向量失败: {str(e)}")
-            return QueryResponse(matches=[], namespace=namespace)
+        collection = self._get_collection(index_name)
+        
+        # 构建查询条件
+        where_clause = {}
+        if namespace:
+            where_clause['namespace'] = namespace
+        
+        if filter_dict:
+            where_clause.update(filter_dict)
+        
+        # 执行查询
+        results = collection.query(
+            query_embeddings=[vector],
+            n_results=top_k,
+            where=where_clause if where_clause else None,
+            include=['distances', 'metadatas', 'documents'] + 
+                    (['embeddings'] if include_values else [])
+        )
+        
+        # 转换查询结果
+        matches = []
+        if results['ids'] and results['ids'][0]:
+            for i, doc_id in enumerate(results['ids'][0]):
+                # ChromaDB返回距离，需要转换为相似度分数
+                distance = results['distances'][0][i]
+                # 对于cosine距离，相似度 = 1 - distance
+                # 对于其他距离度量，可能需要不同的转换
+                score = 1.0 - distance if distance <= 1.0 else 1.0 / (1.0 + distance)
+                
+                query_result = QueryResult(
+                    id=doc_id,
+                    score=score,
+                    values=results['embeddings'][0][i] if include_values and 'embeddings' in results else None,
+                    metadata=results['metadatas'][0][i] if include_metadata and 'metadatas' in results else {}
+                )
+                matches.append(query_result)
+        
+        return QueryResponse(
+            matches=matches,
+            namespace=namespace
+        )
     
     def delete(self, 
                index_name: str, 
@@ -337,25 +287,20 @@ class ChromaDBVectorDatabase(VectorDatabaseAbstract):
         Returns:
             DeleteResponse: 删除响应
         """
-        try:
-            collection = self._get_collection(index_name)
-            
-            # 构建删除条件
-            where_clause = {}
-            if namespace:
-                where_clause['namespace'] = namespace
-            
-            # 执行删除
-            collection.delete(
-                ids=ids,
-                where=where_clause if where_clause else None
-            )
-            
-            return DeleteResponse(deleted_count=len(ids))
-            
-        except Exception as e:
-            print(f"删除向量失败: {str(e)}")
-            return DeleteResponse(deleted_count=0)
+        collection = self._get_collection(index_name)
+        
+        # 构建删除条件
+        where_clause = {}
+        if namespace:
+            where_clause['namespace'] = namespace
+        
+        # 执行删除
+        collection.delete(
+            ids=ids,
+            where=where_clause if where_clause else None
+        )
+        
+        return DeleteResponse(deleted_count=len(ids))
     
     def fetch(self, 
               index_name: str, 
@@ -372,36 +317,31 @@ class ChromaDBVectorDatabase(VectorDatabaseAbstract):
         Returns:
             Dict[str, VectorRecord]: ID到向量记录的映射
         """
-        try:
-            collection = self._get_collection(index_name)
-            
-            # 构建查询条件
-            where_clause = {}
-            if namespace:
-                where_clause['namespace'] = namespace
-            
-            # 获取向量
-            results = collection.get(
-                ids=ids,
-                where=where_clause if where_clause else None,
-                include=['embeddings', 'metadatas', 'documents']
-            )
-            
-            # 转换结果
-            result = {}
-            if results['ids']:
-                for i, doc_id in enumerate(results['ids']):
-                    result[doc_id] = VectorRecord(
-                        id=doc_id,
-                        values=results['embeddings'][i] if 'embeddings' in results else [],
-                        metadata=results['metadatas'][i] if 'metadatas' in results else {}
-                    )
-            
-            return result
-            
-        except Exception as e:
-            print(f"获取向量失败: {str(e)}")
-            return {}
+        collection = self._get_collection(index_name)
+        
+        # 构建查询条件
+        where_clause = {}
+        if namespace:
+            where_clause['namespace'] = namespace
+        
+        # 获取向量
+        results = collection.get(
+            ids=ids,
+            where=where_clause if where_clause else None,
+            include=['embeddings', 'metadatas', 'documents']
+        )
+        
+        # 转换结果
+        result = {}
+        if results['ids']:
+            for i, doc_id in enumerate(results['ids']):
+                result[doc_id] = VectorRecord(
+                    id=doc_id,
+                    values=results['embeddings'][i] if 'embeddings' in results else [],
+                    metadata=results['metadatas'][i] if 'metadatas' in results else {}
+                )
+        
+        return result
     
     def get_index_stats(self, index_name: str) -> IndexStats:
         """
@@ -413,48 +353,33 @@ class ChromaDBVectorDatabase(VectorDatabaseAbstract):
         Returns:
             IndexStats: 索引统计信息
         """
-        try:
-            collection = self._get_collection(index_name)
-            
-            # 获取集合统计信息
-            count = collection.count()
-            metadata = collection.metadata or {}
-            
-            # 获取命名空间信息
-            namespaces = {}
-            try:
-                # 尝试获取不同命名空间的统计信息
-                # 这是一个简化的实现，实际可能需要更复杂的查询
-                results = collection.get(include=['metadatas'])
-                namespace_counts = {}
-                
-                if results['metadatas']:
-                    for meta in results['metadatas']:
-                        ns = meta.get('namespace', '')
-                        namespace_counts[ns] = namespace_counts.get(ns, 0) + 1
-                
-                for ns, count in namespace_counts.items():
-                    namespaces[ns] = {'vector_count': count}
-                    
-            except Exception:
-                # 如果获取命名空间信息失败，使用默认值
-                namespaces = {'': {'vector_count': count}}
-            
-            return IndexStats(
-                total_vector_count=count,
-                dimension=metadata.get('dimension', 0),
-                index_fullness=0.0,  # ChromaDB不提供此信息
-                namespaces=namespaces
-            )
-            
-        except Exception as e:
-            print(f"获取索引统计信息失败: {str(e)}")
-            return IndexStats(
-                total_vector_count=0,
-                dimension=0,
-                index_fullness=0.0,
-                namespaces={}
-            )
+        collection = self._get_collection(index_name)
+        
+        # 获取集合统计信息
+        count = collection.count()
+        metadata = collection.metadata or {}
+        
+        # 获取命名空间信息
+        namespaces = {}
+        # 尝试获取不同命名空间的统计信息
+        # 这是一个简化的实现，实际可能需要更复杂的查询
+        results = collection.get(include=['metadatas'])
+        namespace_counts = {}
+        
+        if results['metadatas']:
+            for meta in results['metadatas']:
+                ns = meta.get('namespace', '')
+                namespace_counts[ns] = namespace_counts.get(ns, 0) + 1
+        
+        for ns, count in namespace_counts.items():
+            namespaces[ns] = {'vector_count': count}
+        
+        return IndexStats(
+            total_vector_count=count,
+            dimension=metadata.get('dimension', 0),
+            index_fullness=0.0,  # ChromaDB不提供此信息
+            namespaces=namespaces
+        )
     
     def update(self, 
                index_name: str, 
@@ -475,54 +400,47 @@ class ChromaDBVectorDatabase(VectorDatabaseAbstract):
         Returns:
             bool: 是否更新成功
         """
-        try:
-            collection = self._get_collection(index_name)
-            
-            # 先获取现有数据
-            existing_data = collection.get(
-                ids=[id],
-                include=['embeddings', 'metadatas', 'documents']
-            )
-            
-            if not existing_data['ids']:
-                print(f"向量 {id} 不存在")
-                return False
-            
-            # 准备更新数据
-            update_embedding = values if values is not None else existing_data['embeddings'][0]
-            update_metadata = existing_data['metadatas'][0].copy() if existing_data['metadatas'] else {}
-            
-            if metadata:
-                update_metadata.update(metadata)
-            
-            if namespace:
-                update_metadata['namespace'] = namespace
-            
-            # 过滤元数据
-            filtered_metadata = {}
-            for k, v in update_metadata.items():
-                if isinstance(v, (str, int, float, bool)):
-                    filtered_metadata[k] = v
-                else:
-                    filtered_metadata[k] = str(v)
-            
-            update_document = existing_data['documents'][0] if existing_data['documents'] else id
-            
-            # 执行更新（ChromaDB使用upsert进行更新）
-            collection.upsert(
-                ids=[id],
-                embeddings=[update_embedding],
-                metadatas=[filtered_metadata],
-                documents=[update_document]
-            )
-            
-            return True
-            
-        except Exception as e:
-            print(f"更新向量失败: {str(e)}")
+        collection = self._get_collection(index_name)
+        
+        # 先获取现有数据
+        existing_data = collection.get(
+            ids=[id],
+            include=['embeddings', 'metadatas', 'documents']
+        )
+        
+        if not existing_data['ids']:
+            print(f"向量 {id} 不存在")
             return False
-    
-    def delete_all(self, index_name: str, namespace: str = "") -> bool:
+        
+        # 准备更新数据
+        update_embedding = values if values is not None else existing_data['embeddings'][0]
+        update_metadata = existing_data['metadatas'][0].copy() if existing_data['metadatas'] else {}
+        
+        if metadata:
+            update_metadata.update(metadata)
+        
+        if namespace:
+            update_metadata['namespace'] = namespace
+        
+        # 过滤元数据
+        filtered_metadata = {}
+        for k, v in update_metadata.items():
+            if isinstance(v, (str, int, float, bool)):
+                filtered_metadata[k] = v
+            else:
+                filtered_metadata[k] = str(v)
+        
+        update_document = existing_data['documents'][0] if existing_data['documents'] else id
+        
+        # 执行更新（ChromaDB使用upsert进行更新）
+        collection.upsert(
+            ids=[id],
+            embeddings=[update_embedding],
+            metadatas=[filtered_metadata],
+            documents=[update_document]
+        )
+        
+        return True
         """
         删除命名空间中的所有向量
         
@@ -533,34 +451,28 @@ class ChromaDBVectorDatabase(VectorDatabaseAbstract):
         Returns:
             bool: 是否删除成功
         """
-        try:
-            collection = self._get_collection(index_name)
-            
-            # 构建删除条件
-            where_clause = {}
-            if namespace:
-                where_clause['namespace'] = namespace
-            
-            # 获取所有匹配的ID
-            results = collection.get(
-                where=where_clause if where_clause else None,
-                include=['metadatas']
+        collection = self._get_collection(index_name)
+        
+        # 构建删除条件
+        where_clause = {}
+        if namespace:
+            where_clause['namespace'] = namespace
+        
+        # 获取所有匹配的ID
+        results = collection.get(
+            where=where_clause if where_clause else None,
+            include=['metadatas']
+        )
+        
+        if results['ids']:
+            # 删除所有匹配的向量
+            collection.delete(
+                ids=results['ids'],
+                where=where_clause if where_clause else None
             )
+        
+        return True
             
-            if results['ids']:
-                # 删除所有匹配的向量
-                collection.delete(
-                    ids=results['ids'],
-                    where=where_clause if where_clause else None
-                )
-            
-            return True
-            
-        except Exception as e:
-            print(f"删除所有向量失败: {str(e)}")
-            return False
-    
-    def reset_collection(self, index_name: str) -> bool:
         """
         重置集合（删除所有数据但保留集合结构）
         

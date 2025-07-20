@@ -149,7 +149,14 @@ class Agent:
 
                 # 如果没有工具调用，直接返回消息
                 if not response.get("tool_calls"):
-                    content = response.get("content", "")
+                    content = response.get("content", "").strip()
+                    reasoning_content = response.get("reasoning_content", "").strip()
+                    if not content and not reasoning_content:
+                        logger.warning("Received empty response content, continuing to next iteration.")
+                        continue
+                    if reasoning_content:
+                        self.chat_context.append({"role": "assistant", "content": reasoning_content})
+                        continue
                     self.chat_context.append({"role": "assistant", "content": content})
                     return content
 
@@ -176,11 +183,14 @@ class Agent:
                         }
                     )
 
+                continue
                 # 如果只有工具调用没有文本内容，继续下一轮
-                if not response.get("content"):
-                    continue
-                else:
-                    return response["content"]
+                # if not response.get("content") or not response["content"].strip():
+                #     continue
+
+                # if 
+                # else:
+                #     return response["content"]
 
             except Exception as e:
                 logger.error(f"Error in tool conversation: {str(e)} {traceback.format_exc()}")

@@ -15,6 +15,16 @@ from .embedding_base import (
 
 from .paoluz_embedding import PaoluzEmbedding
 
+def create_default_embedding_service() -> EmbeddingAbstract:
+    """
+    创建默认的嵌入服务实例
+    
+    Returns:
+        EmbeddingAbstract: 默认嵌入服务实例
+    """
+    # 这里可以根据配置或环境变量选择不同的嵌入服务实现
+    return PaoluzEmbedding()
+
 __all__ = [
     # 基础接口和数据类
     'EmbeddingAbstract',
@@ -24,4 +34,5 @@ __all__ = [
     
     # 具体实现
     'PaoluzEmbedding',
+    'create_default_embedding_service'
 ]

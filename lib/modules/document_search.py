@@ -15,21 +15,12 @@ from dataclasses import dataclass, field
 from lib.logger import logger
 from lib.adapter.vector_db import (
     VectorDatabaseAbstract,
-    VectorDatabaseFactory,
-    VectorDatabaseType,
     VectorRecord,
-    QueryResult,
-    QueryResponse,
-    create_pinecone_database,
-    create_chromadb_database,
-    get_default_pinecone_config,
-    get_default_chromadb_config,
     create_default_vector_db
 )
 from lib.adapter.embedding import (
     EmbeddingAbstract,
     PaoluzEmbedding,
-    EmbeddingResponse
 )
 from lib.adapter.lock import with_lock
 from lib.tools.cache_decorator import use_cache

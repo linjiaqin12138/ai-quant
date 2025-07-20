@@ -27,7 +27,7 @@ from lib.tools.ashare_stock import (
     AShareStockInfo
 )
 from lib.logger import logger
-from lib.utils.news import news_list_to_markdown, render_news_in_markdown_group_by_platform
+from lib.utils.news import render_news_in_markdown_group_by_platform
 
 # HTML报告模板
 HTML_TEMPLATE = """
