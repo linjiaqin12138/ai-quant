@@ -109,7 +109,8 @@ class Agent:
             response = self.llm.chat(
                 self.chat_context, 
                 tools=None, 
-                response_format='json_object' if json_response else None
+                response_format='json_object' if json_response else None,
+                stream=False
             )
             content = response.get("content", "")
             self.chat_context.append({"role": "assistant", "content": content})
@@ -145,7 +146,7 @@ class Agent:
                 )
 
             try:
-                response = self.llm.chat(self.chat_context, tools=available_tools, response_format=response_format)
+                response = self.llm.chat(self.chat_context, tools=available_tools, response_format=response_format, stream=False)
 
                 # 如果没有工具调用，直接返回消息
                 if not response.get("tool_calls"):

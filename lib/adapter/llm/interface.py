@@ -87,36 +87,22 @@ class LlmAbstract(abc.ABC):
         messages: List[Dict[str, Any]], 
         tools: Optional[List[ToolCallReq]] = None,
         tool_choice: Literal['auto', 'required', 'none'] = None,
-        response_format: Optional[Literal['json_object']] = None
+        response_format: Optional[Literal['json_object']] = None,
+        stream: bool = False  # 新增参数，控制是否流式输出
     ) -> ChatResponse:
-        """统一的聊天接口
+        """
+        统一的聊天接口
         
         Args:
             messages: 消息列表
             tools: 工具定义列表，None表示不使用工具
             tool_choice: 工具选择策略，'auto'表示自动选择工具
             response_format: 响应格式，如'json_object'
-            
+            stream: 是否流式输出（仅部分实现支持）
         Returns:
             ChatResponse: 包含content和tool_calls的响应
         """
         raise NotImplementedError("chat method must be implemented")
-
-    # 为了向后兼容，保留原有方法但标记为过时
-    def ask(self, context: List, response_format: Optional[str] = None) -> str:
-        """向后兼容的ask方法，已过时，请使用chat方法"""
-        logger.warning("ask method is deprecated, please use chat method instead")
-        response = self.chat(context, tools=None, response_format=response_format)
-        return response.get("content", "")
-
-    def ask_with_tools(
-        self, context: List, available_tools: Optional[List[str]] = None, response_format: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """向后兼容的ask_with_tools方法，已过时，请使用chat方法"""
-        logger.warning("ask_with_tools method is deprecated, please use chat method instead")
-        # 这里无法直接转换available_tools，因为需要Agent层的工具管理
-        response = self.chat(context, tools=None, response_format=response_format)
-        return response
 
 
 __all__ = [

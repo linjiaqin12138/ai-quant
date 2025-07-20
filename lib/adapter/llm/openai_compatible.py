@@ -33,13 +33,14 @@ class OpenAiApiMixin:
         context: List, 
         tools: Optional[List[Dict[str, Any]]]= None,
         tool_choice: Optional[Literal['auto', 'required', 'none']] = None,
-        response_format: Optional[Literal['json_object']] = None
+        response_format: Optional[Literal['json_object']] = None,
+        stream: bool = False
     ) -> dict:
         result = remove_none(
             {
                 "model": self.model,
                 "messages": context,
-                "stream": False,
+                "stream": stream,
                 "temperature": self.params.get("temperature"),
                 "top_p": self.params.get("top_p"),
                 "frequency_penalty": self.params.get("frequency_penalty"),
@@ -71,43 +72,89 @@ class OpenAiApiMixin:
         messages: List[Dict[str, Any]], 
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Literal['auto', 'required', 'none']] = None,
-        response_format: Optional[Literal['json_object']] = None
+        response_format: Optional[Literal['json_object']] = None,
+        stream: bool = False  # 新增参数
     ) -> ChatResponse:
-        """统一的聊天接口实现"""
+        """
+        统一的聊天接口实现
+        """
         json_body = self._build_req_body(messages, tools, tool_choice, response_format)
         headers = self._build_req_header()
         path = "/v1/chat/completions"
         debug_req('POST', self.endpoint, path, headers, json_body)
-        response = requests.post(
-            f"{self.endpoint}{path}",
-            json=json_body,
-            headers=headers,
-            stream=False,
-        )
-        logger.info(f"{self.model} calling statusCode: {response.status_code}")
-        debug_rsp(response)
-        if response.status_code == 200:
-            rsp_body = response.json()
-            message = rsp_body["choices"][0]["message"]
-
-            result: ChatResponse = {"content": message.get("content", ""), "tool_calls": None}
-
-            # 检查是否有工具调用
-            if "tool_calls" in message and message["tool_calls"]:
-                result["tool_calls"] = message["tool_calls"]
-
-            return result
-
-        if (
-            response.status_code >= 400
-            and response.status_code < 500
-            and response.status_code != 429
-        ):
-            raise Exception(
-                f"Client request error: {response.status_code=} {response.text=}"
+        if stream:
+            response = requests.post(
+                f"{self.endpoint}{path}",
+                json=json_body,
+                headers=headers,
+                stream=True,
             )
+            logger.info(f"{self.model} calling statusCode: {response.status_code}")
+            debug_rsp(response)
+            if response.status_code == 200:
+                chunks = []
+                for line in response.iter_lines(decode_unicode=True):
+                    if not line:
+                        continue
+                    if line.startswith("data: "):
+                        data = line[len("data: ") :]
+                    else:
+                        data = line
+                    if data.strip() == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data)
+                        if "choices" in chunk and chunk["choices"]:
+                            delta = chunk["choices"][0].get("delta", {})
+                            content = delta.get("content", "")
+                            if content:
+                                print(content, end="", flush=True)
+                                chunks.append(content)
+                    except Exception:
+                        continue
+                print()
+                content = "".join(chunks)
+                return {"content": content, "tool_calls": None}
+            if (
+                response.status_code >= 400
+                and response.status_code < 500
+                and response.status_code != 429
+            ):
+                raise Exception(
+                    f"Client request error: {response.status_code=} {response.text=}"
+                )
+            raise OpenAiRetryableError(f"{self.model} failed with error: {response.text}")
+        else:
+            response = requests.post(
+                f"{self.endpoint}{path}",
+                json=json_body,
+                headers=headers,
+                stream=False,
+            )
+            logger.info(f"{self.model} calling statusCode: {response.status_code}")
+            debug_rsp(response)
+            if response.status_code == 200:
+                rsp_body = response.json()
+                message = rsp_body["choices"][0]["message"]
 
-        raise OpenAiRetryableError(f"{self.model} failed with error: {response.text}")
+                result: ChatResponse = {"content": message.get("content", ""), "tool_calls": None}
+
+                # 检查是否有工具调用
+                if "tool_calls" in message and message["tool_calls"]:
+                    result["tool_calls"] = message["tool_calls"]
+
+                return result
+
+            if (
+                response.status_code >= 400
+                and response.status_code < 500
+                and response.status_code != 429
+            ):
+                raise Exception(
+                    f"Client request error: {response.status_code=} {response.text=}"
+                )
+
+            raise OpenAiRetryableError(f"{self.model} failed with error: {response.text}")
 
     def ask(self, context: List, response_format: Optional[str] = None) -> str:
         """向后兼容的ask方法，已过时，请使用chat方法"""

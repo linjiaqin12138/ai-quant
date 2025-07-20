@@ -16,10 +16,10 @@ def api_query(method: str, endpoint: str, path: str, token: str, data: dict = No
         logger.info(f"Paoluz API calling with body size: {len(json.dumps(data))} Byte")
     if method == "post":
         response = requests.post(
-            f"{endpoint}{path}", json=data, headers=headers, stream=False
+            f"{endpoint}{path}", json=data, headers=headers, stream=False, timeout=600
         )
     else:
-        response = requests.get(f"{endpoint}{path}", headers=headers)
+        response = requests.get(f"{endpoint}{path}", headers=headers, timeout=600)
     logger.info(f"Paoluz API calling status code: {response.status_code}")
     debug_rsp(response)
     return response
@@ -95,28 +95,66 @@ class PaoluzAgent(OpenAiApiMixin, LlmAbstract):
         messages: List[Dict[str, Any]], 
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Literal['auto', 'required', 'none']] = None,
-        response_format: Optional[Literal['json_object']] = None
+        response_format: Optional[Literal['json_object']] = None,
+        stream: bool = False  # 新增参数
     ) -> ChatResponse:
         """统一的聊天接口实现"""
-        json_data = self._build_req_body(messages, tools, tool_choice, response_format)
-        rsp = query_with_endpoint_retry(
-            self.default_endpoint,
-            self.backup_endpoint,
-            "post",
-            "/v1/chat/completions",
-            self.api_key,
-            json_data,
-        )
-        
-        rsp_body = rsp.json()
-        message = rsp_body["choices"][0]["message"]
+        json_data = self._build_req_body(messages, tools, tool_choice, response_format, stream)
+        if stream:
+            # 流式处理
+            headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"}
+            debug_req("post", self.default_endpoint, "/v1/chat/completions", headers, json_data)
+            response = requests.post(
+                f"{self.default_endpoint}/v1/chat/completions",
+                json=json_data,
+                headers=headers
+            )
+            logger.info(f"Paoluz API calling status code: {response.status_code}")
+            debug_rsp(response)
+            if response.status_code == 200:
+                chunks = []
+                for line in response.iter_lines(decode_unicode=True):
+                    if not line:
+                        continue
+                    if line.startswith("data: "):
+                        data = line[len("data: ") :]
+                    else:
+                        data = line
+                    if data.strip() == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data)
+                        if "choices" in chunk and chunk["choices"]:
+                            delta = chunk["choices"][0].get("delta", {})
+                            content = delta.get("content", "")
+                            if content:
+                                print(content, end="", flush=True)
+                                chunks.append(content)
+                    except Exception:
+                        continue
+                print()
+                content = "".join(chunks)
+                return {"content": content, "tool_calls": None}
+            else:
+                raise Exception(f"Paoluz stream response error: {response.status_code} {response.text}")
+        else:
+            rsp = query_with_endpoint_retry(
+                self.default_endpoint,
+                self.backup_endpoint,
+                "post",
+                "/v1/chat/completions",
+                self.api_key,
+                json_data,
+            )
+            rsp_body = rsp.json()
+            message = rsp_body["choices"][0]["message"]
 
-        result: ChatResponse = {"content": message.get("content", ""), "tool_calls": None}
+            result: ChatResponse = {"content": message.get("content", ""), "tool_calls": None}
 
-        # 检查是否有工具调用
-        if "tool_calls" in message and message["tool_calls"]:
-            result["tool_calls"] = message["tool_calls"]
+            # 检查是否有工具调用
+            if "tool_calls" in message and message["tool_calls"]:
+                result["tool_calls"] = message["tool_calls"]
 
-        return result
+            return result
 
     # ...existing deprecated methods...

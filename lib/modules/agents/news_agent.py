@@ -468,13 +468,13 @@ class NewsAgent:
             self, 
             llm: LlmAbstract = None,
             web_page_reader: Optional[WebPageReader] = None,
-            gloabl_news_reporter: Optional[GlobalNewsAgent] = None
+            global_news_reporter: Optional[GlobalNewsAgent] = None
         ):
         """初始化新闻分析器"""
         self.llm = llm or get_llm("paoluz", "deepseek-v3", temperature=0.2)
         self.agent = get_agent(llm=self.llm)
         self.web_page_reader = web_page_reader or WebPageReader(llm=self.llm)
-        self.global_news_reporter = gloabl_news_reporter or GlobalNewsAgent(
+        self.global_news_reporter = global_news_reporter or GlobalNewsAgent(
             llm=self.llm,
             web_page_reader=WebPageReader(llm=self.llm)
         )
