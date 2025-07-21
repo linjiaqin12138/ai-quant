@@ -6,7 +6,6 @@ Bull Bear Researcher Agent
 
 import re
 from textwrap import dedent
-import traceback
 from typing import Optional, List, TypedDict
 from jinja2 import Template
 
@@ -17,7 +16,6 @@ from lib.modules.agents.web_page_reader import WebPageReader
 from lib.logger import logger
 
 from lib.utils.news import render_news_in_markdown_group_by_platform
-from lib.utils.number import change_rate
 from lib.utils.string import escape_text_for_jinja2_temperate
 
 # HTML报告模板

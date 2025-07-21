@@ -478,7 +478,7 @@ class NewsAgent:
             llm=self.llm,
             web_page_reader=WebPageReader(llm=self.llm)
         )
-        self.agent.register_tool(self._serch_engine)
+        self.agent.register_tool(self._search_engine)
         self.agent.register_tool(self._read_page_content)
         self.agent.set_system_prompt(SYS_PROMPT)
 
@@ -507,7 +507,7 @@ class NewsAgent:
         """
         return self.web_page_reader.read_and_summary(url)
 
-    def _serch_engine(self, query: str, max_result: int = 10) -> str:
+    def _search_engine(self, query: str, max_result: int = 10) -> str:
         """
         搜索相关新闻
         Args:
