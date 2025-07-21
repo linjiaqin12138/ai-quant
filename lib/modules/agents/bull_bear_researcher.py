@@ -624,12 +624,12 @@ class BullBearResearcher:
     
     def _add_history(self, role: str, content: str):
         """添加辩论历史"""
-        self._current_turns += 1
         self._debate_history.append({
-            "round": (self._current_turns + 1) // 2,
+            "round": self._curr_rounds,
             "role": role,
             "content": content
         })
+        self._current_turns += 1
     
     def _check_debate_concede(self, content: str) -> bool:
         """检查是否有认输标识"""
@@ -637,7 +637,7 @@ class BullBearResearcher:
     
     @property
     def _curr_rounds(self):
-        return (self._current_turns + 2) // 2
+        return (self._current_turns) // 2 + 1
     
     def _validate_debate(self) -> str:
         if not self._symbol:

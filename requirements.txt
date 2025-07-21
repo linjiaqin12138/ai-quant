@@ -17,7 +17,10 @@ tqdm==4.67.1
 typer==0.15.3
 jinja2==3.1.4
 pinecone
-
+chromadb
+httplib2
+duckduckgo-search
+google-api-python-client
 # Development tools
 black==24.8.0
 pylint

@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import uuid
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional
 import chromadb
 from chromadb.config import Settings
-from chromadb.utils import embedding_functions
 
 from .vector_database_base import (
     VectorDatabaseAbstract,

@@ -7,9 +7,8 @@
 import json
 import os
 from datetime import datetime
-from typing import List, Optional, Dict, Any, TypedDict
+from typing import Optional
 from textwrap import dedent, indent
-import traceback
 
 from jinja2 import Template
 
@@ -557,7 +556,7 @@ class FundamentalAnalyzer:
                 )
             }
         )
-    def _read_web_page(self, url: str) -> Optional[str]:
+    def _read_web_page(self, url: str) -> str:
         """
         读取网页内容
         
