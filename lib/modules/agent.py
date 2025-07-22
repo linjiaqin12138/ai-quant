@@ -194,8 +194,9 @@ class Agent:
                 #     return response["content"]
 
             except Exception as e:
-                logger.error(f"Error in tool conversation: {str(e)} {traceback.format_exc()}")
-                return f"Error occurred during tool conversation: {str(e)}"
+                raise
+                # logger.error(f"Error in tool conversation: {str(e)} {traceback.format_exc()}")
+                # return f"Error occurred during tool conversation: {str(e)}"
 
     def set_system_prompt(self, prompt: str):
         self.chat_context = [{"role": "system", "content": prompt}]

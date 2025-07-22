@@ -1,9 +1,11 @@
 from dataclasses import dataclass
 from datetime import datetime
 from textwrap import dedent
+from typing import List
 from lib.adapter.llm import get_llm
 from lib.adapter.llm.interface import LlmAbstract
 from lib.modules import get_agent
+from lib.modules.news_proxy import news_proxy
 from lib.modules.agents.web_page_reader import WebPageReader
 from lib.tools.cache_decorator import use_cache
 from lib.tools.information_search import unified_search
@@ -22,7 +24,7 @@ GLOBAL_NEWS_SEARCH_PROMPT_TEMPLATE = """
 
 **搜索策略：**
 
-**第一阶段：批量搜索核心关键词**
+**第一阶段：批量搜索核心关键词和查询各平台热搜**
 请**同时**搜索以下关键词，不要一个一个来，每次搜索后分析结果质量：
 
 1. **全球宏观经济**（英文搜索，region="us-en"）关键词示例：
@@ -50,6 +52,8 @@ GLOBAL_NEWS_SEARCH_PROMPT_TEMPLATE = """
    - "US stocks" (美国股市)
    - "oil prices" (石油价格)
    - "gold trend" (黄金趋势)
+
+6. **全球热搜**（使用各大平台的热搜查询工具）：
 
 **第二阶段：结果评估和深度获取**
 每次搜索后，请评估：
@@ -83,6 +87,7 @@ GLOBAL_NEWS_SEARCH_PROMPT_TEMPLATE = """
 **使用工具说明：**
 - `_search_tool(query, region)`：搜索新闻，一次只搜索一个关键词
 - `_read_web_page(url)`：获取重要新闻的完整内容
+- `_get_top_10_hot_news_of_platform(platforms, top_k)`：获取各大平台的热搜
 
 **最终输出要求：**
 搜索完成后，请分析这些新闻信息并提供一份报告，参考模板如下：
@@ -171,6 +176,23 @@ class GlobalNewsAgent:
         self._agent.set_system_prompt(GLOBAL_NEWS_SYSTEM_PROMPT_TEMPLATE)
         self._agent.register_tool(self._search_tool)
         self._agent.register_tool(self._read_web_page)
+        self._agent.register_tool(self._get_top_10_hot_news_of_platform)
+
+    def _get_top_10_hot_news_of_platform(self, platforms: List[str], top_k: int = 5) -> str:
+
+        """
+        获取指定平台的前top_k条热门新闻
+        Args:
+            platforms: 字符串数组，新闻平台名称列表, 例如"36kr", "qq-news", "sina-news", "sina", "huxiu", "netease-news", "toutiao"
+            top_k: 每个平台返回的热门新闻数量，默认为5
+
+        Returns:
+            返回格式化的新闻列表字符串
+        """
+        result = {}
+        for platform in platforms:
+            result[platform] = news_proxy.get_current_hot_news(platform)[:top_k]
+        return render_news_in_markdown_group_by_platform(result)
 
     def _read_web_page(self, url: str) -> str:
         """

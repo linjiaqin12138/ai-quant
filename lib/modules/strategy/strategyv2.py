@@ -3,6 +3,7 @@ from datetime import datetime
 import time
 from typing import Literal, Optional, List
 
+from lib.adapter.notification.api import NotificationAbstract
 from lib.model.common import Ohlcv, Order
 from lib.utils.time import time_ago_from, ts_to_dt
 from lib.utils.string import random_id
@@ -186,6 +187,7 @@ class StrategyBase(abc.ABC):
         symbol: str = None,
         investment: float = None,
         frame: str = None,
+        notification: NotificationAbstract = PushPlus(),
         **addtional_params,
     ):
         self._is_test_mode = False
@@ -197,7 +199,7 @@ class StrategyBase(abc.ABC):
             setattr(self, param, val)
 
         self.trade_ops = crypto if self.symbol.endswith("USDT") else ashare
-        self.logger = NotificationLogger(self.name, PushPlus())
+        self.logger = NotificationLogger(self.name, notification)
         try:
             if not self.trade_ops.is_business_day(self.current_time):
                 return

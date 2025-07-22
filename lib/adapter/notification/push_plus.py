@@ -6,10 +6,10 @@ from ...utils.decorators import with_retry
 
 from .api import NotificationAbstract
 
-
 class PushPlus(NotificationAbstract):
-    def __init__(self):
+    def __init__(self, template: str = "text"):
         self.token = get_push_token()
+        self.template = template
         if not self.token:
             raise Exception("Push plus token is not set")
 
@@ -27,7 +27,7 @@ class PushPlus(NotificationAbstract):
         def retryable_part():
             res = requests.post(
                 "https://www.pushplus.plus/send",
-                {"token": self.token, "content": content, "title": title},
+                {"token": self.token, "content": content, "title": title, "template": self.template},
             )
             logger.debug(f"PushPlus reply with body {res.content}")
             rspBody = res.json()

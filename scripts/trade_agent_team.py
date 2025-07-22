@@ -3,6 +3,9 @@ from datetime import datetime
 
 from textwrap import dedent
 from typing import Any, Dict, Optional
+
+import typer
+from lib.adapter.notification.push_plus import PushPlus
 from lib.utils.time import days_ago
 from lib.adapter.database.db_transaction import create_transaction
 from lib.adapter.llm import get_llm, get_llm_direct_ask
@@ -391,11 +394,19 @@ class TradeDecisionAgent:
                 'summary': self.summary_text(reasoning)
             })
 
-    
-if __name__ == "__main__":
+def main(
+    symbol: str = typer.Argument(..., help="股票代码"),
+    name: str = typer.Argument(..., help="任务名称"),
+    investment: float = typer.Argument(..., help="初始投资金额")
+):
     agent = TradingSystem()
     agent.run(
-        name="xxxx",
-        symbol = "600016",
-        investment = 1000000,
+        name=name,
+        symbol = symbol,
+        investment = investment,
+        notification=PushPlus(template="markdown"),
     )
+    
+if __name__ == "__main__":
+    typer.run(main)
+    
