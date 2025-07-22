@@ -737,7 +737,7 @@ class BullBearResearcher:
         html_content = Template(HTML_TEMPLATE).render(
             symbol=self._symbol,
             planned_rounds=self._plan_rounds,
-            actual_rounds=self._curr_rounds,
+            actual_rounds=self._curr_rounds - 1 if self._current_turns % 2 == 0 else self._curr_rounds,
             market_research_report=self.market_research_report,
             sentiment_report=self.sentiment_report,
             news_report=self.news_report,

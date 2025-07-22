@@ -65,6 +65,7 @@ def extract_json_string(s: str) -> Optional[dict | list]:
 def url_encode(s: str) -> str:
     return quote(s, safe="")
 
+# TODO 出现```markdown处理后有问题 -> \\`\\`\\`markdown
 def escape_text_for_jinja2_temperate(text: str) -> str:
     """
     转义文本以在Jinja2模板中安全使用

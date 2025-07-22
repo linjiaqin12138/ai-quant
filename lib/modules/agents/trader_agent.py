@@ -121,57 +121,22 @@ class PortfolioStatus:
         }
 
 
-class TraderAgent:
-    """交易代理"""
+class TradingDecisionAgent:
+    """交易决策代理"""
     
     def __init__(
         self,
-        symbol: str,
-        initial_funds: float = 100000.0,
-        llm: Optional[LlmAbstract] = None,
-        reflector: Optional[InvestmentReflector] = None,
-        reflect_top_k: int = 3
+        summary_llm: Optional[LlmAbstract] = None,
+        decision_llm: Optional[LlmAbstract] = None
     ):
         """
         初始化交易代理
         
         Args:
-            symbol: 交易标的
-            initial_funds: 初始资金
-            llm: LLM实例
-            trade_operations: 交易操作接口
-            reflector: 反思工具
-            reflect_top_k: 反思时搜索的相似记录数量
+            summary_llm: 用于决策摘要的LLM实例
+            decision_llm: 用于决策的LLM实例
         """
-        self.symbol = symbol
-        self.initial_funds = initial_funds
-        self.llm = llm or get_llm('paoluz', 'deepseek-v3')
-        self.reflect_top_k = reflect_top_k
         
-        # 初始化交易操作接口
-        self.trade_operations = AshareTrade()
-        
-        # 初始化反思工具
-        self.reflector = reflector or InvestmentReflector(
-            llm=self.llm,
-            index_name=f"trader-reflections"
-        )
-        
-        # 创建决策Agent
-        self.decision_agent = get_agent(llm=self.llm)
-        self._setup_decision_agent()
-        
-        # 数据库键名
-        self.portfolio_key = f"trader_portfolio_{symbol}"
-        self.history_key = f"trader_history_{symbol}"
-        
-        # 牛熊研究报告存储
-        self.bull_bear_research_report = ""
-        
-        # 初始化投资组合状态
-        self._initialize_portfolio()
-        
-        logger.info(f"TraderAgent已初始化，标的: {symbol}, 初始资金: {initial_funds}")
     
     def _setup_decision_agent(self):
         """设置决策Agent的系统提示词"""

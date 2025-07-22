@@ -2,7 +2,7 @@
 import json
 import requests
 from humps import camelize
-from lib.tools.market_master import MarketMaster, TradeContext, AccountInfo, TradeHistoryList
+from lib.modules.agents.market_master import SimpleTraderAgent, TradeContext, AccountInfo, TradeHistoryList
 from lib.adapter.scheduler import TaskScheduler
 from lib.utils.list import map_by
 from lib.utils.object import remove_none
@@ -58,7 +58,7 @@ strategy_prefer_map = {
 def ai_trade(req: TradeAdviceReq):
     """AI交易建议"""
     logger.debug(f'ai trade handling request: {req.model_dump_json(indent=2)}')
-    market_master = MarketMaster(
+    market_master = SimpleTraderAgent(
         risk_prefer=risk_prefer_map.get(req.risk_prefer),
         strategy_prefer=strategy_prefer_map.get(req.strategy_prefer),
         model=req.llm_settings[0].model,
