@@ -7,14 +7,12 @@ from lib.config import get_default_chromadb_config, get_default_pinecone_config
 from lib.logger import logger
 
 from .vector_database_base import VectorDatabaseAbstract
-from .pinecone_vector_database import PineconeVectorDatabase
-from .chromadb_vector_database import ChromaDBVectorDatabase
 
 # 便捷函数
 def create_pinecone_database(
     api_key: str,
     environment: Dict[str, str] = {"cloud": "aws", "region": "us-east-1"}
-) -> PineconeVectorDatabase:
+) -> VectorDatabaseAbstract:
     """
     创建Pinecone向量数据库实例的便捷函数
     
@@ -25,18 +23,22 @@ def create_pinecone_database(
     Returns:
         PineconeVectorDatabase: Pinecone数据库实例
     """
-    
-    return PineconeVectorDatabase(**{
-        "api_key": api_key,
-        "environment": environment
-    })
+    try:
+        from .pinecone_vector_database import PineconeVectorDatabase
+        return PineconeVectorDatabase(**{
+            "api_key": api_key,
+            "environment": environment
+        })
+    except ImportError:
+        logger.error("PineconeVectorDatabase模块导入失败")
+        raise
 
 
 def create_chromadb_database(
     path: str = "./chroma_db",
     host: Optional[str] = None,
     port: Optional[int] = None
-) -> ChromaDBVectorDatabase:
+) -> VectorDatabaseAbstract:
     """
     创建ChromaDB向量数据库实例的便捷函数
     
@@ -54,14 +56,17 @@ def create_chromadb_database(
         "host": host,
         "port": port
     }
-    
-    return ChromaDBVectorDatabase(
-        path=config.get("path", "./chroma_db"),
-        host=config.get("host"),
-        port=config.get("port"),
-        settings=config.get("settings")
-    )
-
+    try:
+        from .chromadb_vector_database import ChromaDBVectorDatabase
+        return ChromaDBVectorDatabase(
+            path=config.get("path", "./chroma_db"),
+            host=config.get("host"),
+            port=config.get("port"),
+            settings=config.get("settings")
+        )
+    except ImportError:
+        logger.error("ChromaDBVectorDatabase模块导入失败")
+        raise
 
 def create_default_vector_db() -> VectorDatabaseAbstract:
     """

@@ -16,9 +16,6 @@ from .vector_database_base import (
     IndexStats
 )
 
-from .pinecone_vector_database import PineconeVectorDatabase
-from .chromadb_vector_database import ChromaDBVectorDatabase
-
 from .vector_database_factory import (
     create_pinecone_database,
     create_chromadb_database,
@@ -36,10 +33,6 @@ __all__ = [
     'UpsertResponse',
     'DeleteResponse',
     'IndexStats',
-    
-    # 具体实现
-    'PineconeVectorDatabase',
-    'ChromaDBVectorDatabase',
     
     # 工厂类和工具函数
     'create_pinecone_database',

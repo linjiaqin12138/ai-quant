@@ -395,9 +395,9 @@ class TradeDecisionAgent:
             })
 
 def main(
-    symbol: str = typer.Argument(..., help="股票代码"),
-    name: str = typer.Argument(..., help="任务名称"),
-    investment: float = typer.Argument(..., help="初始投资金额")
+    symbol: str = typer.Option(..., help="股票代码"),
+    name: str = typer.Option(..., help="任务名称"),
+    investment: float = typer.Option(..., help="初始投资金额")
 ):
     agent = TradingSystem()
     agent.run(

@@ -9,7 +9,7 @@
 import hashlib
 import uuid
 from datetime import datetime
-from typing import List, Dict, Any, Optional, Union, Tuple
+from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
 
 from lib.logger import logger
@@ -22,8 +22,6 @@ from lib.adapter.embedding import (
     EmbeddingAbstract,
     PaoluzEmbedding,
 )
-from lib.adapter.lock import with_lock
-from lib.tools.cache_decorator import use_cache
 
 
 @dataclass
