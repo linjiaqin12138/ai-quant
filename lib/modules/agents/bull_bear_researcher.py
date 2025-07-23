@@ -613,14 +613,17 @@ class BullBearResearcher:
     
     def _format_context(self) -> str:
         """格式化上下文信息"""
-        return dedent(
-            f"""
-                市场研究报告：{self.market_research_report}
-                社交媒体情绪报告：{self.sentiment_report}
-                最新世界事务新闻：{self.news_report}
-                公司基本面报告：{self.fundamentals_report}
-            """
-        )
+        result = ""
+
+        if self.market_research_report:
+            result += f"市场研究报告：{self.market_research_report}\n"
+        if self.sentiment_report:
+            result += f"社交媒体情绪报告：{self.sentiment_report}\n"
+        if self.news_report:
+            result += f"最新世界事务新闻：{self.news_report}\n"
+        if self.fundamentals_report:
+            result += f"公司基本面报告：{self.fundamentals_report}\n"
+        return result
     
     def _add_history(self, role: str, content: str):
         """添加辩论历史"""

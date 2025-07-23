@@ -12,12 +12,11 @@ from textwrap import dedent, indent
 
 from jinja2 import Template
 
+from lib.modules.agents.common import escape_tool_call_results
 from lib.utils.string import escape_text_for_jinja2_temperate
-from lib.adapter.apis import read_web_page_by_jina
 from lib.adapter.llm.interface import LlmAbstract
 from lib.modules import get_agent
 from lib.modules.agents.web_page_reader import WebPageReader
-from lib.tools.cache_decorator import use_cache
 from lib.tools.information_search import unified_search
 from lib.tools.ashare_stock import (
     get_comprehensive_financial_data,
@@ -639,13 +638,6 @@ class FundamentalAnalyzer:
         assert self._report_result is not None, error_msg
         
         self._agent.tool_call_results
-        tools_results = self._agent.tool_call_results.copy()
-        for tool_result in tools_results:
-            # 确保工具调用结果的content字段存在
-            if tool_result["success"]:
-                tool_result["content"] = escape_text_for_jinja2_temperate(tool_result["content"])
-            if not tool_result["success"]:
-                tool_result["error_message"] = escape_text_for_jinja2_temperate(tool_result.get("error_message", ""))
 
         # 渲染HTML内容
         return Template(HTML_TEMPLATE).render(
@@ -654,5 +646,5 @@ class FundamentalAnalyzer:
             business=self._stock_info["stock_business"],
             analysis_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             escaped_content=escape_text_for_jinja2_temperate(self._report_result),
-            tool_results=tools_results
+            tool_results=escape_tool_call_results(self._agent.tool_call_results.copy())
         )

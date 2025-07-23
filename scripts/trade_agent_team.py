@@ -110,7 +110,8 @@ class TradingSystem(StrategyBase):
             self.logger.msg(f"技术分析")
             self.logger.msg(report_txt)
         elif agent_name == "bull_bear_agent":
-            self.bull_bear_agent.add_fundamentals_report(self._get_report_with_cache("fundamental_agent", news_from=news_from))
+            if self.current_time.weekday() == 0: # 每周一才进行基本面报告的获取
+                self.bull_bear_agent.add_fundamentals_report(self._get_report_with_cache("fundamental_agent", news_from=news_from))
             self.bull_bear_agent.add_market_research_report(self._get_report_with_cache("market_agent", news_from=news_from))
             self.bull_bear_agent.add_news_report(self._get_report_with_cache("news_agent", news_from=news_from))
             self.bull_bear_agent.add_sentiment_report(self._get_report_with_cache("sentiment_agent", news_from=news_from))
