@@ -5,6 +5,7 @@ from textwrap import dedent
 from typing import Any, Dict, Optional
 
 import typer
+from lib.adapter.apis import get_crypto_info, get_fear_greed_index
 from lib.adapter.notification.push_plus import PushPlus
 from lib.utils.time import days_ago
 from lib.adapter.database.db_transaction import create_transaction
@@ -22,6 +23,20 @@ from lib.modules.agents.news_agent import NewsAgent
 from lib.modules.agents.stock_sentiment_analyzer import StockSentimentAnalyzer
 from lib.modules.agents.market_analyst import MarketAnalyst
 from lib.modules.agents.json_fixer import JsonFixer
+
+CRYPTO_NAME_MAPPING = {
+    "BTC/USDT": "bitcoin",
+    "ETH/USDT": "ethereum",
+    "BNB/USDT": "binancecoin",
+    "XRP/USDT": "ripple",
+    "SOL/USDT": "solana",
+    "DOGE/USDT": "dogecoin",
+    "TRUMP/USDT": "trumpcoin",
+    "SHIB/USDT": "shiba-inu",
+    "ADA/USDT": "cardano",
+    "SUI/USDT": "sui",
+    "TRX/USDT": "tron",
+}
 
 class TradingSystem(StrategyBase):
     def __init__(self):
@@ -73,13 +88,16 @@ class TradingSystem(StrategyBase):
             raise Exception("不支持回测模式")
         if self.frame != '1d':
             raise Exception("仅支持1天周期的交易")
-        if self.symbol.endswith('USDT'):
-            raise Exception("仅支持A股交易")
+        # if self.symbol.endswith('USDT'):
+        #     raise Exception("仅支持A股交易")
 
     @property
-    def _report_prefix(self):
+    def _report_prefix(self): 
+        if '/' in self.symbol:
+            base_symbol = self.symbol.split('/')[0]
+            return f"{base_symbol}_{self.current_time.strftime('%Y%m%d')}"
         return f"{self.symbol}_{self.current_time.strftime('%Y%m%d')}"
-
+    
     def _get_report_with_cache(self, agent_name: str, news_from: Optional[datetime] = None) -> str:
         with create_transaction() as db:
             report_txt = db.kv_store.get(self._report_prefix + f"_{agent_name}_report")
@@ -110,11 +128,53 @@ class TradingSystem(StrategyBase):
             self.logger.msg(f"技术分析")
             self.logger.msg(report_txt)
         elif agent_name == "bull_bear_agent":
-            if self.current_time.weekday() == 0: # 每周一才进行基本面报告的获取
-                self.bull_bear_agent.add_fundamentals_report(self._get_report_with_cache("fundamental_agent", news_from=news_from))
+            if 'USDT' in self.symbol:
+                crypto_sentiment = get_fear_greed_index()
+                
+                self.bull_bear_agent.add_sentiment_report(
+                    dedent(
+                        f"""
+                            加密货币恐慌与贪婪指数: {crypto_sentiment['value']} ({crypto_sentiment['value_classification']})
+                            来源：Alternative.me
+                        """
+                    )
+                )
+                if CRYPTO_NAME_MAPPING.get(self.symbol):
+                    crypto_fundamental = get_crypto_info(CRYPTO_NAME_MAPPING[self.symbol])[0]
+                    self.bull_bear_agent.add_fundamentals_report(
+                        dedent(
+                            f"""
+                                币种: {crypto_fundamental['name']} ({crypto_fundamental['symbol']})
+                                当前价格: {crypto_fundamental['current_price']}
+                                市值: {crypto_fundamental['market_cap']}
+                                完全稀释市值: {crypto_fundamental['fully_diluted_valuation']}
+                                市值排名： {crypto_fundamental['market_cap_rank']}
+                                总代币数量: {crypto_fundamental['total_supply']}
+                                最大代币数量: {crypto_fundamental['max_supply']}
+                                流通量: {crypto_fundamental['circulating_supply']}
+                                24h交易量: {crypto_fundamental['total_volume']}
+                                24h最高价: {crypto_fundamental['high_24h']}
+                                24h最低价: {crypto_fundamental['low_24h']}
+                                24h涨跌幅: {crypto_fundamental['price_change_percentage_24h']}%
+                                24h市值变化绝对值： {crypto_fundamental['market_cap_change_24h']}
+                                24h市值变化百分比: {crypto_fundamental['market_cap_change_percentage_24h']}%
+                                历史最高价: {crypto_fundamental['ath']}
+                                历史最低价: {crypto_fundamental['atl']}
+                                历史最高价时间: {crypto_fundamental['ath_date']}
+                                历史最低价时间: {crypto_fundamental['atl_date']}
+                                距离历史最高价的百分比变化: {crypto_fundamental['ath_change_percentage']}%
+                                距离历史最低价的百分比变化: {crypto_fundamental['atl_change_percentage']}%
+                                投资回报率（部分币种有）：{crypto_fundamental['roi']}
+                                来源：CoinGecko
+                            """
+                        )
+                    )
+            else:
+                if self.current_time.weekday() == 0:
+                    self.bull_bear_agent.add_fundamentals_report(self._get_report_with_cache("fundamental_agent", news_from=news_from))
+                self.bull_bear_agent.add_sentiment_report(self._get_report_with_cache("sentiment_agent", news_from=news_from))
             self.bull_bear_agent.add_market_research_report(self._get_report_with_cache("market_agent", news_from=news_from))
             self.bull_bear_agent.add_news_report(self._get_report_with_cache("news_agent", news_from=news_from))
-            self.bull_bear_agent.add_sentiment_report(self._get_report_with_cache("sentiment_agent", news_from=news_from))
             self.bull_bear_agent.set_symbol(self.symbol)
             report_txt = self.bull_bear_agent.start_debate()
             report_html = self.bull_bear_agent.generate_html_report()
@@ -198,7 +258,7 @@ class TradeDecisionAgent:
                 
                 说明：
                 - ACTION标签：必须是BUY、SELL或HOLD之一
-                - QUANTITY标签：仅在BUY/SELL时需要大于0，HOLD时为0，单位为手
+                - QUANTITY标签：仅在BUY/SELL时需要大于0，HOLD时为0，单位为手(股票)或个(加密货币)
                 - 除了这两个标签外，其余所有文本都将作为决策理由(reasoning)
                 
                 请先给出详细的分析过程和决策理由，然后在最后用XML标签明确表明你的决策。
@@ -214,7 +274,23 @@ class TradeDecisionAgent:
             llm=summary_llm
         )
 
-    def _get_portfolio_data(self) -> Dict[str, Any]:
+    def _get_crypto_portfolio_data(self) -> Dict[str, Any]:
+        curr_price = self.trading_system.current_price
+        free_money = self.trading_system.free_money
+        hold_amount = self.trading_system.hold_amount
+        holding_value = hold_amount * curr_price
+        position_level = holding_value / (free_money + holding_value) * 100
+        max_lots_can_buy = free_money // curr_price
+        return {
+            "current_price": curr_price,
+            "free_money": free_money,
+            "hold_amount": hold_amount,
+            "holding_value": holding_value,
+            "position_level": position_level,
+            "max_lots_can_buy": max_lots_can_buy
+        }
+    
+    def _get_stock_portfolio_data(self) -> Dict[str, Any]:
         curr_price = self.trading_system.current_price
         free_money = self.trading_system.free_money
         hold_amount = self.trading_system.hold_amount
@@ -234,7 +310,18 @@ class TradeDecisionAgent:
         }
     
     def _get_portfolio_digest(self) -> str:
-        portfolio_data = self._get_portfolio_data()
+        if self.trading_system.symbol.endswith('USDT'):
+            portfolio_data = self._get_crypto_portfolio_data()
+            return f"""
+            当前持仓情况：
+            - 可用资金: {portfolio_data['free_money']}USDT
+            - 持有数量: {portfolio_data['hold_amount']}个
+            - 持有价值：{portfolio_data['holding_value']}USDT
+            - 仓位水平: {portfolio_data['position_level']}%
+            - 当前价格: {portfolio_data['current_price']}USDT
+            - 当前资金可买：{portfolio_data['max_lots_can_buy']}个
+            """
+        portfolio_data = self._get_stock_portfolio_data()
         return f"""
         当前持仓情况：
         - 可用资金: {portfolio_data['free_money']}元
@@ -260,13 +347,13 @@ class TradeDecisionAgent:
             if record["action"] == "HOLD":
                 digest += f"  - {record['date']}: 观望, 理由: {record['summary']}"
             else:
-                digest += f"  - {record['date']}: {record['action']} {record['quantity']}手, 理由: {record['summary']}\n"
+                digest += f"  - {record['date']}: {record['action']} {record['quantity']}{'手' if self.trading_system.symbol.endswith('USDT') else '个'}, 理由: {record['summary']}\n"
         return digest
     
     def _validate_decision(self, decision_response: str) -> Dict[str, Any]:
         """解析XML标签格式的决策结果"""
         import re
-        portfolio = self._get_portfolio_data()
+        portfolio = self._get_stock_portfolio_data()
         # 提取ACTION标签
         action_match = re.search(r'<ACTION>(.*?)</ACTION>', decision_response, re.IGNORECASE)
         if not action_match:
@@ -330,7 +417,7 @@ class TradeDecisionAgent:
     
     def make_decision(self, research_report:str) -> str:
         symbol = self.trading_system.symbol
-        portfolio = self._get_portfolio_data()
+        portfolio = self._get_stock_portfolio_data()
         prompt = dedent(f"""
         基于分析师团队的全面分析，以下是为{symbol}量身定制的牛熊研究报告。该报告融合了技术分析、基本面分析、市场情绪和新闻事件的深度洞察。请将此报告作为评估您下一步交易决策的基础。
 
