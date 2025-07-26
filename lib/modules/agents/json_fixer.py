@@ -38,6 +38,7 @@ SYS_PROMPT = """
 请直接返回修复后的有效JSON，不要包含任何解释文字。
 """
 
+# TODO: Try use json-repair
 class JsonFixer:
     """JSON修复器，使用大模型修复有问题的JSON字符串"""
     

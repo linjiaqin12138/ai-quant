@@ -50,6 +50,11 @@ class KeyValueStore:
         compiled = delete(events).where(events.c.key == key).compile()
         self.session.execute(compiled.string, compiled.params)
 
+    def has(self, key: str) -> bool:
+        compiled = select(1).select_from(events).where(events.c.key == key).limit(1).compile()
+        res = self.session.execute(compiled.string, compiled.params)
+        return len(res.rows) > 0
+
     def get(self, key: str) -> Union[Value, None]:
         compiled = select(events).where(events.c.key == key).compile()
         res = self.session.execute(compiled.string, compiled.params)

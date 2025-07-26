@@ -418,6 +418,9 @@ class StockSentimentAnalyzer:
         guba_url = f"https://guba.eastmoney.com/list,{self._current_symbol}.html"
         urls.append(guba_url)
         
+        # 百度股市通股评本身就是来自雪球和股吧
+        # gushitong_url = f"https://gushitong.baidu.com/stock/ab-{self._current_symbol}?mainTab=%E8%82%A1%E8%AF%84"
+        # urls.append(gushitong_url)
         return urls
     
     def _fetch_all_comments(self):

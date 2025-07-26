@@ -4,8 +4,8 @@ from lib.adapter.database import create_transaction, DbTransaction
 from lib.adapter.exchange.cn_market_exchange import AshareExchange
 from lib.model.cn_market import AShareOrder
 from lib.model.common import Ohlcv, Order, OhlcvHistory, OrderSide, OrderType
-from lib.modules.apis_proxy import is_china_business_day
 from lib.logger import logger
+from lib.tools.ashare_stock import is_china_business_day
 from lib.utils.string import random_id
 from lib.utils.time import round_datetime_in_period, time_ago_from
 from lib.tools.cache_decorator import use_cache
