@@ -2,6 +2,8 @@ import abc
 from datetime import datetime
 from typing import List, Literal
 
+from lib.adapter.news.gushitong import get_latest_news_of_gushitong
+
 from ...model.news import NewsInfo
 from .cointime import get_news_of_cointime
 from .caixin import get_latest_news_of_caixin
@@ -80,12 +82,14 @@ class NewsFetcherApi(abc.ABC):
 # 具体实现类
 class NewsFetcher(NewsFetcherApi):
     def get_news_from(
-        self, platform: Literal["caixin", "cointime", "jin10"], start: datetime
+        self, platform: Literal["caixin", "cointime", "jin10", "gushitong"], start: datetime
     ) -> List[NewsInfo]:
         if platform == "caixin":
             return get_latest_news_of_caixin(start)
         elif platform == "jin10":
             return get_news_of_jin10(start, datetime.now())
+        elif platform == "gushitong":
+            return get_latest_news_of_gushitong(start)
         else:
             return get_news_of_cointime(start, datetime.now())
 
