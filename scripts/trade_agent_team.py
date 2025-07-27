@@ -140,7 +140,7 @@ class TradingSystem(StrategyBase):
                     )
                 )
                 if CRYPTO_NAME_MAPPING.get(self.symbol):
-                    crypto_fundamental = get_crypto_info(CRYPTO_NAME_MAPPING[self.symbol])[0]
+                    crypto_fundamental = get_crypto_info([CRYPTO_NAME_MAPPING[self.symbol]])[0]
                     self.bull_bear_agent.add_fundamentals_report(
                         dedent(
                             f"""
