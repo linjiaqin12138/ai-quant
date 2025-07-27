@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from textwrap import dedent
 from typing import List
 from lib.adapter.llm import get_llm
@@ -54,6 +54,8 @@ GLOBAL_NEWS_SEARCH_PROMPT_TEMPLATE = """
    - "gold trend" (黄金趋势)
 
 6. **全球热搜**（使用各大平台的热搜查询工具）：
+
+7. **百度股市通过去24小时新闻**（使用百度股市的新闻查询工具）
 
 **第二阶段：结果评估和深度获取**
 每次搜索后，请评估：
@@ -177,7 +179,16 @@ class GlobalNewsAgent:
         self._agent.register_tool(self._search_tool)
         self._agent.register_tool(self._read_web_page)
         self._agent.register_tool(self._get_top_10_hot_news_of_platform)
+        self._agent.register_tool(self._get_24h_news_from_gushitong)
 
+    def _get_24h_news_from_gushitong(self) -> str:
+        """
+        获取过去24小时内的股市新闻
+        """
+        return render_news_in_markdown_group_by_platform({
+            "gushitong": news_proxy.get_news_from("gushitong", datetime.now() - timedelta(days=1))
+        })
+    
     def _get_top_10_hot_news_of_platform(self, platforms: List[str], top_k: int = 5) -> str:
 
         """

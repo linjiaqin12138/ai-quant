@@ -18,6 +18,7 @@ platform_name_map = {
     "cointime": "Cointime",
     "eastmoney": "东方财富",
     "jin10": "金十数据",
+    "gushitong": "百度股市通"
 }
 
 

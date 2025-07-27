@@ -101,7 +101,10 @@ def _type_to_json_schema(python_type) -> Dict[str, Any]:
     elif python_type == bool:
         return {"type": "boolean"}
     elif python_type == list or str(python_type).startswith("typing.List"):
-        return {"type": "array"}
+        return {
+            "type": "array",
+            "items": _type_to_json_schema(get_args(python_type)[0]) if get_args(python_type) else {}
+        }
     elif python_type == dict or str(python_type).startswith("typing.Dict"):
         return {"type": "object"}
     elif hasattr(python_type, "__origin__"):

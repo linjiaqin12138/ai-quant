@@ -16,7 +16,7 @@ class NewsFetchProxy(NewsFetcherApi):
         self.news_fetcher = news_fetcher
 
     def get_news_from(
-        self, platform: Literal["cointime", "caixin", "jin10"], start: datetime
+        self, platform: Literal["cointime", "caixin", "jin10", "gushitong"], start: datetime
     ) -> List[NewsInfo]:
         start_ts = dt_to_ts(start)
         logger.info("需要加锁更新本地新闻缓存")
