@@ -34,7 +34,7 @@ class CryptoAgent:
         ):
         self.binance = BinanceExchange(future_mode=True)
         self.symbol = symbol
-        self.message_express = NotificationLogger(f"{symbol} Crypto Bot", PushPlus())
+        self.message_express = NotificationLogger(f"{symbol} Crypto Bot", PushPlus(template="markdown"))
         self.ask_for_technical_analysis = get_llm_direct_ask(
             system_prompt=dedent(f"""
             你是一位经验丰富的技术分析专家，擅长深入的技术分析。
@@ -83,6 +83,7 @@ class CryptoAgent:
         )
         self.operation_advice_ask = get_llm_direct_ask(
             llm=get_llm("paoluz", "gemini-2.5-flash"),
+            # - 如果建议挂限价单，请明确说明可以在什么价位做多/做空，并给出建议的杠杆倍数
             system_prompt=dedent(
             f"""
             你是一位专业的加密货币交易顾问，擅长为用户提供基于市场数据和新闻分析的交易建议。
@@ -90,12 +91,11 @@ class CryptoAgent:
             ## 输出要求
             1. 明确给出做多/做空建议，以及是否继续加仓/减仓（多/空），并给出具体比例或数量
             2. 建议内容包括：
-            - 当前建议方向（做多/做空/观望）
-            - 如果现在已经有仓位，是否建议继续加仓或减仓（多/空），请说明加减仓比例或数量
-            - 是否需要设置止盈或止损（请给出具体价格区间或触发条件）
-            - 当前持仓是否需要调整（如全部平仓、部分平仓等）
-            - 预计接下来一小时内的价格波动范围（请给出具体区间，如“预计在4.20~4.35之间波动”）
-            - 如果建议挂限价单，请明确说明可以在什么价位做多/做空，并给出建议的杠杆倍数
+                - 当前建议方向（做多/做空/观望）
+                - 如果现在已经有仓位，是否建议继续加仓或减仓（多/空），请说明加减仓比例或数量
+                - 是否需要设置止盈或止损（请给出具体价格区间或触发条件）
+                - 当前持仓是否需要调整（如全部平仓、部分平仓等）
+                - 预计接下来一小时内的价格波动范围（请给出具体区间，如“预计在4.20~4.35之间波动”）
             3. 用简洁的Markdown格式输出，包含建议摘要和详细说明
             4. 严格根据技术分析和新闻分析内容进行判断，避免主观臆断
             """
@@ -111,7 +111,9 @@ class CryptoAgent:
             3. 如果当前未开仓
                 2.1 建议开仓方向（做多/做空）
                 2.2 建议开仓数量（合约数量）
-                2.3 使用限价单还是市价单开仓，如果使用限价单，需指明价格，如果使用市价单，可以顺便指明止盈止损
+                2.3 使用限价单还是市价单开仓
+                    2.3.1. 如果使用限价单，需指明价格, 需要观察限价单是否成交才能设置止盈止损
+                    2.3.2. 如果使用市价单，可以顺便指明止盈止损
                 2.4 开仓后建议止盈止损价格
             4. 如果当前已开仓
                 3.1 判断是否需要加仓/减仓，加减多少
@@ -134,6 +136,7 @@ class CryptoAgent:
             dedent(
                 f"""
                     请根据操作说明，调用工具进行操作。
+                    尽量采用市价单，防止限价单无法成交导致错过行情。
                 """
             )
         )
@@ -293,11 +296,17 @@ class CryptoAgent:
 
         t1 = threading.Thread(target=fetch_news)
         t2 = threading.Thread(target=fetch_technical)
-        t1.start(); t2.start()
-        t1.join(); t2.join()
-
+        t1.start()
+        t1.join()
+        t2.start()
+        t2.join()
+        
         assert news_report is not None, "新闻分析报告不能为空"
         assert technical_report is not None, "技术分析报告不能为空"
+
+        self.message_express.msg(news_report)
+        self.message_express.msg(technical_report)
+
         curr_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         curr_price = self.binance.fetch_ticker(self.symbol).last
 
@@ -334,7 +343,7 @@ class CryptoAgent:
     def get_technical_analysis_report(self, interval: str = '1h', limit: int = 40) -> str:
         # 为了使用上缓存，使用现货的symbol代替合约的symbol
         assert interval in ['1d', '1h', '15m'], "不支持的时间周期"
-        curr_time = datetime.now().strftime('%Y-%m-%d_%H:%M')
+        curr_time = datetime.now().strftime('%Y-%m-%d_%H:00')
         cache_key = f"crypto_news_analysis_{self.symbol}_{interval}_{limit}_{curr_time}"
         cache_exist, cache_value = self._get_cache(cache_key)
         if cache_exist:
@@ -516,7 +525,7 @@ class CryptoAgent:
         if not order_id:
             return None
         order = self.get_order(order_id)
-        if order['status'] in ['FILLED', 'CANCELED']:
+        if order['status'] in ['FILLED', 'CANCELED', 'EXPIRED']:
             self.state.set(order_key, None)
             if order['status'] == 'FILLED':
                 logger.info(f"订单已完成: {order}")
@@ -572,7 +581,6 @@ class CryptoAgent:
 
         curr_price = float(info['markPrice'])
 
-        
         recent_limit_order = self.get_unresolved_order("recent_limit_order_id")
         if self.state.get("recent_limit_order_id") and not recent_limit_order:
             # position_info_str += "限价单已完成或取消。\n"
@@ -658,12 +666,14 @@ class CryptoAgent:
         return position_info_str
 
     def run(self):
-        proposal = self.get_operation_proposal()
-        self.message_express.msg(proposal)
-        operation_result = self.operation_agent.ask(proposal, tool_use=True)
-        self.message_express.msg(operation_result)
-        self.state.save()
-        self.message_express.send()
+        try:
+            proposal = self.get_operation_proposal()
+            self.message_express.msg(proposal)
+            operation_result = self.operation_agent.ask(proposal, tool_use=True)
+            self.message_express.msg(operation_result)
+            self.state.save()
+        finally:
+            self.message_express.send()
 
 
 @app.command()
@@ -676,7 +686,12 @@ def main():
             symbol="SUIUSDT",
             investment=50,  # 初始投资金额
         )
-        # print(agent.get_operation_advice())          # small timeout so we loop often
+        # agent.message_express.msg(agent.get_position_info())
+        # agent.message_express.msg(agent.get_news_analysis_report(datetime.now() - timedelta(minutes=55)))
+        # agent.message_express.msg(agent.get_technical_analysis_report())
+        # agent.message_express.msg(agent.get_operation_advice())
+        # agent.message_express.msg(agent.get_operation_proposal())
+        # agent.message_express.send()
         # print(agent.create_order(
         #     order_type="LIMIT",
         #     order_side="SELL",

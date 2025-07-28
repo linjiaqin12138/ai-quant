@@ -7,7 +7,7 @@ from ...utils.decorators import with_retry
 from .api import NotificationAbstract
 
 class PushPlus(NotificationAbstract):
-    def __init__(self, template: str = "text"):
+    def __init__(self, template: str = "markdown"):
         self.token = get_push_token()
         self.template = template
         if not self.token:

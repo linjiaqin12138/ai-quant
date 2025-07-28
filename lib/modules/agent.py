@@ -34,7 +34,7 @@ class Agent:
         return_annotation = sig.return_annotation
         
         if return_annotation != inspect.Signature.empty:
-            if return_annotation not in [str, dict] or get_origin(return_annotation) is not Dict:
+            if return_annotation not in [str, dict] and get_origin(return_annotation) != dict:
                 logger.warning(f"Tool '{func.__name__}' return type is {return_annotation}, expected str or dict. "
                               f"The result will be converted to string in execute_tool method.")
         else:
