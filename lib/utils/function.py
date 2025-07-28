@@ -1,5 +1,5 @@
 import inspect
-from typing import Annotated, Any, Callable, Dict, Union, get_args, get_origin, get_type_hints
+from typing import Annotated, Any, Callable, Dict, Literal, Union, get_args, get_origin, get_type_hints
 # 兼容不同Python版本的Annotated导入
 try:
     from typing import Annotated
@@ -94,6 +94,8 @@ def _type_to_json_schema(python_type) -> Dict[str, Any]:
     """将Python类型转换为JSON Schema格式"""
     if python_type == str:
         return {"type": "string"}
+    if get_origin(python_type) is Literal:
+        return {"type": "string", "enum": [v for v in get_args(python_type)]}
     elif python_type == int:
         return {"type": "integer"}
     elif python_type == float:

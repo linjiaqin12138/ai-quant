@@ -402,8 +402,8 @@ CRYPTO_ANALYSIS_PROMPT_TEMPLATE = """
 请分析加密货币标的 {symbol} 从 {from_time_str} 至今的相关新闻信息。
 
 **分析要求：**
-1. 使用 serch_engine 搜索 "{symbol}" 相关的最新消息
-2. 如发现重要新闻链接，使用 read_page_content 深入了解详情
+1. 使用 _search_engine 搜索 "{symbol}" 相关的最新消息
+2. 如发现重要新闻链接，使用 _read_page_content 深入了解详情
 
 **重点关注：**
 - {symbol} 的价格动态和技术发展
@@ -420,8 +420,8 @@ STOCK_ANALYSIS_PROMPT_TEMPLATE = """
 请分析A股股票 {stock_name}({stock_code})({stock_business}行业) 从 {from_time_str} 至今的相关新闻信息。
 
 **分析要求：**
-1. 使用 serch_engine 搜索 "{stock_name}" 或 "{stock_code}" 相关消息
-2. 如发现重要新闻链接，使用 read_page_content 深入了解详情
+1. 使用 _search_engine 搜索 "{stock_name}" 或 "{stock_code}" 相关消息
+2. 如发现重要新闻链接，使用 _read_page_content 深入了解详情
 
 **重点关注：**
 - 公司业务动态和经营状况
@@ -443,13 +443,13 @@ SYS_PROMPT = """
 3. 深度分析新闻内容，提供有价值的投资参考
 
 **工具使用指南：**
-- `serch_engine`: 通用搜索工具，可用于补充搜索相关信息
-- `read_page_content`: 阅读网页详细内容，用于深入了解重要新闻
+- `_search_engine`: 通用搜索工具，可用于补充搜索相关信息
+- `_read_page_content`: 阅读网页详细内容，用于深入了解重要新闻
 
 **分析流程：**
 1. 先仔细阅读系统已收集的新闻内容，理解核心信息
-2. 针对不明确或需要补充的点，使用serch_engine等工具进一步搜索相关行业、市场、政策等新闻
-3. 如重要新闻描述不清晰，使用read_page_content深入了解详情
+2. 针对不明确或需要补充的点，使用_search_engine等工具进一步搜索相关行业、市场、政策等新闻
+3. 如重要新闻描述不清晰，使用_read_page_content深入了解详情
 4. 综合所有信息，提供专业的分析报告
 
 **报告要求：**
@@ -581,7 +581,7 @@ class NewsAgent:
                 ),
                 "eastmoney": get_stock_news_during(self._current_symbol, from_time)
             }
-
+        self._user_prompt += f"\n\n{self._global_news_report}"
         self._user_prompt += f"\n\n{render_news_in_markdown_group_by_platform(self._platform_news)}"
 
     def analyze_news(self, symbol: str, from_time: datetime) -> str:

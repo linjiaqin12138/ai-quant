@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Literal, Optional
 
 from lib.model import NewsInfo
@@ -59,6 +59,15 @@ class NewsFetchProxy(NewsFetcherApi):
                     db.kv_store.set(info_key, cache_time_range)  # [start, end)
                     db.commit()
                     return news_list
+
+                # 缓存消息新鲜度5分钟内的不要发起查询
+                if (
+                    cache_time_range["query_start"] <= start_ts
+                    and start_ts < cache_time_range["query_end"]
+                    and datetime.now() - ts_to_dt(cache_time_range["query_end"]) < timedelta(minutes=5)
+                ):
+                    logger.info(f"本地{platform}新闻缓存覆盖查询范围")
+                    return db.news_cache.get_news_by_time_range(platform, start)
 
                 if (
                     cache_time_range["query_start"] <= start_ts

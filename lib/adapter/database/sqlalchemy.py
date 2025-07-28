@@ -6,7 +6,13 @@ from sqlalchemy.dialects.mysql import MEDIUMTEXT
 from lib.model import CryptoHistoryFrame
 from lib.config import get_database_uri, get_create_table
 
-engine = create_engine(get_database_uri())
+engine = create_engine(
+    get_database_uri(),
+    pool_size=10,
+    max_overflow=20,
+    pool_pre_ping=True,
+    pool_recycle=1800
+)
 
 metadata_obj = MetaData()
 

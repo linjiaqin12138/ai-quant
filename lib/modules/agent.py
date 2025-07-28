@@ -1,6 +1,6 @@
 import json
 import traceback
-from typing import Optional, List, Dict, Any, Callable, TypedDict, Union
+from typing import Optional, List, Dict, Any, Callable, TypedDict, Union, get_origin
 
 from lib.utils.function import extract_function_schema
 from lib.adapter.llm import get_llm
@@ -34,7 +34,7 @@ class Agent:
         return_annotation = sig.return_annotation
         
         if return_annotation != inspect.Signature.empty:
-            if return_annotation not in [str, dict]:
+            if return_annotation not in [str, dict] or get_origin(return_annotation) is not Dict:
                 logger.warning(f"Tool '{func.__name__}' return type is {return_annotation}, expected str or dict. "
                               f"The result will be converted to string in execute_tool method.")
         else:
