@@ -640,10 +640,10 @@ class CryptoAgent:
         )
         if recent_take_profit_order:
             position_info_str += (
-                f"当前有未完成止盈限价单: {recent_take_profit_order['orderId']}\n"
-                f"止盈限价单价格: {recent_take_profit_order['price']}\n"
-                f"止盈限价单委托数量: {recent_take_profit_order['origQty']}\n"
-                f"止盈限价单状态: {recent_take_profit_order['status']}\n"
+                f"当前有未完成止盈平仓限价单: {recent_take_profit_order['orderId']}\n"
+                # f"止盈限价单价格: {recent_take_profit_order['price']}\n"
+                # f"止盈限价单委托数量: {recent_take_profit_order['origQty']}\n"
+                # f"止盈限价单状态: {recent_take_profit_order['status']}\n"
                 f"仓位方向: {recent_take_profit_order['side']}\n"
             )
         else:
@@ -652,10 +652,10 @@ class CryptoAgent:
             )
         if recent_stop_loss_order:
             position_info_str += (
-                f"当前有未完成止损限价单: {recent_stop_loss_order['orderId']}\n"
-                f"止损限价单价格: {recent_stop_loss_order['price']}\n"
-                f"止损限价单委托数量: {recent_stop_loss_order['origQty']}\n"
-                f"止损限价单状态: {recent_stop_loss_order['status']}\n"
+                f"当前有未完成止损平仓限价单: {recent_stop_loss_order['orderId']}\n"
+                # f"止损限价单价格: {recent_stop_loss_order['price']}\n"
+                # f"止损限价单委托数量: {recent_stop_loss_order['origQty']}\n"
+                # f"止损限价单状态: {recent_stop_loss_order['status']}\n"
                 f"仓位方向: {recent_stop_loss_order['side']}\n"
             )
         else:
