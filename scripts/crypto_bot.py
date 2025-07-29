@@ -1,13 +1,11 @@
 from datetime import datetime, timedelta
 import json
-import re
 from textwrap import dedent, indent
 from typing import Annotated, Dict, Literal, Optional
 import typer
 
 from lib.adapter.database.db_transaction import create_transaction
 from lib.adapter.llm import get_llm, get_llm_direct_ask
-from lib.adapter.llm.interface import LlmAbstract
 from lib.adapter.exchange.crypto_exchange import BinanceExchange
 from lib.adapter.notification.push_plus import PushPlus
 from lib.logger import logger
@@ -17,9 +15,7 @@ from lib.modules.agents.common import format_indicators, format_ohlcv_list, form
 from lib.modules.notification_logger import NotificationLogger
 from lib.modules.trade.crypto import crypto
 from lib.modules.strategy.state import PersisitentState
-from lib.modules.strategy import StrategyBase
 from lib.modules.trade.crypto import crypto
-from lib.tools.cache_decorator import use_cache
 from lib.utils.news import render_news_in_markdown_group_by_platform
 import threading
 
@@ -143,20 +139,15 @@ class CryptoAgent:
         self.operation_agent.register_tool(self.create_order)
         self.operation_agent.register_tool(self.cancel_order)
         self.operation_agent.register_tool(self.set_leverage)
-        
-        # self.agent = get_agent(llm = get_llm())
-        # self.positive_agent = get_agent(llm = get_llm())
-        # self.negative_agent = get_agent(llm = get_llm())
-        # self.technical_agent = get_agent(llm = get_llm())
-        # self.advice_agent = get_agent(llm = get_llm())
 
         plan_id = f"crypto_agent_{self.symbol}_{investment}"
         self.position_status = None
         self.state = PersisitentState(plan_id, {
-            "free_balance": investment,
-            "leverate": 5,
-            "position_amount": 0,
-            "position_side": "node", # 当前仓位方向, LONG-多仓，SHORT-空仓
+            "free_balance": investment, # 可用余额
+            "suspended_balance": 0, # 挂单冻结
+            "leverage": 5, # 杠杆倍数
+            "position_amount": 0, # 仓位数量
+            "position_side": "none", # 当前仓位方向, LONG-多仓，SHORT-空仓
             "recent_limit_order_id": None, # 开仓限价单
             "recent_take_profit_order_id": None, # 止盈限价单
             "recent_stop_loss_order_id": None, # 止损限价单
@@ -379,7 +370,7 @@ class CryptoAgent:
             self, 
             order_type: Annotated[
                 Literal["LIMIT", "MARKET", "STOP_MARKET", "TAKE_PROFIT_MARKET"], 
-                """订单类型, 如LIMIT(限价单)、MARKET(市价单）、TAKE_PROFIT_MARKET(止盈), STOP_MARKET(止损)"""
+                """订单类型, 如LIMIT(限价单)、MARKET(市价单）、TAKE_PROFIT_MARKET(止盈平仓限价单), STOP_MARKET(止损平仓限单)"""
             ],
             order_side: Annotated[
                 Literal["BUY", "SELL"], 
@@ -403,7 +394,10 @@ class CryptoAgent:
                 "止盈止损价格, TAKE_PROFIT_MARKET和STOP_MARKET必填"
             ] = None,
             # reduce_only: bool = None,
-            # close_position: bool = None
+            # close_position: Annotated[
+            #     Optional[bool], 
+            #     "是否平仓"
+            # ] = None,
         ) -> Dict[str, str]:
         """
         创建订单函数。
@@ -434,11 +428,11 @@ class CryptoAgent:
                 self.state.set("recent_limit_order_id", result['orderId'])
             if result['status'] == 'FILLED':
                 self.state.set("recent_limit_order_id", None)
-                self.state.set("free_balance", self.state.get("free_balance") - float(result['executedQty']) * float(result['avgPrice']))
+                self.state.set("free_balance", self.state.get("free_balance") - (float(result['executedQty']) * float(result['avgPrice']) / self.state.get("leverage")))
         if order_type == 'MARKET':
             if result['status'] == 'FILLED':
                 self.state.set("recent_limit_order_id", None)
-                self.state.set("free_balance", self.state.get("free_balance") - float(result['executedQty']) * float(result['avgPrice']))
+                self.state.set("free_balance", self.state.get("free_balance") - (float(result['executedQty']) * float(result['avgPrice']) / self.state.get("leverage")))
         if order_type == 'STOP_MARKET':
             self.state.set("recent_stop_loss_order_id", result['orderId'])
         if order_type == 'TAKE_PROFIT_MARKET':
@@ -500,8 +494,9 @@ class CryptoAgent:
         """
         设置杠杆倍率
         """
-        return self.binance.binance.fapiPrivatePostLeverage({ 'symbol': self.symbol, 'leverage': leverage })
-        
+        result = self.binance.binance.fapiPrivatePostLeverage({ 'symbol': self.symbol, 'leverage': leverage })
+        self.state.set("leverage", leverage)
+        return result
 
     def cancel_order(self, order_id: Annotated[str, "订单ID"]) -> Dict[str, str]:
         """
@@ -531,9 +526,9 @@ class CryptoAgent:
                 logger.info(f"订单已完成: {order}")
                 if order_key == "recent_limit_order_id":
                     # self.state.set("position_amount", self.state.get("position_amount") + order['executedQty'])
-                    self.state.set("free_balance", self.state.get("free_balance") - order['executedQty'] * order['avgPrice'])
+                    self.state.set("free_balance", self.state.get("free_balance") - (order['executedQty'] * order['avgPrice'] / self.state.get("leverage")))
                 else:
-                    self.state.set("free_balance", self.state.get("free_balance") + order['executedQty'] * order['avgPrice'])
+                    self.state.set("free_balance", self.state.get("free_balance") + (order['executedQty'] * order['avgPrice'] / self.state.get("leverage")))
             return None
         if order['status'] == 'NEW':
             return order
@@ -575,7 +570,8 @@ class CryptoAgent:
         logger.debug(f"获取仓位信息: {json.dumps(info, indent=2)}")
         leverage = int(info.get('leverage', 5))
         position_amount = float(info.get('positionAmt', 0))
-        self.state.set("position_amount", position_amount)
+        self.state.set("position_amount", abs(position_amount))
+        self.state.set("position_side", "long" if position_amount > 0 else "short" if position_amount < 0 else "none")
         self.state.set("leverage", leverage)
         free_balance = self.state.get('free_balance')
 
@@ -672,6 +668,8 @@ class CryptoAgent:
             operation_result = self.operation_agent.ask(proposal, tool_use=True)
             self.message_express.msg(operation_result)
             self.state.save()
+        except Exception as e:
+            self.message_express.msg(f"运行过程中发生错误: {str(e)}")
         finally:
             self.message_express.send()
 
