@@ -19,7 +19,7 @@ from ...utils.time import (
 from ...utils.string import url_encode
 
 
-class ReplyIsNotJson(Exception):
+class RetryableError(Exception):
     pass
 
 
@@ -44,7 +44,7 @@ def get_news_of_cointime(
 
     @with_retry(
         (
-            ReplyIsNotJson,
+            RetryableError,
             curl_cffi.requests.exceptions.Timeout,
             curl_cffi.requests.exceptions.ConnectionError,
         ),
@@ -88,11 +88,13 @@ def get_news_of_cointime(
         if res.status_code == 404:
             logger.warning("Coin time news return 404")
             return []
+        if res.status_code >= 500:
+            raise RetryableError("Cointime API returned 500 error")
         res.raise_for_status()
         try:
             rsp_body = res.json()
         except:
-            raise ReplyIsNotJson(res.content[:100])
+            raise RetryableError(res.content[:100])
         assert rsp_body["code"] == 0, str(rsp_body)
         return rsp_body["data"]
 
