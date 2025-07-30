@@ -51,7 +51,7 @@ def _get_nested(context: dict, key_or_path: str | List[str]):
 
 
 def _set_nested(context: dict, key_or_path: str | List[str], value: Any):
-    logger.info(f"SET {key_or_path} = {value}")
+    logger.info(f"SET {key_or_path} {_get_nested(context, key_or_path)} => {value}")
     if isinstance(key_or_path, str):
         context[key_or_path] = value
         return
@@ -68,6 +68,9 @@ def _set_nested(context: dict, key_or_path: str | List[str], value: Any):
 def _del_nested(context: dict, key_or_path: str | List[str]):
     logger.info(f"DEL {key_or_path}")
     if isinstance(key_or_path, str):
+        if context.get(key_or_path) is None:
+            logger.warning(f"Key {key_or_path} does not exist in context")
+            return
         del context[key_or_path]
         return
     curr = context
