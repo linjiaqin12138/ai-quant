@@ -7,7 +7,12 @@ from lib.utils.decorators import with_retry
 from lib.config import API_MAX_RETRY_TIMES
 
 retry_decorator = with_retry(
-    (ccxt.errors.NetworkError, ccxt.errors.RequestTimeout, requests.ConnectionError),
+    (
+        ccxt.errors.NetworkError, 
+        ccxt.errors.RequestTimeout, 
+        # ccxt.base.errors.RequestTimeout,
+        requests.ConnectionError
+    ),
     API_MAX_RETRY_TIMES,
 )
 G = TypeVar("G")
