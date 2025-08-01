@@ -91,7 +91,17 @@ def get_crypto_info(coin_ids: List[str]) -> List[Dict[str, Any]]:
     return response.json()
 
 def get_fear_greed_index() -> Dict[str, Any]:
-    """获取加密货币恐慌与贪婪指数（Fear & Greed Index）"""
+    """
+    获取加密货币恐慌与贪婪指数（Fear & Greed Index
+    # 获取当前恐惧贪婪指数
+    curl -X GET "https://api.alternative.me/fng/?limit=1" -H "Accept: application/json"
+
+    # 获取最近10天的历史数据
+    curl -X GET "https://api.alternative.me/fng/?limit=10&date_format=world" -H "Accept: application/json"
+
+    # 获取特定日期的数据
+    curl -X GET "https://api.alternative.me/fng/?limit=1&date_format=world&format=json" -H "Accept: application/json"   
+    """
     url = "https://api.alternative.me/fng/"
     proxies = None
     if proxy := get_http_proxy():

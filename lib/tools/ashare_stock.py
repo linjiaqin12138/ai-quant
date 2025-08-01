@@ -741,6 +741,9 @@ def get_financial_indicators(symbol: str) -> Dict[str, Any]:
     # 将最新一期数据转换为字典格式
     if not df.empty:
         result['data'] = df.tail(1).iloc[0].dropna().to_dict()
+        if result['data'].get("日期"):
+            result['data']["日期"] = str(result['data'].get("日期"))
+
     return result
 
 # 里面的函数都设置了7天缓存，可以不用设置了

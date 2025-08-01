@@ -579,7 +579,11 @@ class NewsAgent:
                     start=from_time, 
                     platform='caixin'
                 ),
-                "eastmoney": get_stock_news_during(self._current_symbol, from_time)
+                "eastmoney": get_stock_news_during(self._current_symbol, from_time),
+                "gushitong": news_proxy.get_news_from(
+                    start=from_time,
+                    platform='gushitong'
+                )
             }
         self._user_prompt += f"\n\n{self._global_news_report}"
         self._user_prompt += f"\n\n{render_news_in_markdown_group_by_platform(self._platform_news)}"
