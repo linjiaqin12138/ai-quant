@@ -208,9 +208,11 @@ class CryptoAgent:
             ## 重要约束
             1. 不能同时做多做空
             2. 操作顺序必须正确（先取消冲突订单，再执行新操作）
-            3. 止盈止损只能各设置一次
-            4. 必须考虑限价单可能不成交的情况
-            5. 每个操作都要有明确的风险评估
+            3. 加仓数量不得超过“杠杆后余额最大可继续加仓开多/开空合约数量”
+            4. 由于系统限制，加建仓限价单只能挂一个，不能分批挂多个在不同价位
+            5. 止盈止损只能各设置一次
+            6. 必须考虑限价单可能不成交的情况
+            7. 每个操作都要有明确的风险评估
 
             请确保方案具体可执行，避免模糊指令。
             """
@@ -297,6 +299,7 @@ class CryptoAgent:
                     - 不能同时持有多空仓位
                     - 止盈止损只能各设置一次，重复设置会取消之前的
                     - 取消订单时要考虑对资金状态的影响
+                    - 由于系统限制，加建仓限价单只能各设置一个，不能分批挂多个在不同价位
 
                     请严格按照以上规范执行操作，确保每个步骤都安全可靠。
                 """
@@ -324,11 +327,11 @@ class CryptoAgent:
             "recent_open_position_limit_order": None, # 开仓限价单对象
             "recent_add_position_limit_order": None,
             "recent_decrease_position_limit_order": None,
-            "recent_take_profit_order": None, # 止盈限价单对象
-            "recent_stop_loss_order": None, # 止损限价单对象
+            "recent_take_profit_limit_order": None, # 止盈限价单对象
+            "recent_stop_loss_limit_order": None, # 止损限价单对象
             "error_state": False
         })
-        logger.info("当前仓位信息: %s", json.dumps(self.state._simple_state._context, indent=2, ensure_ascii=False))
+        logger.info("当前状态: %s", json.dumps(self.state._simple_state._context, indent=2, ensure_ascii=False))
 
     @property
     def free_balance(self):
@@ -395,11 +398,11 @@ class CryptoAgent:
         for key in [
             "recent_add_position_limit_order", 
             "recent_decrease_position_limit_order", 
-            "recent_take_profit_order", 
-            "recent_stop_loss_order"
+            "recent_take_profit_limit_order", 
+            "recent_stop_loss_limit_order"
         ]:
-            self.message_express.msg("[WARN] 检测到有未完成的限价单, 没有先取消它们就关仓")
             if self.state.has(key):
+                self.message_express.msg("[WARN] 检测到有未完成的限价单, 没有先取消它们就关仓")
                 self.cancel_order(self.state.get([key, 'orderId']))
 
         return order
@@ -466,6 +469,8 @@ class CryptoAgent:
         trade_side = "buy" if self.position_side == "long" else "sell"
         result = {}
         if order_type == "limit":
+            if self.state.has("recent_add_position_limit_order"):
+                return { "error": "由于系统限制，当前已有未完成的加仓限价单，不能再挂新加仓的限价单" }
             result = self._create_limit_order(price, amount, trade_side)
             if result['status'] == 'close':
                 self._handling_position_state_change_for_resolved_order(result, "add_position")
@@ -498,6 +503,9 @@ class CryptoAgent:
         trade_side = "sell" if self.position_side == "long" else "buy"
         result = {}
         if order_type == "limit":
+            if self.state.has("recent_decrease_position_limit_order"):
+                return { "error": "由于系统限制，当前已有未完成的减仓限价单，不能再挂新减仓的限价单" }
+
             result = self._create_limit_order(price, amount, trade_side)
             if result['status'] == 'close':
                 self._handling_position_state_change_for_resolved_order(result, "decrease_position")
@@ -534,40 +542,56 @@ class CryptoAgent:
         result = {}
         if take_profit:
             # 可能存在未完成的止盈单
-            if self.state.has("recent_take_profit_order"):
-                self.message_express.msg("[WARN] 检测到有未完成的止盈单, 先取消它")
-                self.cancel_order(self.state.get(["recent_take_profit_order", "orderId"]))
-            order = self.binance.binance.create_order(
-                symbol=self.symbol,
-                type="TAKE_PROFIT_MARKET",
-                side="buy" if self.position_side == "short" else "sell",
-                amount=self.position_amount,
-                params = {
-                    "closePosition": True,
-                    "stopPrice": take_profit
-                }
-            )
-            result["take_profit"] = order["info"]
-            self._handling_position_state_change_for_new_limit_order(order["info"], "take_profit")
-            self.state.set("recent_take_profit_order", order["info"])
-        
+            curr_take_profit = self.state.get(["recent_take_profit_limit_order", "stopPrice"])
+
+            if curr_take_profit and float(curr_take_profit) != take_profit:
+                self.message_express.msg("[WARN] 检测到有未完成的冲突止盈单, 先取消它")
+                self.cancel_order(self.state.get(["recent_take_profit_limit_order", "orderId"]))
+            
+            if not curr_take_profit or float(curr_take_profit) != take_profit:
+                order = self.binance.binance.create_order(
+                    symbol=self.symbol,
+                    type="TAKE_PROFIT_MARKET",
+                    side="buy" if self.position_side == "short" else "sell",
+                    amount=self.position_amount,
+                    params = {
+                        "closePosition": True,
+                        "stopPrice": take_profit
+                    }
+                )
+                result["take_profit"] = order["info"]
+                self._handling_position_state_change_for_new_limit_order(order["info"], "take_profit")
+                self.state.set("recent_take_profit_limit_order", order["info"])
+            
+            if curr_take_profit and float(curr_take_profit) == take_profit:
+                self.message_express.msg(f"[INFO] 当前已有止盈单，价格为 {take_profit}，不需要重新设置")
+                result["take_profit"] = { "error": "新设置的止盈价格和当前未完成的止盈单价格相同，请勿重复设置" }
+
         if stop_loss:
-            if self.state.has("recent_stop_loss_order"):
-                self.message_express.msg("[WARN] 检测到有未完成的止损单, 先取消它")
-                self.cancel_order(self.state.get(["recent_stop_loss_order", "orderId"]))
-            order = self.binance.binance.create_order(
-                symbol=self.symbol,
-                type="STOP_MARKET",
-                side="buy" if self.position_side == "short" else "sell",
-                amount=self.position_amount,
-                params = {
-                    "closePosition": True,
-                    "stopPrice": stop_loss
-                }
-            )
-            result["stop_loss"] = order["info"]
-            self._handling_position_state_change_for_new_limit_order(order["info"], "stop_loss")
-            self.state.set("recent_stop_loss_order", order["info"])
+            curr_stop_loss = self.state.get(["recent_stop_loss_limit_order", "stopPrice"])
+            if curr_stop_loss and float(curr_stop_loss) != stop_loss:
+                # 可能存在未完成的止损单
+                self.message_express.msg("[WARN] 检测到有未完成的冲突止损单, 先取消它")
+                self.cancel_order(self.state.get(["recent_stop_loss_limit_order", "orderId"]))
+
+            if not curr_stop_loss or float(curr_stop_loss) != stop_loss:
+                order = self.binance.binance.create_order(
+                    symbol=self.symbol,
+                    type="STOP_MARKET",
+                    side="buy" if self.position_side == "short" else "sell",
+                    amount=self.position_amount,
+                    params = {
+                        "closePosition": True,
+                        "stopPrice": stop_loss
+                    }
+                )
+                result["stop_loss"] = order["info"]
+                self._handling_position_state_change_for_new_limit_order(order["info"], "stop_loss")
+                self.state.set("recent_stop_loss_limit_order", order["info"])
+
+            if curr_stop_loss and float(curr_stop_loss) == stop_loss:
+                self.message_express.msg(f"[INFO] 当前已有止损单，价格为 {stop_loss}，不需要重新设置")
+                result["stop_loss"] = { "error": "新设置的止损价格和当前未完成的止损单价格相同，请勿重复设置" }
 
         return result
 
@@ -603,11 +627,11 @@ class CryptoAgent:
             if order_side == "buy" and self.position_side == "long":
                 to_be_locked_balance = float(order['origQty']) * float(order['price']) / self.leverage
                 self.state.decrease("free_balance", to_be_locked_balance)
-                self.state.set("limit_order_suspended_balance", to_be_locked_balance)
+                self.state.increase("limit_order_suspended_balance", to_be_locked_balance)
             elif order_side == "sell" and self.position_side == "short":
                 to_be_locked_balance = float(order['origQty']) * float(order['price']) / self.leverage
                 self.state.decrease("free_balance", to_be_locked_balance)
-                self.state.set("limit_order_suspended_balance", to_be_locked_balance)
+                self.state.increase("limit_order_suspended_balance", to_be_locked_balance)
             else:
                 self.message_express.msg(f"[ERROR] Unknown order side {order_side} for add position order {order}")
                 self._mark_error_state_and_exit()
@@ -622,7 +646,7 @@ class CryptoAgent:
         处理已完成订单引发的仓位状态变化(剩余可用、仓位总数、仓位均价、开仓加仓锁定金额、仓位方向等) ，不涉及recent_xxx_order
         """
         def _reset_state_for_close_position():
-            self.state.decrease("position_amount", 0)
+            self.state.set("position_amount", 0)
             self.state.set("position_avg_price", 0)
             self.state.set("position_side", "none")
 
@@ -702,7 +726,7 @@ class CryptoAgent:
                     self.message_express.msg(f"限价买入减空成功: {order}")
                 
                 # 赎回的本金
-                self.state.increase("free_balance", self.position_avg_price * float(order['executedQty']))
+                self.state.increase("free_balance", self.position_avg_price * float(order['executedQty']) / self.leverage)
                 # 赚取利润
                 self.state.increase("free_balance", (self.position_avg_price - float(order['avgPrice'])) * float(order['executedQty']))
                 self.state.decrease("position_amount", float(order['executedQty']))
@@ -715,7 +739,7 @@ class CryptoAgent:
 
             if self.state.get("position_side") == "short" and order_side == "buy":
                 # 收回的本金
-                self.state.increase("free_balance", self.position_avg_price * float(order['executedQty']))
+                self.state.increase("free_balance", self.position_avg_price * float(order['executedQty']) / self.leverage)
                 # 赚取利润
                 profit = (self.position_avg_price - float(order['avgPrice'])) * float(order['executedQty'])
                 self.state.increase("free_balance", profit)
@@ -725,9 +749,7 @@ class CryptoAgent:
             elif self.state.get("position_side") == "long" and order_side == "sell":
                 # 收回的本金
                 self.state.increase("free_balance", float(order['cumQuote']) / self.leverage)
-                # 赚取利润
                 _reset_state_for_close_position()
-                self.message_express.msg(f"仓位平多，获利：{profit}")
             else:
                 self.message_express.msg(f"[ERROR] Unknown order side {order_side} for take profit/stop lossorder {order}")
                 self._mark_error_state_and_exit()
@@ -743,12 +765,12 @@ class CryptoAgent:
             if order['status'] == 'FILLED':
                 self._handling_position_state_change_for_resolved_order(order, order_source)
                 if order_source == "take_profit":
-                    order_to_be_canceled = self.state.get(["recent_stop_loss_order", "orderId"])
+                    order_to_be_canceled = self.state.get(["recent_stop_loss_limit_order", "orderId"])
                     if order_to_be_canceled:
                         canceled_paired_stop_loss_order = self.cancel_order(order_to_be_canceled)
                         self.message_express.msg(f"止盈后取消止损订单: {canceled_paired_stop_loss_order}")
                 elif order_source == "stop_loss":
-                    order_to_be_canceled = self.state.get(["recent_take_profit_order", "orderId"])
+                    order_to_be_canceled = self.state.get(["recent_take_profit_limit_order", "orderId"])
                     if order_to_be_canceled:
                         canceled_paired_take_profit_order = self.cancel_order(order_to_be_canceled)
                         self.message_express.msg(f"止损后取消止盈订单: {canceled_paired_take_profit_order}")
@@ -856,10 +878,10 @@ class CryptoAgent:
             return cache_value
 
         coin_time = news_proxy.get_news_from("cointime", start=from_time)
-        gushitong = news_proxy.get_news_from("gushitong", start=from_time)
+        if len(coin_time) == 0:
+            return "过去一小时无需要关注的新闻"
         news_in_str = render_news_in_markdown_group_by_platform({
-            "cointime": coin_time,
-            "gushitong": gushitong
+            "cointime": coin_time
         })
         prompt = f"请分析以下从{from_time}开始的新闻，会不会对投资标的{self.symbol}产生影响？\n{news_in_str}"
         logger.debug(prompt)
@@ -981,14 +1003,14 @@ class CryptoAgent:
             "recent_add_position_limit_order",
             "recent_decrease_position_limit_order",
             "recent_open_position_limit_order", 
-            "recent_take_profit_order", 
-            "recent_stop_loss_order"
+            "recent_take_profit_limit_order", 
+            "recent_stop_loss_limit_order"
         ]:
             if order_id == self.state.get([order_id_key, 'orderId']):
                 self.state.delete(order_id_key)
-        if order_id_key in ["recent_add_position_limit_order", "recent_open_position_limit_order"]:
-            self.state.increase("free_balance", self.state.get("limit_order_suspended_balance"))
-            self.state.set("limit_order_suspended_balance", 0)
+                if order_id_key in ["recent_add_position_limit_order", "recent_open_position_limit_order"]:
+                    self.state.increase("free_balance", self.state.get("limit_order_suspended_balance"))
+                    self.state.set("limit_order_suspended_balance", 0)
         return result['info']
 
     def get_position_info(self) -> str:
@@ -1044,8 +1066,8 @@ class CryptoAgent:
         recent_open_position_limit_order = self.state.get("recent_open_position_limit_order")
         recent_add_position_limit_order = self.state.get("recent_add_position_limit_order")
         recent_decrease_position_limit_order = self.state.get("recent_decrease_position_limit_order")
-        recent_take_profit_order = self.state.get("recent_take_profit_order")
-        recent_stop_loss_order = self.state.get("recent_stop_loss_order")
+        recent_take_profit_limit_order = self.state.get("recent_take_profit_limit_order")
+        recent_stop_loss_limit_order = self.state.get("recent_stop_loss_limit_order")
 
         if self.position_side == "none":
             position_info_str = (
@@ -1070,6 +1092,7 @@ class CryptoAgent:
         position_info_str = (
             f"持仓数量: {self.position_amount}\n"
             f"仓位方向：{'做多' if self.position_side == 'long' else '做空' if self.position_side == 'short' else '无'}\n"
+            f"仓位水平: {self.position_amount * self.position_avg_price / (self.position_amount * self.position_avg_price + self.free_balance * self.leverage):.2%}\n"
             f"开仓均价: {self.position_avg_price}\n"
             f"盈亏平衡价格: {info.get('breakEvenPrice', '')}\n"
             f"当前标记价格: {curr_price}\n"
@@ -1079,7 +1102,7 @@ class CryptoAgent:
             f"持仓名义价值: {info.get('notional', '')}\n"
             f"当前可用: {self.free_balance:2f}USDT\n"
             f"杠杆后余额: {self.free_balance * leverage:2f}USDT\n"
-            f"杠杆后余额最大可继续{'开多' if position_amount > 0 else '开空'}合约数量: {self.free_balance * leverage / curr_price:2f}\n"
+            f"杠杆后余额最大可继续加仓{'开多' if position_amount > 0 else '开空'}合约数量: {self.free_balance * leverage / curr_price:2f}\n"
             f"最大可反向{'开多' if position_amount < 0 else '开空'}合约数量: {self.free_balance * leverage / curr_price + self.position_amount:2f}\n"
         )
         if recent_add_position_limit_order:
@@ -1100,19 +1123,19 @@ class CryptoAgent:
                 f"当前有未完成减仓限价单: {recent_decrease_position_limit_order['orderId']}\n"
                 f"限价单价格: {recent_decrease_position_limit_order['price']}\n"
             )
-        if recent_take_profit_order:
+        if recent_take_profit_limit_order:
             position_info_str += (
-                f"当前有未完成止盈平仓限价单({recent_take_profit_order['side']}): {recent_take_profit_order['orderId']}\n"
-                f"当前止盈价格: {recent_take_profit_order['stopPrice']}\n"
+                f"当前有未完成止盈平仓限价单({recent_take_profit_limit_order['side']}): {recent_take_profit_limit_order['orderId']}\n"
+                f"当前止盈价格: {recent_take_profit_limit_order['stopPrice']}\n"
             )
         else:
             position_info_str += (
                 "当前没有设置止盈。\n"
             )
-        if recent_stop_loss_order:
+        if recent_stop_loss_limit_order:
             position_info_str += (
-                f"当前有未完成止损平仓限价单({recent_stop_loss_order['side']}): {recent_stop_loss_order['orderId']}\n"
-                f"当前止损限价格: {recent_stop_loss_order['stopPrice']}\n"
+                f"当前有未完成止损平仓限价单({recent_stop_loss_limit_order['side']}): {recent_stop_loss_limit_order['orderId']}\n"
+                f"当前止损限价格: {recent_stop_loss_limit_order['stopPrice']}\n"
             )
         else:
             position_info_str += (

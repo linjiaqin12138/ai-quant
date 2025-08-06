@@ -194,7 +194,7 @@ class GlobalNewsAgent:
         """
         获取指定平台的前top_k条热门新闻
         Args:
-            platforms: 字符串数组，新闻平台名称列表, 例如"36kr", "qq-news", "sina-news", "sina", "huxiu", "netease-news", "toutiao"
+            platforms: 字符串数组，新闻平台名称列表, 例如"36kr", "qq-news", "sina-news", "sina", "netease-news", "toutiao"
             top_k: 每个平台返回的热门新闻数量，默认为5
 
         Returns:
