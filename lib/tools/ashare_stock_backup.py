@@ -1,8 +1,9 @@
 
+import re
 import akshare as ak
 from typing import List, Dict, Any, Literal, Optional, TypedDict
 import pandas as pd
-from datetime import datetime, time, timedelta
+from datetime import datetime, timedelta
 
 from lib.adapter.apis import fetch_realtime_stock_snapshot, get_china_holiday
 from lib.adapter.database.db_transaction import create_transaction
@@ -34,6 +35,22 @@ def get_fund_list() -> pd.DataFrame:
     # 从 akshare 获取数据
     return ak.fund_name_em()
 
+@use_cache(
+    86400 * 7,
+    use_db_cache=True
+)
+def get_stock_list() -> List[Dict[str, str]]:
+    """
+    获取A股股票列表，使用二级缓存
+    """
+    df = ak.stock_info_a_code_name()
+    result = []
+    for _, row in df.iterrows():
+        result.append({
+            "stock_code": row["code"],
+            "name": row["name"]
+        })
+    return result
 
 @use_cache(86400 * 30, use_db_cache=True)
 def get_ashare_stock_info(symbol: str) -> AShareStockInfo:
@@ -109,42 +126,44 @@ def get_stock_news_during(symbol: str, from_time: datetime, end_time: datetime =
         if from_time <= news.timestamp <= end_time
     ]
 
-
+unknown_column_cache = set()
 def colum_mapping_transform(latest_row: pd.Series, mapping: Dict[str, Any]) -> Dict[str, Any]:
     data = {}
     for origin_col in latest_row.index.to_list():
         if origin_col in mapping:
             chn_name = mapping[origin_col]
             value = latest_row[origin_col]
-            data[chn_name] = float(value) if pd.notna(value) and value != "" else 0
+            # 判断是否为nan，如果是nan则跳过
+            if pd.isna(value):
+                continue
+            # 判断是否为数字或浮点数
+            if re.match(r"^\d+(\.\d+)?$", str(value)):
+                data[chn_name] = float(value)
+            else:
+                data[chn_name] = str(value)
         else:
-            logger.warning("字段：%s 未在映射中找到", origin_col)
+            if origin_col not in unknown_column_cache:
+                logger.warning("字段：%s 未在映射中找到", origin_col)
+                unknown_column_cache.add(origin_col)
     return data
 
 @use_cache(86400 * 7, use_db_cache=True)
-def get_financial_balance_sheet(symbol: str) -> Dict[str, Any]:
-    """
-    获取A股公司资产负债表数据
-
-    Args:
-        symbol: 股票代码
-
-    Returns:
-        包含资产负债表数据的字典
-    """
-    # 转换为字典格式，便于处理
+def get_financial_balance_sheet_history(symbol: str) -> List[Dict[str, Any]]:
     result = {
         "symbol": symbol,
         "source": "新浪财经-财务报表-资产负债表",
-        "data": {},
+        "data": [],
     }
-    # 获取资产负债表数据
-    df = ak.stock_financial_report_sina(stock='600588', symbol="资产负债表")
-    if not df.empty:
-        result['data'] = df.head(1).iloc[0].dropna().to_dict()
-        return result
+    # try:
+    #     df = ak.stock_financial_report_sina(stock=symbol, symbol="资产负债表")
+    #     for _, row in df.iterrows():
+    #         result["data"].append(row.dropna().to_dict())
+    #     if result:
+    #         return result
+    # except Exception as e:
+    #     logger.error("获取财务报表历史数据失败: %s, 尝试切换到其他数据源", e)
+
     result['source'] = "东方财富-股票-财务分析-资产负债表-按报告期"
-    
     df = ak.stock_balance_sheet_by_report_em(symbol=determine_exchange(symbol) + symbol)
     # 主要资产负债表项目（英文列名映射）
     AK_BALANCE_SHEET_COLUMN_MAP = {
@@ -161,195 +180,362 @@ def get_financial_balance_sheet(symbol: str) -> Dict[str, Any]:
         "UPDATE_DATE": "更新日期",
         "CURRENCY": "币种",
         "ACCEPT_DEPOSIT_INTERBANK": "吸收存款及同业存放",
+        "ACCEPT_DEPOSIT_INTERBANK_YOY": "吸收存款及同业存放同比",
         "ACCOUNTS_PAYABLE": "应付账款",
+        "ACCOUNTS_PAYABLE_YOY": "应付账款同比",
         "ACCOUNTS_RECE": "应收账款",
+        "ACCOUNTS_RECE_YOY": "应收账款同比",
         "ACCRUED_EXPENSE": "预提费用",
+        "ACCRUED_EXPENSE_YOY": "预提费用同比",
         "ADVANCE_RECEIVABLES": "预收款项",
+        "ADVANCE_RECEIVABLES_YOY": "预收款项同比",
         "AGENT_TRADE_SECURITY": "代理买卖证券款",
+        "AGENT_TRADE_SECURITY_YOY": "代理买卖证券款同比",
         "AGENT_UNDERWRITE_SECURITY": "代理承销证券款",
+        "AGENT_UNDERWRITE_SECURITY_YOY": "代理承销证券款同比",
         "AMORTIZE_COST_FINASSET": "以摊余成本计量的金融资产",
+        "AMORTIZE_COST_FINASSET_YOY": "以摊余成本计量的金融资产同比",
         "AMORTIZE_COST_FINLIAB": "以摊余成本计量的金融负债",
+        "AMORTIZE_COST_FINLIAB_YOY": "以摊余成本计量的金融负债同比",
         "AMORTIZE_COST_NCFINASSET": "以摊余成本计量的非流动金融资产",
+        "AMORTIZE_COST_NCFINASSET_YOY": "以摊余成本计量的非流动金融资产同比",
         "AMORTIZE_COST_NCFINLIAB": "以摊余成本计量的非流动金融负债",
+        "AMORTIZE_COST_NCFINLIAB_YOY": "以摊余成本计量的非流动金融负债同比",
         "APPOINT_FVTPL_FINASSET": "指定以公允价值计量且其变动计入当期损益的金融资产",
+        "APPOINT_FVTPL_FINASSET_YOY": "指定以公允价值计量且其变动计入当期损益的金融资产同比",
         "APPOINT_FVTPL_FINLIAB": "指定以公允价值计量且其变动计入当期损益的金融负债",
+        "APPOINT_FVTPL_FINLIAB_YOY": "指定以公允价值计量且其变动计入当期损益的金融负债同比",
         "ASSET_BALANCE": "资产余额",
+        "ASSET_BALANCE_YOY": "资产余额同比",
         "ASSET_OTHER": "其他资产",
+        "ASSET_OTHER_YOY": "其他资产同比",
         "ASSIGN_CASH_DIVIDEND": "拟分配现金股利",
+        "ASSIGN_CASH_DIVIDEND_YOY": "拟分配现金股利同比",
         "AVAILABLE_SALE_FINASSET": "可供出售金融资产",
+        "AVAILABLE_SALE_FINASSET_YOY": "可供出售金融资产同比",
         "BOND_PAYABLE": "应付债券",
+        "BOND_PAYABLE_YOY": "应付债券同比",
         "BORROW_FUND": "拆入资金",
+        "BORROW_FUND_YOY": "拆入资金同比",
         "BUY_RESALE_FINASSET": "买入返售金融资产",
+        "BUY_RESALE_FINASSET_YOY": "买入返售金融资产同比",
         "CAPITAL_RESERVE": "资本公积",
+        "CAPITAL_RESERVE_YOY": "资本公积同比",
         "CIP": "在建工程",
+        "CIP_YOY": "在建工程同比",
         "CONSUMPTIVE_BIOLOGICAL_ASSET": "消耗性生物资产",
+        "CONSUMPTIVE_BIOLOGICAL_ASSET_YOY": "消耗性生物资产同比",
         "CONTRACT_ASSET": "合同资产",
+        "CONTRACT_ASSET_YOY": "合同资产同比",
         "CONTRACT_LIAB": "合同负债",
+        "CONTRACT_LIAB_YOY": "合同负债同比",
         "CONVERT_DIFF": "外币报表折算差额",
+        "CONVERT_DIFF_YOY": "外币报表折算差额同比",
         "CREDITOR_INVEST": "债权投资",
+        "CREDITOR_INVEST_YOY": "债权投资同比",
         "CURRENT_ASSET_BALANCE": "流动资产余额",
+        "CURRENT_ASSET_BALANCE_YOY": "流动资产余额同比",
         "CURRENT_ASSET_OTHER": "其他流动资产",
+        "CURRENT_ASSET_OTHER_YOY": "其他流动资产同比",
         "CURRENT_LIAB_BALANCE": "流动负债余额",
+        "CURRENT_LIAB_BALANCE_YOY": "流动负债余额同比",
         "CURRENT_LIAB_OTHER": "其他流动负债",
+        "CURRENT_LIAB_OTHER_YOY": "其他流动负债同比",
         "DEFER_INCOME": "递延收益",
+        "DEFER_INCOME_YOY": "递延收益同比",
         "DEFER_INCOME_1YEAR": "一年内到期的递延收益",
+        "DEFER_INCOME_1YEAR_YOY": "一年内到期的递延收益同比",
         "DEFER_TAX_ASSET": "递延所得税资产",
+        "DEFER_TAX_ASSET_YOY": "递延所得税资产同比",
         "DEFER_TAX_LIAB": "递延所得税负债",
+        "DEFER_TAX_LIAB_YOY": "递延所得税负债同比",
         "DERIVE_FINASSET": "衍生金融资产",
+        "DERIVE_FINASSET_YOY": "衍生金融资产同比",
         "DERIVE_FINLIAB": "衍生金融负债",
+        "DERIVE_FINLIAB_YOY": "衍生金融负债同比",
         "DEVELOP_EXPENSE": "开发支出",
+        "DEVELOP_EXPENSE_YOY": "开发支出同比",
         "DIV_HOLDSALE_ASSET": "划分为持有待售的资产",
+        "DIV_HOLDSALE_ASSET_YOY": "划分为持有待售的资产同比",
         "DIV_HOLDSALE_LIAB": "划分为持有待售的负债",
+        "DIV_HOLDSALE_LIAB_YOY": "划分为持有待售的负债同比",
         "DIVIDEND_PAYABLE": "应付股利",
+        "DIVIDEND_PAYABLE_YOY": "应付股利同比",
         "DIVIDEND_RECE": "应收股利",
+        "DIVIDEND_RECE_YOY": "应收股利同比",
         "EQUITY_BALANCE": "所有者权益余额",
+        "EQUITY_BALANCE_YOY": "所有者权益余额同比",
         "EQUITY_OTHER": "其他所有者权益",
+        "EQUITY_OTHER_YOY": "其他所有者权益同比",
         "EXPORT_REFUND_RECE": "应收出口退税",
+        "EXPORT_REFUND_RECE_YOY": "应收出口退税同比",
         "FEE_COMMISSION_PAYABLE": "应付手续费及佣金",
+        "FEE_COMMISSION_PAYABLE_YOY": "应付手续费及佣金同比",
         "FIN_FUND": "结算备付金",
+        "FIN_FUND_YOY": "结算备付金同比",
         "FINANCE_RECE": "应收款项融资",
+        "FINANCE_RECE_YOY": "应收款项融资同比",
         "FIXED_ASSET": "固定资产",
+        "FIXED_ASSET_YOY": "固定资产同比",
         "FIXED_ASSET_DISPOSAL": "固定资产清理",
+        "FIXED_ASSET_DISPOSAL_YOY": "固定资产清理同比",
         "FVTOCI_FINASSET": "以公允价值计量且其变动计入其他综合收益的金融资产",
+        "FVTOCI_FINASSET_YOY": "以公允价值计量且其变动计入其他综合收益的金融资产同比",
         "FVTOCI_NCFINASSET": "以公允价值计量且其变动计入其他综合收益的非流动金融资产",
+        "FVTOCI_NCFINASSET_YOY": "以公允价值计量且其变动计入其他综合收益的非流动金融资产同比",
         "FVTPL_FINASSET": "以公允价值计量且其变动计入当期损益的金融资产",
+        "FVTPL_FINASSET_YOY": "以公允价值计量且其变动计入当期损益的金融资产同比",
         "FVTPL_FINLIAB": "以公允价值计量且其变动计入当期损益的金融负债",
+        "FVTPL_FINLIAB_YOY": "以公允价值计量且其变动计入当期损益的金融负债同比",
         "GENERAL_RISK_RESERVE": "一般风险准备",
+        "GENERAL_RISK_RESERVE_YOY": "一般风险准备同比",
         "GOODWILL": "商誉",
+        "GOODWILL_YOY": "商誉同比",
         "HOLD_MATURITY_INVEST": "持有至到期投资",
+        "HOLD_MATURITY_INVEST_YOY": "持有至到期投资同比",
         "HOLDSALE_ASSET": "持有待售资产",
+        "HOLDSALE_ASSET_YOY": "持有待售资产同比",
         "HOLDSALE_LIAB": "持有待售负债",
+        "HOLDSALE_LIAB_YOY": "持有待售负债同比",
         "INSURANCE_CONTRACT_RESERVE": "保险合同准备金",
+        "INSURANCE_CONTRACT_RESERVE_YOY": "保险合同准备金同比",
         "INTANGIBLE_ASSET": "无形资产",
+        "INTANGIBLE_ASSET_YOY": "无形资产同比",
         "INTEREST_PAYABLE": "应付利息",
+        "INTEREST_PAYABLE_YOY": "应付利息同比",
         "INTEREST_RECE": "应收利息",
+        "INTEREST_RECE_YOY": "应收利息同比",
         "INTERNAL_PAYABLE": "内部应付款",
+        "INTERNAL_PAYABLE_YOY": "内部应付款同比",
         "INTERNAL_RECE": "内部应收款",
+        "INTERNAL_RECE_YOY": "内部应收款同比",
         "INVENTORY": "存货",
+        "INVENTORY_YOY": "存货同比",
         "INVEST_REALESTATE": "投资性房地产",
+        "INVEST_REALESTATE_YOY": "投资性房地产同比",
         "LEASE_LIAB": "租赁负债",
+        "LEASE_LIAB_YOY": "租赁负债同比",
         "LEND_FUND": "发放贷款及垫款",
+        "LEND_FUND_YOY": "发放贷款及垫款同比",
         "LIAB_BALANCE": "负债余额",
+        "LIAB_BALANCE_YOY": "负债余额同比",
         "LIAB_EQUITY_BALANCE": "负债和所有者权益余额",
+        "LIAB_EQUITY_BALANCE_YOY": "负债和所有者权益余额同比",
         "LIAB_EQUITY_OTHER": "负债和所有者权益其他",
+        "LIAB_EQUITY_OTHER_YOY": "负债和所有者权益其他同比",
         "LIAB_OTHER": "其他负债",
+        "LIAB_OTHER_YOY": "其他负债同比",
         "LOAN_ADVANCE": "发放贷款及垫款",
+        "LOAN_ADVANCE_YOY": "发放贷款及垫款同比",
         "LOAN_PBC": "向中央银行借款",
+        "LOAN_PBC_YOY": "向中央银行借款同比",
         "LONG_EQUITY_INVEST": "长期股权投资",
+        "LONG_EQUITY_INVEST_YOY": "长期股权投资同比",
         "LONG_LOAN": "长期借款",
+        "LONG_LOAN_YOY": "长期借款同比",
         "LONG_PAYABLE": "长期应付款",
+        "LONG_PAYABLE_YOY": "长期应付款同比",
         "LONG_PREPAID_EXPENSE": "长期待摊费用",
+        "LONG_PREPAID_EXPENSE_YOY": "长期待摊费用同比",
         "LONG_RECE": "长期应收款",
+        "LONG_RECE_YOY": "长期应收款同比",
         "LONG_STAFFSALARY_PAYABLE": "长期应付职工薪酬",
+        "LONG_STAFFSALARY_PAYABLE_YOY": "长期应付职工薪酬同比",
         "MINORITY_EQUITY": "少数股东权益",
+        "MINORITY_EQUITY_YOY": "少数股东权益同比",
         "MONETARYFUNDS": "货币资金",
+        "MONETARYFUNDS_YOY": "货币资金同比",
         "NONCURRENT_ASSET_1YEAR": "一年内到期的非流动资产",
+        "NONCURRENT_ASSET_1YEAR_YOY": "一年内到期的非流动资产同比",
         "NONCURRENT_ASSET_BALANCE": "非流动资产余额",
+        "NONCURRENT_ASSET_BALANCE_YOY": "非流动资产余额同比",
         "NONCURRENT_ASSET_OTHER": "其他非流动资产",
+        "NONCURRENT_ASSET_OTHER_YOY": "其他非流动资产同比",
         "NONCURRENT_LIAB_1YEAR": "一年内到期的非流动负债",
+        "NONCURRENT_LIAB_1YEAR_YOY": "一年内到期的非流动负债同比",
         "NONCURRENT_LIAB_BALANCE": "非流动负债余额",
+        "NONCURRENT_LIAB_BALANCE_YOY": "非流动负债余额同比",
         "NONCURRENT_LIAB_OTHER": "其他非流动负债",
+        "NONCURRENT_LIAB_OTHER_YOY": "其他非流动负债同比",
         "NOTE_ACCOUNTS_PAYABLE": "应付票据及应付账款",
+        "NOTE_ACCOUNTS_PAYABLE_YOY": "应付票据及应付账款同比",
         "NOTE_ACCOUNTS_RECE": "应收票据及应收账款",
+        "NOTE_ACCOUNTS_RECE_YOY": "应收票据及应收账款同比",
         "NOTE_PAYABLE": "应付票据",
+        "NOTE_PAYABLE_YOY": "应付票据同比",
         "NOTE_RECE": "应收票据",
+        "NOTE_RECE_YOY": "应收票据同比",
         "OIL_GAS_ASSET": "油气资产",
+        "OIL_GAS_ASSET_YOY": "油气资产同比",
         "OTHER_COMPRE_INCOME": "其他综合收益",
+        "OTHER_COMPRE_INCOME_YOY": "其他综合收益同比",
         "OTHER_CREDITOR_INVEST": "其他债权投资",
+        "OTHER_CREDITOR_INVEST_YOY": "其他债权投资同比",
         "OTHER_CURRENT_ASSET": "其他流动资产",
+        "OTHER_CURRENT_ASSET_YOY": "其他流动资产同比",
         "OTHER_CURRENT_LIAB": "其他流动负债",
+        "OTHER_CURRENT_LIAB_YOY": "其他流动负债同比",
         "OTHER_EQUITY_INVEST": "其他权益工具投资",
+        "OTHER_EQUITY_INVEST_YOY": "其他权益工具投资同比",
         "OTHER_EQUITY_OTHER": "其他权益工具其他",
+        "OTHER_EQUITY_OTHER_YOY": "其他权益工具其他同比",
         "OTHER_EQUITY_TOOL": "其他权益工具",
+        "OTHER_EQUITY_TOOL_YOY": "其他权益工具同比",
         "OTHER_NONCURRENT_ASSET": "其他非流动资产",
+        "OTHER_NONCURRENT_ASSET_YOY": "其他非流动资产同比",
         "OTHER_NONCURRENT_FINASSET": "其他非流动金融资产",
+        "OTHER_NONCURRENT_FINASSET_YOY": "其他非流动金融资产同比",
         "OTHER_NONCURRENT_LIAB": "其他非流动负债",
+        "OTHER_NONCURRENT_LIAB_YOY": "其他非流动负债同比",
         "OTHER_PAYABLE": "其他应付款",
+        "OTHER_PAYABLE_YOY": "其他应付款同比",
         "OTHER_RECE": "其他应收款",
+        "OTHER_RECE_YOY": "其他应收款同比",
         "PARENT_EQUITY_BALANCE": "归属于母公司股东权益合计",
+        "PARENT_EQUITY_BALANCE_YOY": "归属于母公司股东权益合计同比",
         "PARENT_EQUITY_OTHER": "归属于母公司股东权益其他",
+        "PARENT_EQUITY_OTHER_YOY": "归属于母公司股东权益其他同比",
         "PERPETUAL_BOND": "永续债",
+        "PERPETUAL_BOND_YOY": "永续债同比",
         "PERPETUAL_BOND_PAYBALE": "应付永续债",
+        "PERPETUAL_BOND_PAYBALE_YOY": "应付永续债同比",
         "PREDICT_CURRENT_LIAB": "预计流动负债",
+        "PREDICT_CURRENT_LIAB_YOY": "预计流动负债同比",
         "PREDICT_LIAB": "预计非流动负债",
+        "PREDICT_LIAB_YOY": "预计非流动负债同比",
         "PREFERRED_SHARES": "优先股",
+        "PREFERRED_SHARES_YOY": "优先股同比",
         "PREFERRED_SHARES_PAYBALE": "应付优先股",
+        "PREFERRED_SHARES_PAYBALE_YOY": "应付优先股同比",
         "PREMIUM_RECE": "应收保费",
+        "PREMIUM_RECE_YOY": "应收保费同比",
         "PREPAYMENT": "预付款项",
+        "PREPAYMENT_YOY": "预付款项同比",
         "PRODUCTIVE_BIOLOGY_ASSET": "生产性生物资产",
+        "PRODUCTIVE_BIOLOGY_ASSET_YOY": "生产性生物资产同比",
         "PROJECT_MATERIAL": "工程物资",
+        "PROJECT_MATERIAL_YOY": "工程物资同比",
         "RC_RESERVE_RECE": "应收分保合同准备金",
+        "RC_RESERVE_RECE_YOY": "应收分保合同准备金同比",
         "REINSURE_PAYABLE": "应付分保账款",
+        "REINSURE_PAYABLE_YOY": "应付分保账款同比",
         "REINSURE_RECE": "应收分保账款",
+        "REINSURE_RECE_YOY": "应收分保账款同比",
         "SELL_REPO_FINASSET": "卖出回购金融资产款",
+        "SELL_REPO_FINASSET_YOY": "卖出回购金融资产款同比",
         "SETTLE_EXCESS_RESERVE": "结算备付金",
+        "SETTLE_EXCESS_RESERVE_YOY": "结算备付金同比",
         "SHARE_CAPITAL": "实收资本(或股本)",
+        "SHARE_CAPITAL_YOY": "实收资本(或股本)同比",
         "SHORT_BOND_PAYABLE": "应付短期债券",
+        "SHORT_BOND_PAYABLE_YOY": "应付短期债券同比",
         "SHORT_FIN_PAYABLE": "短期融资款",
+        "SHORT_FIN_PAYABLE_YOY": "短期融资款同比",
         "SHORT_LOAN": "短期借款",
+        "SHORT_LOAN_YOY": "短期借款同比",
         "SPECIAL_PAYABLE": "专项应付款",
+        "SPECIAL_PAYABLE_YOY": "专项应付款同比",
         "SPECIAL_RESERVE": "专项储备",
+        "SPECIAL_RESERVE_YOY": "专项储备同比",
         "STAFF_SALARY_PAYABLE": "应付职工薪酬",
+        "STAFF_SALARY_PAYABLE_YOY": "应付职工薪酬同比",
         "SUBSIDY_RECE": "应收补贴款",
+        "SUBSIDY_RECE_YOY": "应收补贴款同比",
         "SURPLUS_RESERVE": "盈余公积",
+        "SURPLUS_RESERVE_YOY": "盈余公积同比",
         "TAX_PAYABLE": "应交税费",
+        "TAX_PAYABLE_YOY": "应交税费同比",
         "TOTAL_ASSETS": "资产总计",
+        "TOTAL_ASSETS_YOY": "资产总计同比",
         "TOTAL_CURRENT_ASSETS": "流动资产合计",
+        "TOTAL_CURRENT_ASSETS_YOY": "流动资产合计同比",
         "TOTAL_CURRENT_LIAB": "流动负债合计",
+        "TOTAL_CURRENT_LIAB_YOY": "流动负债合计同比",
         "TOTAL_EQUITY": "所有者权益合计",
+        "TOTAL_EQUITY_YOY": "所有者权益合计同比",
         "TOTAL_LIAB_EQUITY": "负债和所有者权益(或股东权益)总计",
+        "TOTAL_LIAB_EQUITY_YOY": "负债和所有者权益(或股东权益)总计同比",
         "TOTAL_LIABILITIES": "负债合计",
+        "TOTAL_LIABILITIES_YOY": "负债合计同比",
         "TOTAL_NONCURRENT_ASSETS": "非流动资产合计",
+        "TOTAL_NONCURRENT_ASSETS_YOY": "非流动资产合计同比",
         "TOTAL_NONCURRENT_LIAB": "非流动负债合计",
+        "TOTAL_NONCURRENT_LIAB_YOY": "非流动负债合计同比",
         "TOTAL_OTHER_PAYABLE": "其他应付款合计",
+        "TOTAL_OTHER_PAYABLE_YOY": "其他应付款合计同比",
         "TOTAL_OTHER_RECE": "其他应收款合计",
+        "TOTAL_OTHER_RECE_YOY": "其他应收款合计同比",
         "TOTAL_PARENT_EQUITY": "归属于母公司股东权益合计",
+        "TOTAL_PARENT_EQUITY_YOY": "归属于母公司股东权益合计同比",
         "TRADE_FINASSET": "交易性金融资产",
+        "TRADE_FINASSET_YOY": "交易性金融资产同比",
         "TRADE_FINASSET_NOTFVTPL": "交易性金融资产(非以公允价值计量)",
+        "TRADE_FINASSET_NOTFVTPL_YOY": "交易性金融资产(非以公允价值计量)同比",
         "TRADE_FINLIAB": "交易性金融负债",
+        "TRADE_FINLIAB_YOY": "交易性金融负债同比",
         "TRADE_FINLIAB_NOTFVTPL": "交易性金融负债(非以公允价值计量)",
+        "TRADE_FINLIAB_NOTFVTPL_YOY": "交易性金融负债(非以公允价值计量)同比",
         "TREASURY_SHARES": "库存股",
+        "TREASURY_SHARES_YOY": "库存股同比",
         "UNASSIGN_RPOFIT": "未分配利润",
+        "UNASSIGN_RPOFIT_YOY": "未分配利润同比",
         "UNCONFIRM_INVEST_LOSS": "未确定的投资损失",
+        "UNCONFIRM_INVEST_LOSS_YOY": "未确定的投资损失同比",
         "USERIGHT_ASSET": "使用权资产",
+        "USERIGHT_ASSET_YOY": "使用权资产同比",
         "OPINION_TYPE": "审计意见类型",
         "OSOPINION_TYPE": "原审计意见类型",
         "LISTING_STATE": "上市状态",
     }
-    if not df.empty:
-        latest_row = df.iloc[0]
-        result['data'] = colum_mapping_transform(latest_row, AK_BALANCE_SHEET_COLUMN_MAP)
-        return result
+
+    for _, row in df.iterrows():
+        result["data"].append(colum_mapping_transform(row, AK_BALANCE_SHEET_COLUMN_MAP))
+
     return result
 
-
-@use_cache(86400 * 7, use_db_cache=True)
-def get_financial_profit_statement(symbol: str) -> Dict[str, Any]:
+def get_recent_financial_balance_sheet(symbol: str) -> Dict[str, Any]:
     """
-    获取A股公司利润表数据
+    获取A股公司资产负债表数据
 
     Args:
         symbol: 股票代码
 
     Returns:
-        包含利润表数据的字典
+        包含资产负债表数据的字典
     """
-    # 获取利润表数据
-    df = ak.stock_financial_report_sina(stock=symbol, symbol="利润表")
-    # ['报告日', '营业总收入', '营业收入', '利息收入', '已赚保费', '手续费及佣金收入', '房地产销售收入', '其他业务收入', '营业总成本', '营业成本', '手续费及佣金支出', '房地产销售成本', '退 保金', '赔付支出净额', '提取保险合同准备金净额', '保单红利支出', '分保费用', '其他业务成本', '营业税金及附加', '研发费用', '销售费用', '管理费用', '财务费用', '利息费用', '利息支出', '投资收益', '对联营企业和合营企业的投资收益', '以摊余成本计量的金融资产终止确认产生的收益', '汇兑收益', '净敞口套期收益', '公允价值变动收益', '期货损益', '托管收益', '补贴收入', '其他收益', '资产减值损失', '信用减值损失', '其他业务利润', '资产处置收益', '营业利润', '营业外收入', '非流动资产处置利得', '营业外支出', '非流动资产处置损失', '利润总额', '所得税费用', ' 未确认投资损失', '净利润', '持续经营净利润', '终止经营净利润', '归属于母公司所有者的净利润', '被合并方在合并前实现净利润', '少数股东损益', '其他综合收益', '归属于母公司所有者的其他综 合收益', '（一）以后不能重分类进损益的其他综合收益', '重新计量设定受益计划变动额', '权益法下不能转损益的其他综合收益', '其他权益工具投资公允价值变动', '企业自身信用风险公允价值变动', '（二）以后将重分类进损益的其他综合收益', '权益法下可转损益的其他综合收益', '可供出售金融资产公允价值变动损益', '其他债权投资公允价值变动', '金融资产重分类计入其他综合收益的金额', '其他债权投资信用减值准备', '持有至到期投资重分类为可供出售金融资产损益', '现金流量套期储备', '现金流量套期损益的有效部分', '外币财务报表折算差额', '其他', '归属于少数股东的其他综合收益', '综合收益总额', '归属于母公司所有者的综合收益总额', '归属于少数股东的综合收益总额', '基本每股收益', '稀释每股收益', '数据源', '是否审计', '公告日期', '币种', '类型', '更新日期'] 
+    result = get_financial_balance_sheet_history(symbol)
+    result['data'] = result['data'][0] if result['data'] else {}
+    return result
+
+
+@use_cache(86400 * 7, use_db_cache=True)
+def get_financial_profit_statement_history(symbol: str) -> Dict[str, Any]:
+    """
+    获取A股公司利润表历史数据
+
+    Args:
+        symbol: 股票代码
+
+    Returns:
+        包含利润表历史数据的字典
+    """
     result = {
         "symbol": symbol,
         "source": "新浪财经-财务分析-利润表",
-        "data": {},
+        "data": [],
     }
-    if not df.empty:
-        result['data'] = dict(df.head(1).iloc[0].dropna()) # 取最新一期数据
-        return result
+    # try:
+    #     df = ak.stock_financial_report_sina(stock=symbol, symbol="利润表")
+    #     for _, row in df.iterrows():
+    #         result["data"].append(row.dropna().to_dict())
+    #     if result["data"]:
+    #         return result
+    # except Exception as e:
+    #     logger.error("获取利润表历史数据失败: %s, 尝试切换到其他数据源", e)
 
+    result['source'] = "东方财富-股票-财务分析-利润表-按报告期"
     df = ak.stock_profit_sheet_by_report_em(symbol=determine_exchange(symbol) + symbol)
-    result['source'] = "东方财富-股票-财务分析-利润表-报告期"
     
-
     # 主要利润表项目（英文列名映射）
     PROFIT_COLUMN_MAP = {
         "SECUCODE": "证券代码",
@@ -548,32 +734,49 @@ def get_financial_profit_statement(symbol: str) -> Dict[str, Any]:
         "OPINION_TYPE": "审计意见类型",
     }
 
-    # 获取最新一期数据
-    latest_row = df.iloc[0]
-    result['data'] = colum_mapping_transform(latest_row, PROFIT_COLUMN_MAP)
+    for _, row in df.iterrows():
+        result["data"].append(colum_mapping_transform(row, PROFIT_COLUMN_MAP))
+
     return result
- 
-@use_cache(86400 * 7, use_db_cache=True)
-def get_financial_cash_flow(symbol: str) -> Dict[str, Any]:
+
+def get_recent_financial_profit_statement(symbol: str) -> Dict[str, Any]:
     """
-    获取A股公司现金流量表数据
+    获取A股公司利润表数据
 
     Args:
         symbol: 股票代码
 
     Returns:
-        包含现金流量表数据的字典
+        包含利润表数据的字典
     """
-    # 获取现金流量表数据
+    result = get_financial_profit_statement_history(symbol)
+    result['data'] = result['data'][0] if result['data'] else {}
+    return result
+ 
+@use_cache(86400 * 7, use_db_cache=True)
+def get_financial_cash_flow_history(symbol: str) -> Dict[str, Any]:
+    """
+    获取A股公司现金流量表历史数据
+
+    Args:
+        symbol: 股票代码
+
+    Returns:
+        包含现金流量表历史数据的字典
+    """
     result = {
         "symbol": symbol,
         "source": "新浪财经-财务分析-现金流量表",
-        "data": {},
+        "data": [],
     }
-    df = ak.stock_financial_report_sina(stock='600588', symbol="现金流量表")
-    if not df.empty:
-        result['data'] = dict(df.head(1).iloc[0].dropna()) # 取最新一期数据
-        return result
+    # try:
+    #     df = ak.stock_financial_report_sina(stock=symbol, symbol="现金流量表")
+    #     for _, row in df.iterrows():
+    #         result["data"].append(row.dropna().to_dict())
+    #     if result["data"]:
+    #         return result
+    # except Exception as e:
+    #     logger.error("获取现金流量表历史数据失败: %s, 尝试切换到其他数据源", e)
     
     CASH_FLOW_COLUMN_MAP = {
         "SECUCODE": "证券代码",
@@ -710,13 +913,65 @@ def get_financial_cash_flow(symbol: str) -> Dict[str, Any]:
     }
     df = ak.stock_cash_flow_sheet_by_report_em(symbol=determine_exchange(symbol) + symbol)
     result['source'] = "东方财富-股票-财务分析-现金流量表-按报告期"
-    if not df.empty:
-        latest_row = df.iloc[0]
-        result['data'] = colum_mapping_transform(latest_row, CASH_FLOW_COLUMN_MAP)   
+    for _, row in df.iterrows():
+        result["data"].append(colum_mapping_transform(row, CASH_FLOW_COLUMN_MAP))
+    return result
+
+def get_recent_financial_cash_flow(symbol: str) -> Dict[str, Any]:
+    """
+    获取A股公司现金流量表数据
+
+    Args:
+        symbol: 股票代码
+
+    Returns:
+        包含现金流量表数据的字典
+    """
+    result = get_financial_cash_flow_history(symbol)
+    result['data'] = result['data'][0] if result['data'] else {}
     return result
 
 @use_cache(86400 * 7, use_db_cache=True)
-def get_financial_indicators(symbol: str) -> Dict[str, Any]:
+def get_financial_indicators_history(symbol: str) -> Dict[str, Any]:
+    """
+    获取A股公司主要财务指标历史数据
+
+    Args:
+        symbol: 股票代码
+
+    Returns:
+        包含主要财务指标历史数据的字典
+    """
+    result = {
+        "symbol": symbol,
+        "source": "新浪财经-财务分析-财务指标",
+        "data": [],
+    }
+    # try:
+    #     from_year = str(datetime.now().year) if datetime.now().month >= 4 else str(datetime.now().year - 1)
+    #     df = ak.stock_financial_analysis_indicator(symbol=symbol, start_year=from_year)
+    #     if not df.empty:
+    #         for _, row in df.iterrows():
+    #             row_dict = row.dropna().to_dict()
+    #             if row_dict.get("日期"):
+    #                 row_dict["日期"] = str(row_dict.get("日期"))
+    #             result["data"].append(row_dict)
+    #         return result
+    # except Exception as e:
+    #     logger.error("获取财务指标历史数据失败: %s, 尝试切换到其他数据源", e)
+
+    result["source"] = "同花顺-财务分析-财务指标"
+    df = ak.stock_financial_abstract_ths(symbol=symbol)
+    if not df.empty:
+        for _, row in df.iterrows():
+            row_dict = row.dropna().to_dict()
+            if row_dict.get("日期"):
+                row_dict["日期"] = str(row_dict.get("日期"))
+            result["data"].append(row_dict)
+
+    return result
+
+def get_recent_financial_indicators(symbol: str) -> Dict[str, Any]:
     """
     获取A股公司主要财务指标
 
@@ -726,24 +981,8 @@ def get_financial_indicators(symbol: str) -> Dict[str, Any]:
     Returns:
         包含主要财务指标的字典
     """
-    result = {
-        "symbol": symbol,
-        "source": "新浪财经-财务分析-财务指标",
-        "data": {},
-    }
-    from_year = str(datetime.now().year) if datetime.now().month >= 4 else str(datetime.now().year - 1)
-    df = ak.stock_financial_analysis_indicator(symbol=symbol, start_year=from_year)
-    if df.empty:
-        logger.warning(f"未找到股票 {symbol} 的财务指标数据")
-        result["source"] = "同花顺-财务分析-财务指标"
-        df = ak.stock_financial_abstract_ths(symbol=symbol)
-
-    # 将最新一期数据转换为字典格式
-    if not df.empty:
-        result['data'] = df.tail(1).iloc[0].dropna().to_dict()
-        if result['data'].get("日期"):
-            result['data']["日期"] = str(result['data'].get("日期"))
-
+    result = get_financial_indicators_history(symbol)
+    result['data'] = result['data'][-1] if result['data'] else {}
     return result
 
 # 里面的函数都设置了7天缓存，可以不用设置了
@@ -759,10 +998,10 @@ def get_comprehensive_financial_data(symbol: str) -> Dict[str, Any]:
     """
     return {
         "symbol": symbol,
-        "balance_sheet": get_financial_balance_sheet(symbol),
-        "profit_statement": get_financial_profit_statement(symbol),
-        "cash_flow": get_financial_cash_flow(symbol),
-        "financial_indicators": get_financial_indicators(symbol),
+        "balance_sheet": get_recent_financial_balance_sheet(symbol),
+        "profit_statement": get_recent_financial_profit_statement(symbol),
+        "cash_flow": get_recent_financial_cash_flow(symbol),
+        "financial_indicators": get_recent_financial_indicators(symbol),
     }
 
 
@@ -976,8 +1215,8 @@ def get_current_pe_pb_from_tencent(symbol: str) -> Dict[str, float]:
     """
     snap_shot = fetch_realtime_stock_snapshot(symbol)
     return {
-        'pe': snap_shot['pe_dynamic'],
-        'pb': snap_shot['pb_ratio'],
-        'total_market_cap': snap_shot['total_market_cap']
+        'pe': float(snap_shot['pe_dynamic']),
+        'pb': float(snap_shot['pb_ratio']),
+        'total_market_cap': float(snap_shot['total_market_cap'])
     }
 

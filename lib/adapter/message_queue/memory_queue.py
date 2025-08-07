@@ -3,7 +3,7 @@
 import threading
 import time
 from queue import PriorityQueue, Empty
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from datetime import datetime
 
 from lib.adapter.message_queue.base import MessageQueueAdapter, MessageHandler
@@ -170,6 +170,7 @@ class MemoryMessageQueue(MessageQueueAdapter):
                     priority_item = queue.get_nowait()
                     _, _, message = priority_item
                     
+                    assert isinstance(message, QueueMessage), "队列中的项不是QueueMessage类型"
                     # 检查消息是否过期
                     if message.is_expired():
                         logger.debug(f"消息已过期，丢弃: {message.id}")

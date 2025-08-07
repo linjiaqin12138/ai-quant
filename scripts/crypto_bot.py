@@ -437,7 +437,7 @@ class CryptoAgent:
         result = {}
         if order_type == "limit":
             result = self._create_limit_order(price, amount, trade_side)
-            if result['status'] == 'close':
+            if result['status'] == 'FILLED':
                 self._handling_position_state_change_for_resolved_order(result, "open_position")
             else:
                 self.state.set("recent_open_position_limit_order", result)
@@ -472,7 +472,7 @@ class CryptoAgent:
             if self.state.has("recent_add_position_limit_order"):
                 return { "error": "由于系统限制，当前已有未完成的加仓限价单，不能再挂新加仓的限价单" }
             result = self._create_limit_order(price, amount, trade_side)
-            if result['status'] == 'close':
+            if result['status'] == 'FILLED':
                 self._handling_position_state_change_for_resolved_order(result, "add_position")
             else:
                 self.state.set("recent_add_position_limit_order", result)
@@ -507,7 +507,7 @@ class CryptoAgent:
                 return { "error": "由于系统限制，当前已有未完成的减仓限价单，不能再挂新减仓的限价单" }
 
             result = self._create_limit_order(price, amount, trade_side)
-            if result['status'] == 'close':
+            if result['status'] == 'FILLED':
                 self._handling_position_state_change_for_resolved_order(result, "decrease_position")
             else:
                 self.state.set("recent_decrease_position_limit_order", result)

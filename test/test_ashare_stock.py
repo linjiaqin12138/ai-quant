@@ -2,21 +2,20 @@ import pytest
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from typing import Dict, List, Any
 
 from lib.tools.ashare_stock import (
-    is_etf,
     get_fund_list,
     get_ashare_stock_info,
     get_stock_news,
-    get_financial_balance_sheet,
-    get_financial_profit_statement,
-    get_financial_cash_flow,
-    get_financial_indicators,
+    get_recent_financial_balance_sheet,
+    get_recent_financial_profit_statement,
+    get_recent_financial_cash_flow,
+    get_recent_financial_indicators,
     get_comprehensive_financial_data,
 )
 from lib.model.news import NewsInfo
 from lib.adapter.database import create_transaction
+from lib.utils.symbol import is_etf
 
 def cleanup_cache():
     """
@@ -247,7 +246,7 @@ class TestAshareStock:
         """测试获取资产负债表功能"""
         try:
             # 测试知名股票
-            balance_sheet = get_financial_balance_sheet("000001")  # 平安银行
+            balance_sheet = get_recent_financial_balance_sheet("000001")  # 平安银行
             
             # 验证返回结果
             assert isinstance(balance_sheet, dict)
@@ -282,10 +281,10 @@ class TestAshareStock:
         """测试资产负债表缓存功能"""
         try:
             # 第一次调用
-            balance_sheet1 = get_financial_balance_sheet("600036")  # 招商银行
+            balance_sheet1 = get_recent_financial_balance_sheet("600036")  # 招商银行
             
             # 第二次调用（应该使用缓存）
-            balance_sheet2 = get_financial_balance_sheet("600036")
+            balance_sheet2 = get_recent_financial_balance_sheet("600036")
             
             # 验证两次结果一致
             assert balance_sheet1 == balance_sheet2
@@ -304,7 +303,7 @@ class TestAshareStock:
         """测试获取利润表功能"""
         try:
             # 测试知名股票
-            profit_statement = get_financial_profit_statement("000001")  # 平安银行
+            profit_statement = get_recent_financial_profit_statement("000001")  # 平安银行
             
             # 验证返回结果
             assert isinstance(profit_statement, dict)
@@ -339,7 +338,7 @@ class TestAshareStock:
         """测试获取现金流量表功能"""
         try:
             # 测试知名股票
-            cash_flow = get_financial_cash_flow("600036")  # 招商银行
+            cash_flow = get_recent_financial_cash_flow("600036")  # 招商银行
             
             # 验证返回结果
             assert isinstance(cash_flow, dict)
@@ -374,7 +373,7 @@ class TestAshareStock:
         """测试获取财务指标功能"""
         try:
             # 测试知名股票
-            indicators = get_financial_indicators("000001")  # 平安银行
+            indicators = get_recent_financial_indicators("000001")  # 平安银行
             
             # 验证返回结果
             assert isinstance(indicators, dict)
