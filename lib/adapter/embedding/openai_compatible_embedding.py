@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
 import requests
 from typing import List, Union, Optional, Dict, Any
-from .embedding_base import EmbeddingAbstract, EmbeddingRequest, EmbeddingResult, EmbeddingResponse
+from .embedding_base import EmbeddingAbstract, EmbeddingResult, EmbeddingResponse
 
 from lib.config import get_paoluz_token
 
 
-class PaoluzEmbedding(EmbeddingAbstract):
+class OpenAICompatibleEmbedding(EmbeddingAbstract):
     """NewAPI嵌入服务提供者实现"""
-    def __init__(self, api_key: str = None):
+    def __init__(self, api_key, base_url: str):
         self.api_key = api_key or get_paoluz_token()
-        self.base_url = "https://chatapi.nloli.xyz/"
+        self.base_url = base_url or "https://chatapi.nloli.xyz/"
         self.endpoint = f"{self.base_url}/v1/embeddings"
 
     def _build_request_data(
@@ -60,7 +59,7 @@ class PaoluzEmbedding(EmbeddingAbstract):
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}"
         }
-        
+
         response = requests.post(
             self.endpoint,
             headers=headers,

@@ -7,7 +7,6 @@
 """
 
 import hashlib
-import uuid
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
@@ -20,8 +19,10 @@ from lib.adapter.vector_db import (
 )
 from lib.adapter.embedding import (
     EmbeddingAbstract,
-    PaoluzEmbedding,
+    create_default_embedding_service,
 )
+
+from lib.adapter.database import create_transaction
 
 
 @dataclass
@@ -105,6 +106,8 @@ class DocumentSearch:
         vector_db: Optional[VectorDatabaseAbstract] = None,
         embedding_service: Optional[EmbeddingAbstract] = None,
         index_name: str = "document-search",
+        namespace: str = "default",
+        embedding_model: str = "text-embedding-3-small",
         embedding_dimension: int = 1536,
         chunk_size: int = 1000,
         chunk_overlap: int = 200,
@@ -128,18 +131,25 @@ class DocumentSearch:
         self.chunk_overlap = chunk_overlap
         self.vector_db = vector_db
         self.embedding_service = embedding_service
+        self.embedding_model = embedding_model
+        self.namespace = namespace
+        
         # 初始化向量数据库
         if self.vector_db is None:
-            self.vector_db = create_default_vector_db(default_path="./chromadb")
+            self.vector_db = create_default_vector_db()
    
         # 初始化嵌入服务
         if self.embedding_service is None:
-            self.embedding_service = PaoluzEmbedding()
+            self.embedding_service = create_default_embedding_service()
             
         # 自动创建索引
         if auto_create_index:
             self._ensure_index_exists()
-    
+
+    def _get_chunk_id(self, document_id: str, chunk_index: int) -> str:
+        """生成文档分块ID"""
+        return f"{document_id}_chunk_{chunk_index}"
+
     def _ensure_index_exists(self) -> None:
         """确保索引存在"""
         try:
@@ -203,14 +213,10 @@ class DocumentSearch:
         Returns:
             List[List[float]]: 嵌入向量列表
         """
-        try:
-            response = self.embedding_service.create_embedding(texts)
-            embeddings = [result.embedding for result in response.data]
-            logger.info(f"成功获取 {len(embeddings)} 个嵌入向量")
-            return embeddings
-        except Exception as e:
-            logger.error(f"获取嵌入向量失败: {e}")
-            raise
+        response = self.embedding_service.create_embedding(texts, self.embedding_model, dimensions=self.embedding_dimension)
+        embeddings = [result.embedding for result in response.data]
+        logger.info(f"成功获取 {len(embeddings)} 个嵌入向量")
+        return embeddings
     
     def add_document(
         self,
@@ -248,16 +254,15 @@ class DocumentSearch:
         # 分块处理
         chunks = self._chunk_text(content)
         logger.info(f"文档 {title} 分为 {len(chunks)} 个块")
-        
+
         # 获取嵌入向量
         embeddings = self._get_embeddings(chunks)
-        
+
         # 创建向量记录
         vector_records = []
         for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
-            chunk_id = f"{document_id}_chunk_{i}"
             vector_record = VectorRecord(
-                id=chunk_id,
+                id=self._get_chunk_id(document_id, i),
                 values=embedding,
                 metadata={
                     "document_id": document_id,
@@ -272,16 +277,13 @@ class DocumentSearch:
             vector_records.append(vector_record)
         
         # 插入向量数据库
-        try:
-            response = self.vector_db.upsert(
-                index_name=self.index_name,
-                vectors=vector_records
-            )
-            logger.info(f"成功插入 {response.upserted_count} 个向量")
-        except Exception as e:
-            logger.error(f"插入向量失败: {e}")
-            raise
         
+        response = self.vector_db.upsert(
+            index_name=self.index_name,
+            vectors=vector_records
+        )
+        logger.info(f"成功插入 {response.upserted_count} 个向量")
+
         return document
     
     def search_documents(
@@ -309,17 +311,13 @@ class DocumentSearch:
         query_embedding = self._get_embeddings([query])[0]
         
         # 执行向量搜索
-        try:
-            response = self.vector_db.query(
-                index_name=self.index_name,
-                vector=query_embedding,
-                top_k=top_k * 2,  # 获取更多结果以便去重
-                include_metadata=True,
-                filter_dict=filter_metadata
-            )
-        except Exception as e:
-            logger.error(f"向量搜索失败: {e}")
-            raise
+        response = self.vector_db.query(
+            index_name=self.index_name,
+            vector=query_embedding,
+            top_k=top_k * 2,  # 获取更多结果以便去重
+            include_metadata=True,
+            filter_dict=filter_metadata
+        )
         
         # 处理搜索结果
         document_scores = {}
@@ -343,9 +341,9 @@ class DocumentSearch:
                     document_scores[doc_id]["best_match"] = match
         
         # 构建搜索结果
-        results = []
+        results: List[SearchResult] = []
         for doc_id, scores in document_scores.items():
-            best_match = scores["best_match"]
+            best_match: VectorRecord = scores["best_match"]
             
             # 创建文档信息
             document = DocumentInfo(
@@ -372,6 +370,19 @@ class DocumentSearch:
         # 按相似度排序并返回指定数量
         results.sort(key=lambda x: x.similarity, reverse=True)
         return results[:top_k]
+
+    def _get_document_chunk_ids(self, document_id: str) -> List[str]:
+        first_chunk_id = self._get_chunk_id(document_id, 0)
+        # 查找相关的块
+        first_chunk = self.vector_db.fetch(
+            self.index_name,
+            ids=[first_chunk_id],  # 假设最多有1000个块
+        ).get(first_chunk_id)
+        if not first_chunk:
+            logger.warning(f"未找到文档 {document_id} 的任何块")
+            return []
+        chunk_ids = [self._get_chunk_id(document_id, i) for i in range(first_chunk.metadata.get("chunk_total", 0))]
+        return chunk_ids
     
     def delete_document(self, document_id: str) -> bool:
         """
@@ -383,35 +394,13 @@ class DocumentSearch:
         Returns:
             bool: 是否删除成功
         """
-        try:
-            # 查找相关的块
-            response = self.vector_db.query(
-                index_name=self.index_name,
-                vector=[0.0] * self.embedding_dimension,  # 使用零向量
-                top_k=1000,  # 获取足够多的结果
-                filter_dict={"document_id": document_id},
-                include_metadata=True
-            )
-            
-            # 收集要删除的ID
-            chunk_ids = [match.id for match in response.matches]
-            
-            if not chunk_ids:
-                logger.warning(f"未找到文档 {document_id} 的任何块")
-                return False
-            
-            # 删除向量
-            delete_response = self.vector_db.delete(
-                index_name=self.index_name,
-                ids=chunk_ids
-            )
-            
-            logger.info(f"成功删除文档 {document_id} 的 {delete_response.deleted_count} 个块")
-            return delete_response.deleted_count > 0
-            
-        except Exception as e:
-            logger.error(f"删除文档失败: {e}")
-            return False
+        delete_response = self.vector_db.delete(
+            index_name=self.index_name,
+            ids=self._get_document_chunk_ids(document_id)
+        )
+        
+        logger.info(f"成功删除文档 {document_id} 的 {delete_response.deleted_count} 个块")
+        return delete_response.deleted_count > 0
     
     def update_document(
         self,
@@ -456,17 +445,13 @@ class DocumentSearch:
         Returns:
             Dict[str, Any]: 索引统计信息
         """
-        try:
-            stats = self.vector_db.get_index_stats(self.index_name)
-            return {
-                "total_vector_count": stats.total_vector_count,
-                "dimension": stats.dimension,
-                "index_fullness": stats.index_fullness,
-                "namespaces": stats.namespaces
-            }
-        except Exception as e:
-            logger.error(f"获取索引统计信息失败: {e}")
-            return {}
+        stats = self.vector_db.get_index_stats(self.index_name)
+        return {
+            "total_vector_count": stats.total_vector_count,
+            "dimension": stats.dimension,
+            "index_fullness": stats.index_fullness,
+            "namespaces": stats.namespaces
+        }
     
     def clear_index(self) -> bool:
         """
@@ -475,18 +460,14 @@ class DocumentSearch:
         Returns:
             bool: 是否成功
         """
-        try:
-            # 删除索引
-            success = self.vector_db.delete_index(self.index_name)
-            if success:
-                # 重新创建索引
-                self._ensure_index_exists()
-                logger.info(f"成功清空索引 {self.index_name}")
-                return True
-            return False
-        except Exception as e:
-            logger.error(f"清空索引失败: {e}")
-            return False
+        # 删除索引
+        success = self.vector_db.delete_index(self.index_name)
+        if success:
+            # 重新创建索引
+            self._ensure_index_exists()
+            logger.info(f"成功清空索引 {self.index_name}")
+            return True
+        return False
 
 
 # 创建默认实例

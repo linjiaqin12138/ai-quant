@@ -370,6 +370,6 @@ def get_recent_financial_balance_sheet(symbol: str) -> Dict[str, Any]:
     Returns:
         包含资产负债表数据的字典
     """
-    result = get_financial_balance_sheet_history(symbol)
+    result = get_financial_balance_sheet_history(symbol).copy()
     result['data'] = result['data'][0] if result['data'] else {}
     return result

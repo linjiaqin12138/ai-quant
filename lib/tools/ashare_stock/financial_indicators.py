@@ -54,6 +54,6 @@ def get_recent_financial_indicators(symbol: str) -> Dict[str, Any]:
     Returns:
         包含主要财务指标的字典
     """
-    result = get_financial_indicators_history(symbol)
+    result = get_financial_indicators_history(symbol).copy()
     result['data'] = result['data'][-1] if result['data'] else {}
     return result

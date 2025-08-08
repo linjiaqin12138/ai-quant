@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from textwrap import dedent
 import traceback
 
-from lib.adapter.embedding.paoluz_embedding import PaoluzEmbedding
+from lib.adapter.embedding.openai_compatible_embedding import OpenAICompatibleEmbedding
 from lib.adapter.llm.interface import LlmAbstract
 from lib.logger import logger
 from lib.modules.agent import get_agent

@@ -5,7 +5,7 @@
 嵌入服务适配器模块
 提供统一的嵌入服务接口和多种实现
 """
-
+from lib.config import get_paoluz_token, get_silicon_token
 from .embedding_base import (
     EmbeddingAbstract,
     EmbeddingRequest,
@@ -13,7 +13,7 @@ from .embedding_base import (
     EmbeddingResponse
 )
 
-from .paoluz_embedding import PaoluzEmbedding
+from .openai_compatible_embedding import OpenAICompatibleEmbedding
 
 def create_default_embedding_service() -> EmbeddingAbstract:
     """
@@ -23,7 +23,10 @@ def create_default_embedding_service() -> EmbeddingAbstract:
         EmbeddingAbstract: 默认嵌入服务实例
     """
     # 这里可以根据配置或环境变量选择不同的嵌入服务实现
-    return PaoluzEmbedding()
+    return OpenAICompatibleEmbedding(
+        api_key=get_paoluz_token(),
+        base_url="https://chatapi.nloli.xyz/"
+    )
 
 __all__ = [
     # 基础接口和数据类
@@ -33,6 +36,6 @@ __all__ = [
     'EmbeddingResponse',
     
     # 具体实现
-    'PaoluzEmbedding',
+    'OpenAICompatibleEmbedding',
     'create_default_embedding_service'
 ]

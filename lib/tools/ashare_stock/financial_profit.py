@@ -1,5 +1,6 @@
 import akshare as ak
 from typing import Dict, Any
+from lib.logger import logger
 from lib.tools.cache_decorator import use_cache
 from lib.utils.symbol import determine_exchange
 from .utils import colum_mapping_transform
@@ -255,6 +256,6 @@ def get_recent_financial_profit_statement(symbol: str) -> Dict[str, Any]:
     Returns:
         包含利润表数据的字典
     """
-    result = get_financial_profit_statement_history(symbol)
+    result = get_financial_profit_statement_history(symbol).copy()
     result['data'] = result['data'][0] if result['data'] else {}
     return result
