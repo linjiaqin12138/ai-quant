@@ -280,7 +280,8 @@ class DocumentSearch:
         
         response = self.vector_db.upsert(
             index_name=self.index_name,
-            vectors=vector_records
+            vectors=vector_records,
+            namespace=self.namespace
         )
         logger.info(f"成功插入 {response.upserted_count} 个向量")
 
@@ -316,7 +317,8 @@ class DocumentSearch:
             vector=query_embedding,
             top_k=top_k * 2,  # 获取更多结果以便去重
             include_metadata=True,
-            filter_dict=filter_metadata
+            filter_dict=filter_metadata,
+            namespace=self.namespace
         )
         
         # 处理搜索结果
@@ -377,6 +379,7 @@ class DocumentSearch:
         first_chunk = self.vector_db.fetch(
             self.index_name,
             ids=[first_chunk_id],  # 假设最多有1000个块
+            namespace=self.namespace
         ).get(first_chunk_id)
         if not first_chunk:
             logger.warning(f"未找到文档 {document_id} 的任何块")
@@ -396,7 +399,8 @@ class DocumentSearch:
         """
         delete_response = self.vector_db.delete(
             index_name=self.index_name,
-            ids=self._get_document_chunk_ids(document_id)
+            ids=self._get_document_chunk_ids(document_id),
+            namespace=self.namespace
         )
         
         logger.info(f"成功删除文档 {document_id} 的 {delete_response.deleted_count} 个块")

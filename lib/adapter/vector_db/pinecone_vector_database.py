@@ -4,6 +4,7 @@
 import time
 from typing import List, Dict, Any, Optional
 from pinecone import Pinecone, ServerlessSpec
+from pinecone.db_data import Index
 from pinecone.exceptions import NotFoundException
 
 from .vector_database_base import (
@@ -32,7 +33,7 @@ class PineconeVectorDatabase(VectorDatabaseAbstract):
         self.pc = Pinecone(api_key=self.api_key)
         self._index_cache = {}  # 缓存已连接的索引
     
-    def _get_index(self, index_name: str):
+    def _get_index(self, index_name: str) -> Index:
         """获取索引连接（带缓存）"""
         if index_name not in self._index_cache:
             self._index_cache[index_name] = self.pc.Index(index_name)

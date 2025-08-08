@@ -15,7 +15,7 @@ from lib.modules.notification_logger import NotificationLogger
 from lib.modules.trade import ashare, crypto
 from lib.utils.time import round_datetime_in_period, dt_to_ts
 from lib.utils.ohlcv import to_df
-from .state import SimpleState
+from lib.modules.strategy.state import SimpleState
 from .strategyv2 import StrategyBase
 
 
