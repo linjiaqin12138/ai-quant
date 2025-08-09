@@ -84,7 +84,7 @@ class Agent:
             })
             return result
         except Exception as e:
-            logger.error(f"Error executing tool {function_name}: {str(e)}")
+            logger.error(f"Error executing tool {function_name}: {str(e)} {traceback.format_exc()}")
             tool_call_result["error_message"] = str(e)
             return f"Error executing tool {function_name}: {str(e)}"
         finally:

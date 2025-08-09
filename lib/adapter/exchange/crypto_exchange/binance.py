@@ -199,8 +199,8 @@ class BinanceExchange(ExchangeAPI):
             type=res["type"],
             side=res["side"],
             price=res["price"],
-            _amount=res["amount"],
-            _cost=res["cost"],
+            amount=res["amount"],
+            cost=res["cost"],
             fees=map_by(
                 res["fees"],
                 lambda fee: OrderFee(fee["currency"], fee["cost"], fee.get("rate")),

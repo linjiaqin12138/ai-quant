@@ -25,7 +25,14 @@ class DbBasedDistributedLock(DistributedLock):
             max_concurrent_access=max_concurrent_access,
             expiration_time=expiration_time,
         )
-        self.engine = create_engine(echo=False, url=db_url)
+        self.engine = create_engine(
+            echo=False, 
+            url=db_url,
+            pool_size=10,
+            max_overflow=20,
+            pool_pre_ping=True,
+            pool_recycle=1800
+        )
         self.Session = sessionmaker(bind=self.engine)
 
     def _begin_immediate_transaction_if_sqlite(self, begined_session):

@@ -32,3 +32,4 @@ class NotificationLogger:
     def send(self) -> None:
         if len(self.message_pool):
             self.sender.send("\n".join(self.message_pool), self.topic)
+            self.message_pool.clear()

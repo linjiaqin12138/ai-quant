@@ -22,6 +22,7 @@ chromadb
 httplib2
 duckduckgo-search
 google-api-python-client
+websocket-client==1.8.0
 # Development tools
 black==24.8.0
 pylint

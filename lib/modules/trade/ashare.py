@@ -127,10 +127,10 @@ class AshareTrade(TradeOperations):
             type=type,
             side=side,
             price=price,
-            _amount=(
+            amount=(
                 amount if side == "sell" else spent / self.get_current_price(symbol)
             ),
-            _cost=self.get_current_price(symbol) * amount if side == "sell" else spent,
+            cost=self.get_current_price(symbol) * amount if side == "sell" else spent,
             fees=[],
         )
 

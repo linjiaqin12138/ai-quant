@@ -179,7 +179,7 @@ class GlobalNewsAgent:
         self._agent.register_tool(self._search_tool)
         self._agent.register_tool(self._read_web_page)
         self._agent.register_tool(self._get_top_10_hot_news_of_platform)
-        self._agent.register_tool(self._get_24h_news_from_gushitong)
+        # self._agent.register_tool(self._get_24h_news_from_gushitong)
 
     def _get_24h_news_from_gushitong(self) -> str:
         """

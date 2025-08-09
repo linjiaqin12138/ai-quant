@@ -13,12 +13,12 @@ from textwrap import dedent
 from jinja2 import Template
 from lib.adapter.llm import get_llm, get_llm_direct_ask
 from lib.adapter.llm.interface import LlmAbstract
-from lib.tools.ashare_stock import get_ashare_stock_info, determine_exchange
+from lib.tools.ashare_stock import get_ashare_stock_info
 from lib.logger import logger
-from lib.utils.decorators import with_retry
 from lib.utils.string import escape_text_for_jinja2_temperate
 from lib.model.error import LlmReplyInvalid
 from lib.modules.agents.comment_extractor_agent import CommentExtractorAgent, CommentItem
+from lib.utils.symbol import determine_exchange
 
 # HTML报告模板
 HTML_TEMPLATE = """

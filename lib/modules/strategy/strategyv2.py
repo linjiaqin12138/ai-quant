@@ -15,10 +15,10 @@ from .state import PersisitentState, StateApi
 
 class FakeOrder(Order):
     def get_net_amount(self):
-        return self._amount
+        return self.amount
 
     def get_net_cost(self):
-        return self._cost
+        return self.cost
 
 
 class StrategyBase(abc.ABC):

@@ -72,20 +72,10 @@ class Order(abc.ABC):
     type: OrderType
     side: OrderSide
     price: float
-    _amount: float
+    amount: float
     # 交易涉及的总金额
-    _cost: float
+    cost: float
     fees: List[OrderFee]
-
-    @property
-    def amount(self) -> float:
-        """获取订单的原始（毛）数量。"""
-        return self._amount
-
-    @property
-    def cost(self) -> float:
-        """获取订单的原始（毛）成本/价值 (price * amount)，不包含手续费。"""
-        return self._cost
 
     @abc.abstractmethod
     def get_net_amount(self) -> float:
@@ -94,7 +84,7 @@ class Order(abc.ABC):
         对于费用以基础资产支付的情况（如某些加密货币交易），
         此数量会扣除相应费用。
         """
-        pass
+        return self.amount
 
     @abc.abstractmethod
     def get_net_cost(self) -> float:
@@ -103,7 +93,7 @@ class Order(abc.ABC):
         对于买单，返回值通常 >= cost。
         对于卖单，返回值通常 <= cost。
         """
-        pass
+        return self.cost
 
     def get_total_fee_in_currency(self, currency: str) -> float:
         """计算指定货币的总费用。"""

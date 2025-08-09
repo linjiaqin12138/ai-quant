@@ -14,8 +14,8 @@ def test_get_amount_cost_with_fee():
         type="market",
         side="buy",
         price=20000,
-        _amount=0.01,
-        _cost=200,
+        amount=0.01,
+        cost=200,
         fees=[OrderFee("BTC", 0.001, None), OrderFee("USDT", 1, None)],
     )
 

@@ -21,6 +21,7 @@ SUPPORT_RETRY_METHODS = [
     "fetch_ohlcv",
     "create_order",
     "fetch_ticker",
+    "cancel_order",
     # Binance
     "fapidataGetGloballongshortaccountratio",
     "fapidataGetToplongshortaccountratio",
